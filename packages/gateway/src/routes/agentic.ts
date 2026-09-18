@@ -219,6 +219,7 @@ agenticRoutes.post('/execute', async (c) => {
 
   try {
     const report = await orchestrator.execute({
+      identity: { userId: 'gateway', workspaceId: 'default', roles: [] },
       name: input.name,
       description: input.description,
       prompt: input.prompt,
@@ -302,6 +303,7 @@ agenticRoutes.post('/plan', async (c) => {
 
   try {
     const { analysis, plan } = await router.route({
+      identity: { userId: 'gateway', workspaceId: 'default', roles: [] },
       name: input.name,
       description: input.description,
       prompt: input.prompt,

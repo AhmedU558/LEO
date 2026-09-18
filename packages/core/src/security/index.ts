@@ -349,3 +349,10 @@ export function isCommandBlocked(command: string): boolean {
 
 // Safe math expression evaluator (replaces new Function() usage)
 export { evaluateMathExpression } from './safe-math.js';
+
+export * from './identity.js';
+export * from './capabilities.js';
+export * from './approvals.js';
+export * from './policy-engine.js';
+export * from './risk-engine.js';
+export * from './action-ledger.js';

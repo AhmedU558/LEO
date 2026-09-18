@@ -1,30 +1,30 @@
-export type WorkspaceId = string;
-export type UserId = string;
-export type SessionId = string;
+export type LeoWorkspaceId = string;
+export type LeoUserId = string;
+export type LeoSessionId = string;
 
-export interface User {
-  id: UserId;
+export interface LeoUser {
+  id: LeoUserId;
   email: string;
   roles: string[];
 }
 
-export interface Workspace {
-  id: WorkspaceId;
-  ownerId: UserId;
+export interface LeoWorkspace {
+  id: LeoWorkspaceId;
+  ownerId: LeoUserId;
   name: string;
 }
 
-export interface Session {
-  id: SessionId;
-  userId: UserId;
-  workspaceId: WorkspaceId;
+export interface LeoSession {
+  id: LeoSessionId;
+  userId: LeoUserId;
+  workspaceId: LeoWorkspaceId;
   expiresAt: Date;
   trustedOrigin: boolean;
 }
 
-export interface IdentityContext {
-  userId: UserId;
-  workspaceId: WorkspaceId;
-  sessionId?: SessionId;
+export interface LeoIdentityContext {
+  userId: LeoUserId;
+  workspaceId: LeoWorkspaceId;
+  sessionId?: LeoSessionId;
   roles: string[];
 }

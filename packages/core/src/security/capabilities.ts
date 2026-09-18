@@ -1,4 +1,4 @@
-import type { WorkspaceId } from './identity.js';
+import type { LeoWorkspaceId } from './identity.js';
 
 export type Capability =
   | 'agent.execute'
@@ -22,18 +22,18 @@ export type Capability =
   | 'memory.read'
   | 'memory.write';
 
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type LeoRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface CapabilityLease {
   leaseId: string;
   subjectId: string;
-  workspaceId: WorkspaceId;
+  workspaceId: LeoWorkspaceId;
   capability: Capability;
   resourceScope: string;
   issuedAt: Date;
   expiresAt: Date;
   issuedBy: string;
-  riskLimit: RiskLevel;
+  riskLimit: LeoRiskLevel;
   status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
 }
 

@@ -1,19 +1,19 @@
-import type { Capability, RiskLevel } from './capabilities.js';
-import type { WorkspaceId, UserId } from './identity.js';
+import type { Capability, LeoRiskLevel } from './capabilities.js';
+import type { LeoWorkspaceId, LeoUserId } from './identity.js';
 
 export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'EXPIRED' | 'CANCELLED';
 
 export interface ApprovalRequest {
   approvalId: string;
-  userId: UserId;
-  workspaceId: WorkspaceId;
+  userId: LeoUserId;
+  workspaceId: LeoWorkspaceId;
   taskId?: string;
   runId?: string;
   tool: string;
   action: string;
   resource: string;
   capability: Capability;
-  risk: RiskLevel;
+  risk: LeoRiskLevel;
   requestedParameters: Record<string, unknown>;
   status: ApprovalStatus;
   createdAt: Date;
