@@ -14,27 +14,27 @@
 
 This document defines the technical architecture required to implement LEO according to:
 
-* `LEO_PRODUCT_DOCUMENT.md`
-* `LEO_SRS.md`
-* repository due diligence findings
+- `LEO_PRODUCT_DOCUMENT.md`
+- `LEO_SRS.md`
+- repository due diligence findings
 
 The architecture must provide:
 
-* autonomous agents
-* persistent tasks
-* workflows
-* memory
-* social automation
-* browser automation
-* computer use
-* voice
-* email/productivity
-* permissions
-* approvals
-* security
-* auditability
-* provider independence
-* reliable background execution
+- autonomous agents
+- persistent tasks
+- workflows
+- memory
+- social automation
+- browser automation
+- computer use
+- voice
+- email/productivity
+- permissions
+- approvals
+- security
+- auditability
+- provider independence
+- reliable background execution
 
 The architecture must also allow LEO to evolve without repeatedly rewriting the core platform.
 
@@ -92,12 +92,12 @@ rather than immediately becoming a microservice system.
 
 This gives:
 
-* simpler development
-* easier local deployment
-* lower operational complexity
-* shared types
-* simpler debugging
-* faster MVP development
+- simpler development
+- easier local deployment
+- lower operational complexity
+- shared types
+- simpler debugging
+- faster MVP development
 
 while still creating clear module boundaries.
 
@@ -178,23 +178,23 @@ LEO SHALL contain the following logical layers.
 
 Technology target:
 
-* React
-* TypeScript
-* Next.js or existing foundation UI architecture where compatible
+- React
+- TypeScript
+- Next.js or existing foundation UI architecture where compatible
 
 Responsibilities:
 
-* chat
-* task dashboard
-* agent dashboard
-* approvals
-* social manager
-* media library
-* analytics
-* memory
-* audit
-* settings
-* voice interface
+- chat
+- task dashboard
+- agent dashboard
+- approvals
+- social manager
+- media library
+- analytics
+- memory
+- audit
+- settings
+- voice interface
 
 The frontend SHALL NOT contain authorization logic as the ultimate security boundary.
 
@@ -206,14 +206,14 @@ The gateway is the entry point into LEO.
 
 Responsibilities:
 
-* HTTP API
-* WebSocket/realtime communication
-* authentication
-* request validation
-* session handling
-* rate limiting
-* request context
-* API versioning
+- HTTP API
+- WebSocket/realtime communication
+- authentication
+- request validation
+- session handling
+- rate limiting
+- request context
+- API versioning
 
 Conceptually:
 
@@ -234,11 +234,11 @@ Gateway
 
 Identity manages:
 
-* users
-* sessions
-* authentication
-* devices
-* authorization context
+- users
+- sessions
+- authentication
+- devices
+- authorization context
 
 Identity must remain separate from agent reasoning.
 
@@ -250,15 +250,15 @@ The Agent Orchestrator is the central execution brain.
 
 Responsibilities:
 
-* understand intent
-* construct plans
-* select agents
-* select tools
-* maintain execution state
-* execute steps
-* handle failures
-* request approvals
-* produce final results
+- understand intent
+- construct plans
+- select agents
+- select tools
+- maintain execution state
+- execute steps
+- handle failures
+- request approvals
+- produce final results
 
 It should not directly perform privileged actions.
 
@@ -528,14 +528,14 @@ The Execution Engine is responsible for actually invoking tools.
 
 Responsibilities:
 
-* tool validation
-* timeout
-* cancellation
-* retries
-* concurrency
-* result normalization
-* error classification
-* audit events
+- tool validation
+- timeout
+- cancellation
+- retries
+- concurrency
+- result normalization
+- error classification
+- audit events
 
 ---
 
@@ -613,16 +613,16 @@ The Workflow Engine executes persistent multi-step workflows.
 
 It supports:
 
-* sequential steps
-* parallel steps
-* conditions
-* branching
-* delays
-* approvals
-* retries
-* timeouts
-* cancellation
-* compensation
+- sequential steps
+- parallel steps
+- conditions
+- branching
+- delays
+- approvals
+- retries
+- timeouts
+- cancellation
+- compensation
 
 ---
 
@@ -652,9 +652,9 @@ UI
 
 Potential queue infrastructure:
 
-* Redis-backed queue
-* PostgreSQL-backed jobs
-* foundation-native scheduler/queue where appropriate
+- Redis-backed queue
+- PostgreSQL-backed jobs
+- foundation-native scheduler/queue where appropriate
 
 The final choice belongs in the implementation architecture decision record.
 
@@ -664,12 +664,12 @@ The final choice belongs in the implementation architecture decision record.
 
 The Scheduler handles:
 
-* scheduled tasks
-* recurring workflows
-* autonomous agents
-* delayed execution
-* retries
-* heartbeat-style agents
+- scheduled tasks
+- recurring workflows
+- autonomous agents
+- delayed execution
+- retries
+- heartbeat-style agents
 
 Example:
 
@@ -926,12 +926,12 @@ Initial target:
 
 Responsibilities:
 
-* application discovery
-* screenshots
-* keyboard
-* mouse
-* accessibility
-* controlled application interaction
+- application discovery
+- screenshots
+- keyboard
+- mouse
+- accessibility
+- controlled application interaction
 
 LEO owns the permission layer around it.
 
@@ -945,11 +945,11 @@ Secondary target:
 
 Use cases:
 
-* isolated browser sessions
-* remote research
-* long-running tasks
-* tasks requiring cloud execution
-* user device unavailable
+- isolated browser sessions
+- remote research
+- long-running tasks
+- tasks requiring cloud execution
+- user device unavailable
 
 ---
 
@@ -1062,12 +1062,12 @@ The model should receive a reference/capability rather than unnecessary secret m
 
 Secrets SHALL NOT be placed into:
 
-* prompts
-* ordinary logs
-* task descriptions
-* analytics
-* browser-visible UI
-* model context
+- prompts
+- ordinary logs
+- task descriptions
+- analytics
+- browser-visible UI
+- model context
 
 unless specifically required and protected.
 
@@ -1138,13 +1138,13 @@ All outbound network-capable tools should use controlled networking.
 
 Required protections:
 
-* URL validation
-* DNS validation
-* private IP blocking
-* redirect validation
-* protocol restrictions
-* timeout
-* response limits
+- URL validation
+- DNS validation
+- private IP blocking
+- redirect validation
+- protocol restrictions
+- timeout
+- response limits
 
 The final architecture should centralize these capabilities into a reusable network policy layer.
 
@@ -1331,11 +1331,11 @@ Large media files should not be stored directly in PostgreSQL.
 
 Use object storage for:
 
-* videos
-* images
-* audio
-* generated documents
-* other large artifacts
+- videos
+- images
+- audio
+- generated documents
+- other large artifacts
 
 Database stores metadata and references.
 
@@ -1345,12 +1345,12 @@ Database stores metadata and references.
 
 Caching may be used for:
 
-* tool definitions
-* provider metadata
-* temporary task state
-* session data
-* rate-limit state
-* frequently accessed configuration
+- tool definitions
+- provider metadata
+- temporary task state
+- session data
+- rate-limit state
+- frequently accessed configuration
 
 Sensitive credential caching must remain tightly controlled and short-lived.
 
@@ -1466,10 +1466,10 @@ Avoid unnecessary dependency duplication.
 
 All third-party components should undergo:
 
-* license review
-* security review
-* maintenance review
-* dependency audit
+- license review
+- security review
+- maintenance review
+- dependency audit
 
 ---
 
@@ -1615,12 +1615,12 @@ Optional Computer Agent
 
 Cloud deployment should support:
 
-* scalable API
-* workers
-* managed PostgreSQL
-* managed Redis
-* object storage
-* isolated computer environments
+- scalable API
+- workers
+- managed PostgreSQL
+- managed Redis
+- object storage
+- isolated computer environments
 
 Cloud computer sessions should remain isolated from the core API.
 
@@ -1839,14 +1839,14 @@ User Request
 
 Security monitoring should identify:
 
-* repeated authorization failures
-* unusual tool activity
-* excessive execution
-* credential failures
-* suspicious network requests
-* repeated denied actions
-* sandbox violations
-* abnormal agent behavior
+- repeated authorization failures
+- unusual tool activity
+- excessive execution
+- credential failures
+- suspicious network requests
+- repeated denied actions
+- sandbox violations
+- abnormal agent behavior
 
 ---
 
@@ -1854,14 +1854,14 @@ Security monitoring should identify:
 
 LEO should record appropriate metadata around model execution:
 
-* model provider
-* model
-* latency
-* token usage
-* tool selection
-* plan outcome
-* failure
-* cost
+- model provider
+- model
+- latency
+- token usage
+- tool selection
+- plan outcome
+- failure
+- cost
 
 Sensitive prompt content should not automatically be logged in plaintext.
 
@@ -1887,15 +1887,15 @@ Reason:
 
 It already provides substantial infrastructure for:
 
-* agents
-* tools
-* MCP
-* workflows
-* memory
-* scheduling
-* browser
-* voice
-* security
+- agents
+- tools
+- MCP
+- workflows
+- memory
+- scheduling
+- browser
+- voice
+- security
 
 LEO's effort should focus on the product-specific intelligence, policy and automation layer.
 
@@ -1927,11 +1927,11 @@ This avoids coupling LEO to a single computer-use engine.
 
 Use existing repositories for:
 
-* patterns
-* provider mappings
-* validation
-* scheduling ideas
-* MCP interfaces
+- patterns
+- provider mappings
+- validation
+- scheduling ideas
+- MCP interfaces
 
 Do not make a hosted third-party social backend a hard dependency.
 
@@ -1977,13 +1977,13 @@ Long-running operations SHALL run asynchronously.
 
 This includes:
 
-* media processing
-* social publishing
-* browser tasks
-* computer tasks
-* research
-* autonomous agents
-* scheduled workflows
+- media processing
+- social publishing
+- browser tasks
+- computer tasks
+- research
+- autonomous agents
+- scheduled workflows
 
 ---
 
@@ -1991,10 +1991,10 @@ This includes:
 
 LEO should avoid putting provider-specific logic into:
 
-* agent prompts
-* task engine
-* policy engine
-* core database models
+- agent prompts
+- task engine
+- policy engine
+- core database models
 
 Provider-specific behavior belongs in adapters.
 
@@ -2069,14 +2069,14 @@ Performance and horizontal scalability remain important but should not compromis
 
 Before implementation, architecture review must verify:
 
-* every SRS requirement maps to a module
-* every external side effect maps to policy
-* every privileged capability has an authorization model
-* every persistent task has recovery behavior
-* every provider has an abstraction
-* every secret has a storage/access strategy
-* every high-risk action has an approval strategy
-* every major workflow has an audit strategy
+- every SRS requirement maps to a module
+- every external side effect maps to policy
+- every privileged capability has an authorization model
+- every persistent task has recovery behavior
+- every provider has an abstraction
+- every secret has a storage/access strategy
+- every high-risk action has an approval strategy
+- every major workflow has an audit strategy
 
 ---
 

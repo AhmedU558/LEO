@@ -108,26 +108,26 @@ The selected architecture is:
 
 OwnPilot already provides a large portion of the infrastructure LEO needs:
 
-* agent engine
-* tool orchestration
-* dynamic tool registry
-* MCP
-* plugins
-* workflows
-* scheduler
-* memory
-* autonomous agents
-* browser capabilities
-* voice pipeline
-* WebSocket gateway
-* HTTP API
-* PostgreSQL
-* credential storage
-* authentication
-* permissions
-* audit logging
-* rate limiting
-* sandboxing
+- agent engine
+- tool orchestration
+- dynamic tool registry
+- MCP
+- plugins
+- workflows
+- scheduler
+- memory
+- autonomous agents
+- browser capabilities
+- voice pipeline
+- WebSocket gateway
+- HTTP API
+- PostgreSQL
+- credential storage
+- authentication
+- permissions
+- audit logging
+- rate limiting
+- sandboxing
 
 Its architecture is substantially closer to LEO's target than a conventional chatbot framework.
 
@@ -159,13 +159,13 @@ OwnPilot
 
 OwnPilot supports:
 
-* tool validation
-* tool source tracking
-* tool trust levels
-* execution permissions
-* confirmation requirements
-* dynamic registration
-* sandbox execution
+- tool validation
+- tool source tracking
+- tool trust levels
+- execution permissions
+- confirmation requirements
+- dynamic registration
+- sandbox execution
 
 Trust levels include:
 
@@ -181,26 +181,26 @@ This is directly useful for LEO.
 
 MCP can become the principal integration boundary for:
 
-* computer use
-* external services
-* social tools
-* browser tools
-* future integrations
+- computer use
+- external services
+- social tools
+- browser tools
+- future integrations
 
 ### Autonomous agents
 
 OwnPilot's autonomous-agent architecture includes:
 
-* cron triggers
-* heartbeat execution
-* quiet hours
-* budgets
-* tasks
-* execution logs
-* autonomy levels
-* allowed actions
-* blocked actions
-* approval requirements
+- cron triggers
+- heartbeat execution
+- quiet hours
+- budgets
+- tasks
+- execution logs
+- autonomy levels
+- allowed actions
+- blocked actions
+- approval requirements
 
 This is highly aligned with LEO's autonomous workflow model.
 
@@ -212,25 +212,25 @@ This is highly aligned with LEO's autonomous workflow model.
 
 Audited areas include:
 
-* API-key authentication
-* JWT validation
-* UI sessions
-* origin validation
-* password throttling
-* bootstrap authentication
-* login auditing
+- API-key authentication
+- JWT validation
+- UI sessions
+- origin validation
+- password throttling
+- bootstrap authentication
+- login auditing
 
 Important controls include:
 
-* SHA-256 API-key comparison
-* timing-safe comparison
-* JWT algorithm restriction
-* JWT age restrictions
-* HttpOnly cookies
-* trusted Origin/Referer checks
-* login throttling
-* password-change verification
-* audit events
+- SHA-256 API-key comparison
+- timing-safe comparison
+- JWT algorithm restriction
+- JWT age restrictions
+- HttpOnly cookies
+- trusted Origin/Referer checks
+- login throttling
+- password-change verification
+- audit events
 
 ## LEO changes required
 
@@ -250,12 +250,12 @@ LEO must use explicit identity and authorization.
 
 OwnPilot provides:
 
-* encrypted credential storage
-* OAuth credentials
-* API keys
-* AES-256-GCM/PBKDF2 mechanisms
-* controlled credential access
-* short-lived plaintext credential caching
+- encrypted credential storage
+- OAuth credentials
+- API keys
+- AES-256-GCM/PBKDF2 mechanisms
+- controlled credential access
+- short-lived plaintext credential caching
 
 Production configuration must require a persistent encryption key.
 
@@ -263,13 +263,13 @@ Production configuration must require a persistent encryption key.
 
 Credentials must never be placed directly into:
 
-* prompts
-* model context
-* ordinary logs
-* action descriptions
-* analytics
-* browser snapshots
-* error messages
+- prompts
+- model context
+- ordinary logs
+- action descriptions
+- analytics
+- browser snapshots
+- error messages
 
 Credentials are accessed through controlled capabilities.
 
@@ -279,24 +279,24 @@ Credentials are accessed through controlled capabilities.
 
 OwnPilot's plugin API provides controlled access to:
 
-* isolated storage
-* restricted network
-* tool registration
-* filtered events
-* sanitized logs
-* UI notifications
-* plugin communication
+- isolated storage
+- restricted network
+- tool registration
+- filtered events
+- sanitized logs
+- UI notifications
+- plugin communication
 
 Sensitive capabilities are intentionally excluded:
 
-* credentials
-* OAuth tokens
-* master keys
-* audit logs
-* arbitrary process execution
-* environment variables
-* unrestricted filesystem
-* OS operations
+- credentials
+- OAuth tokens
+- master keys
+- audit logs
+- arbitrary process execution
+- environment variables
+- unrestricted filesystem
+- OS operations
 
 ## LEO decision
 
@@ -310,15 +310,15 @@ Plugins must be treated as untrusted extensions by default.
 
 OwnPilot already contains significant SSRF protection:
 
-* URL validation
-* DNS resolution
-* private IP blocking
-* internal address blocking
-* IPv4-mapped IPv6 handling
-* CGNAT blocking
-* redirect revalidation
-* DNS failure fail-closed behavior
-* safe-fetch wrappers
+- URL validation
+- DNS resolution
+- private IP blocking
+- internal address blocking
+- IPv4-mapped IPv6 handling
+- CGNAT blocking
+- redirect revalidation
+- DNS failure fail-closed behavior
+- safe-fetch wrappers
 
 ## LEO requirement
 
@@ -338,12 +338,12 @@ All external network access should pass through policy enforcement.
 
 OwnPilot includes:
 
-* static validation
-* execution permissions
-* approval requirements
-* sandbox execution
-* tool trust levels
-* concurrency protection
+- static validation
+- execution permissions
+- approval requirements
+- sandbox execution
+- tool trust levels
+- concurrency protection
 
 A historical concurrency problem involving unrestricted parallel tool execution has been addressed with a tool execution concurrency cap.
 
@@ -476,16 +476,16 @@ LEO should not become an uncontrolled fork.
 
 OpenClaw contains useful architectural patterns around:
 
-* gateway architecture
-* agent runs
-* approvals
-* cancellation
-* lifecycle management
-* cron
-* heartbeats
-* tool planning
-* tool registries
-* operational security
+- gateway architecture
+- agent runs
+- approvals
+- cancellation
+- lifecycle management
+- cron
+- heartbeats
+- tool planning
+- tool registries
+- operational security
 
 Particularly valuable is the separation between an agent run and its execution/approval lifecycle.
 
@@ -532,19 +532,19 @@ Repository:
 
 It provides MCP-based computer control for:
 
-* Windows
-* macOS
-* Linux
+- Windows
+- macOS
+- Linux
 
 Capabilities include:
 
-* application discovery
-* application state
-* keyboard control
-* sequences
-* screenshots
-* accessibility information
-* diagnostics
+- application discovery
+- application state
+- keyboard control
+- sequences
+- screenshots
+- accessibility information
+- diagnostics
 
 It is particularly valuable because it fits naturally behind LEO's MCP boundary.
 
@@ -594,12 +594,12 @@ Repository:
 
 Best suited for:
 
-* isolated research
-* autonomous browser work
-* long-running tasks
-* remote execution
-* disposable environments
-* situations where local machine access is unavailable
+- isolated research
+- autonomous browser work
+- long-running tasks
+- remote execution
+- disposable environments
+- situations where local machine access is unavailable
 
 Architecture:
 
@@ -632,22 +632,22 @@ Repository:
 
 Useful for:
 
-* computer-use action loops
-* screenshot/action patterns
-* Playwright integration
-* dedicated desktop sessions
+- computer-use action loops
+- screenshot/action patterns
+- Playwright integration
+- dedicated desktop sessions
 
 It should not be treated as a complete production security boundary.
 
 LEO must add its own:
 
-* sandbox
-* permissions
-* action review
-* credential isolation
-* resource limits
-* audit
-* network restrictions
+- sandbox
+- permissions
+- action review
+- credential isolation
+- resource limits
+- audit
+- network restrictions
 
 ## License
 
@@ -667,10 +667,10 @@ Repository:
 
 Useful primarily for:
 
-* remote desktop UI
-* browser-based computer session
-* modern Next.js UI
-* sandbox visualization
+- remote desktop UI
+- browser-based computer session
+- modern Next.js UI
+- sandbox visualization
 
 Not a LEO foundation.
 
@@ -690,10 +690,10 @@ Repository:
 
 Useful for studying:
 
-* GUI grounding
-* visual computer interaction
-* agent planning
-* desktop task execution
+- GUI grounding
+- visual computer interaction
+- agent planning
+- desktop task execution
 
 It remains a research/reference component rather than a production dependency.
 
@@ -711,12 +711,12 @@ This is a strong fit for LEO's browser voice interface.
 
 Useful capabilities include:
 
-* realtime voice
-* React integration
-* tool definitions
-* transcripts
-* lifecycle management
-* constrained voice actions
+- realtime voice
+- React integration
+- tool definitions
+- transcripts
+- lifecycle management
+- constrained voice actions
 
 LEO should expose only narrow, approved tools to the voice interface.
 
@@ -756,13 +756,13 @@ Repository:
 
 Useful for:
 
-* wake-word architecture
-* local STT
-* VAD
-* turn detection
-* local voice execution
-* Raspberry Pi/local assistant architecture
-* swappable providers
+- wake-word architecture
+- local STT
+- VAD
+- turn detection
+- local voice execution
+- Raspberry Pi/local assistant architecture
+- swappable providers
 
 LEO can later provide:
 
@@ -794,29 +794,29 @@ MIT.
 
 Supports:
 
-* X
-* Facebook Pages
-* Instagram
-* LinkedIn
-* Pinterest
-* TikTok
-* Discord
-* Telegram
-* YouTube
-* Reddit
-* WordPress
+- X
+- Facebook Pages
+- Instagram
+- LinkedIn
+- Pinterest
+- TikTok
+- Discord
+- Telegram
+- YouTube
+- Reddit
+- WordPress
 
 Also provides:
 
-* scheduling
-* validation
-* campaign workflows
-* media uploads
-* publishing
-* retries
-* analytics
-* status inspection
-* MCP
+- scheduling
+- validation
+- campaign workflows
+- media uploads
+- publishing
+- retries
+- analytics
+- status inspection
+- MCP
 
 ## Critical limitation
 
@@ -842,14 +842,14 @@ Therefore the repository does not constitute a self-contained social backend tha
 
 Study:
 
-* provider abstraction
-* capability discovery
-* validation
-* publishing state
-* retry model
-* analytics
-* MCP tool surface
-* schedule representation
+- provider abstraction
+- capability discovery
+- validation
+- publishing state
+- retry model
+- analytics
+- MCP tool surface
+- schedule representation
 
 Do not make LEO dependent on `getsocialclaw.com`.
 
@@ -881,13 +881,13 @@ This maps directly to LEO's approval model.
 
 It also demonstrates useful separation between:
 
-* accounts
-* posts
-* drafts
-* media
-* results
-* retries
-* analytics
+- accounts
+- posts
+- drafts
+- media
+- results
+- retries
+- analytics
 
 ## Decision
 
@@ -909,17 +909,17 @@ MIT.
 
 ## Architecture
 
-* Next.js
-* PostgreSQL
-* Prisma
-* NextAuth
-* Stripe
-* MuAPI
+- Next.js
+- PostgreSQL
+- Prisma
+- NextAuth
+- Stripe
+- MuAPI
 
 Current live publishing coverage is primarily:
 
-* YouTube
-* TikTok
+- YouTube
+- TikTok
 
 Other major platforms are listed as future functionality.
 
@@ -929,11 +929,11 @@ Other major platforms are listed as future functionality.
 
 Useful for:
 
-* scheduling UI
-* post history
-* multi-account concepts
-* simple deployment
-* Prisma/PostgreSQL patterns
+- scheduling UI
+- post history
+- multi-account concepts
+- simple deployment
+- Prisma/PostgreSQL patterns
 
 Not suitable as LEO's social foundation.
 
@@ -1078,15 +1078,15 @@ Publishing
 
 Each platform receives its own:
 
-* title
-* description
-* keywords
-* hashtags
-* CTA
-* metadata
-* media treatment
-* audience strategy
-* publishing schedule
+- title
+- description
+- keywords
+- hashtags
+- CTA
+- metadata
+- media treatment
+- audience strategy
+- publishing schedule
 
 ---
 
@@ -1204,13 +1204,13 @@ Reconciliation
 
 Retries require:
 
-* idempotency
-* exponential backoff
-* provider-aware retry rules
-* rate-limit handling
-* permanent vs transient failure classification
-* maximum retry count
-* audit entries
+- idempotency
+- exponential backoff
+- provider-aware retry rules
+- rate-limit handling
+- permanent vs transient failure classification
+- maximum retry count
+- audit entries
 
 ---
 
@@ -1218,11 +1218,11 @@ Retries require:
 
 Where providers support webhooks, LEO should use them for:
 
-* publishing completion
-* failures
-* account changes
-* token events
-* provider notifications
+- publishing completion
+- failures
+- account changes
+- token events
+- provider notifications
 
 Webhook processing must include:
 
@@ -1377,13 +1377,13 @@ LEO follows four rules.
 
 Use OwnPilot rather than rebuilding:
 
-* agents
-* memory
-* tools
-* MCP
-* scheduler
-* gateway
-* credential infrastructure
+- agents
+- memory
+- tools
+- MCP
+- scheduler
+- gateway
+- credential infrastructure
 
 ## Rule 2 — Isolate external implementations
 

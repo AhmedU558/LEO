@@ -141,7 +141,6 @@ Do not duplicate existing OwnPilot functionality unless there is a documented re
 
 The audited repositories have these roles:
 
-
 | Repository                      | Implementation Role                 |
 | ------------------------------- | ----------------------------------- |
 | OwnPilot                        | **Primary foundation**              |
@@ -154,7 +153,6 @@ The audited repositories have these roles:
 | OpenClaw                        | **Architecture/security reference** |
 | OpenLily                        | **Voice reference**                 |
 | Agent S                         | **Computer-use research reference** |
-
 
 Do not automatically import code from these repositories.
 
@@ -598,7 +596,6 @@ Example:
     "platforms": ["instagram", "tiktok"]
   }
 }
-
 ```
 
 Never rely exclusively on free-form strings internally.
@@ -625,7 +622,6 @@ Example:
     }
   ]
 }
-
 ```
 
 Plans must be validated before execution.
@@ -996,7 +992,6 @@ Example:
   "scheduling": true,
   "analytics": true
 }
-
 ```
 
 Do not assume all providers support identical functionality.

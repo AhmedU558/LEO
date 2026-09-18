@@ -116,7 +116,6 @@ Successful responses may follow:
   "data": {},
   "meta": {}
 }
-
 ```
 
 For collections:
@@ -130,7 +129,6 @@ For collections:
     "total": 100
   }
 }
-
 ```
 
 ---
@@ -147,7 +145,6 @@ Errors SHALL use a consistent structure:
     "requestId": "req_123"
   }
 }
-
 ```
 
 Do not expose:
@@ -275,7 +272,6 @@ Request:
   "email": "user@example.com",
   "password": "password"
 }
-
 ```
 
 Response:
@@ -287,7 +283,6 @@ Response:
     "session": {}
   }
 }
-
 ```
 
 ---
@@ -331,7 +326,6 @@ Example:
   "timezone": "Asia/Karachi",
   "locale": "en"
 }
-
 ```
 
 ---
@@ -355,7 +349,6 @@ Request:
   "name": "My Workspace",
   "timezone": "Asia/Karachi"
 }
-
 ```
 
 ---
@@ -384,7 +377,6 @@ Request:
 {
   "title": "Social Planning"
 }
-
 ```
 
 ---
@@ -412,7 +404,6 @@ Request:
   "content": "Prepare this video for TikTok and Instagram.",
   "attachments": []
 }
-
 ```
 
 Response:
@@ -425,7 +416,6 @@ Response:
     "status": "PROCESSING"
   }
 }
-
 ```
 
 ---
@@ -451,7 +441,6 @@ Request:
   "autonomyLevel": 2,
   "instructions": "Manage my social content."
 }
-
 ```
 
 ---
@@ -509,7 +498,6 @@ Example:
     "startedAt": "..."
   }
 }
-
 ```
 
 ---
@@ -529,7 +517,6 @@ Request:
   "agentId": "agent_123",
   "priority": "NORMAL"
 }
-
 ```
 
 ---
@@ -609,7 +596,6 @@ Example:
     }
   ]
 }
-
 ```
 
 ---
@@ -633,7 +619,6 @@ Request:
   "name": "Daily Social Report",
   "definition": {}
 }
-
 ```
 
 ---
@@ -721,7 +706,6 @@ Approval resolution should return:
     "taskId": "task_123"
   }
 }
-
 ```
 
 The executor must revalidate policy before execution.
@@ -752,7 +736,6 @@ Request:
   "effect": "ALLOW",
   "requiresApproval": true
 }
-
 ```
 
 ---
@@ -900,7 +883,6 @@ Example:
     }
   ]
 }
-
 ```
 
 ---
@@ -953,7 +935,6 @@ Preferred response:
     "expiresAt": "..."
   }
 }
-
 ```
 
 Upload URLs must be temporary and scoped.
@@ -1023,13 +1004,8 @@ Request:
 
 ```json
 {
-  "platforms": [
-    "instagram",
-    "tiktok",
-    "youtube"
-  ]
+  "platforms": ["instagram", "tiktok", "youtube"]
 }
-
 ```
 
 Response:
@@ -1063,7 +1039,6 @@ Request:
   "mediaId": "media_123",
   "variantId": "variant_123"
 }
-
 ```
 
 Default behavior should create a draft rather than immediately publish.
@@ -1101,7 +1076,6 @@ Request:
   "scheduledAt": "2026-09-20T15:00:00Z",
   "timezone": "Asia/Karachi"
 }
-
 ```
 
 The backend must validate:
@@ -1174,7 +1148,6 @@ Request:
   "type": "PREFERENCE",
   "content": "Prefer short social captions."
 }
-
 ```
 
 ---
@@ -1201,7 +1174,6 @@ Request:
 {
   "query": "What are my social media preferences?"
 }
-
 ```
 
 Results must respect memory scope.
@@ -1374,7 +1346,6 @@ Authentication must be required.
   "timestamp": "...",
   "data": {}
 }
-
 ```
 
 ---
@@ -1519,7 +1490,6 @@ Repeated requests with the same valid idempotency key should return the same log
 
 Example:
 
-
 | Endpoint           | User          | Agent         | Admin            |
 | ------------------ | ------------- | ------------- | ---------------- |
 | Read tasks         | Yes           | Scoped        | Yes              |
@@ -1530,7 +1500,6 @@ Example:
 | Read credentials   | Metadata only | No            | Restricted       |
 | Modify permissions | Yes           | No            | Restricted       |
 | Audit              | Own scope     | Own execution | Authorized scope |
-
 
 The policy engine remains authoritative.
 
@@ -1604,7 +1573,6 @@ Example:
     "status": "QUEUED"
   }
 }
-
 ```
 
 The client then subscribes to task events or polls the task endpoint.

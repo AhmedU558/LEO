@@ -501,7 +501,6 @@ Risk factors:
 
 # 17. Example Risk Matrix
 
-
 | Action                    | Typical Risk |
 | ------------------------- | ------------ |
 | Read public webpage       | Low          |
@@ -514,7 +513,6 @@ Risk factors:
 | Execute shell command     | High         |
 | Run administrator command | Critical     |
 | Transfer funds            | Critical     |
-
 
 Actual risk should remain policy-configurable.
 

@@ -1145,7 +1145,6 @@ Example:
   "delete": false,
   "analytics": true
 }
-
 ```
 
 The provider adapter is authoritative for actual capabilities.

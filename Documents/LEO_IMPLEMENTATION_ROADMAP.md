@@ -2274,4 +2274,3 @@ That document will be the **actual instruction set for Antigravity** and will co
 - explicit "do not do this" constraints
 - Phase 0 implementation prompt
 - phase-by-phase Antigravity execution protocol
-
