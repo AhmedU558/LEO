@@ -946,7 +946,23 @@ export class WorkflowService implements IWorkflowService {
    * Cancel a running workflow execution.
    */
   cancelExecution(workflowId: string): boolean {
-    return this.locks.cancel(workflowId);
+    const cancelled = this.locks.cancel(workflowId);
+    if (cancelled) {
+      // Invalidate pending approvals in background
+      import('../../db/repositories/workflows/approvals.js').then(
+        ({ createWorkflowApprovalsRepository }) => {
+          const repo = createWorkflowApprovalsRepository('system');
+          repo.listByWorkflow(workflowId).then((approvals) => {
+            approvals.forEach((app) => {
+              if (app.status === 'pending') {
+                repo.updateStatus(app.id, 'denied', 'Workflow cancelled');
+              }
+            });
+          });
+        }
+      );
+    }
+    return cancelled;
   }
 
   /**

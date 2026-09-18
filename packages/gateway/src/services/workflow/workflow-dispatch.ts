@@ -168,7 +168,76 @@ export type { DispatchNodeContext, DispatchCallbacks } from './workflow-context.
 // Node dispatch (the giant switch)
 // ============================================================================
 
+import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
+import type { Capability } from '@ownpilot/core/security';
+import { randomUUID } from 'crypto';
+
 export async function dispatchNode(
+  ctx: DispatchNodeContext,
+  cb: DispatchCallbacks
+): Promise<NodeResult> {
+  const { node, userId, dryRun, workflowId } = ctx;
+  const identity = { userId, workspaceId: 'default', roles: [] };
+
+  // Map Node to Capability
+  let capability: Capability = 'workflow.execute';
+  if (node.type === 'llmNode') capability = 'agent.execute';
+  else if (node.type === 'codeNode') capability = 'shell.execute';
+
+  const actionName = ((node.data as Record<string, unknown>).toolName as string) || node.type;
+
+  const policyEngine = new PolicyEngine();
+  const riskEngine = new RiskEngine();
+
+  const risk = riskEngine.classify(capability, actionName);
+  const policyResult = policyEngine.evaluate({
+    identity,
+    action: actionName,
+    resource: 'workflow_node',
+    capability,
+    risk,
+    environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+    autonomous: true,
+    requestedParameters: node.data as Record<string, unknown>,
+  });
+
+  if (policyResult.decision === 'DENY') {
+    return {
+      nodeId: node.id,
+      status: 'error',
+      error: `Policy Engine Denied: ${policyResult.reason}`,
+    };
+  }
+
+  if (policyResult.decision === 'REQUIRE_APPROVAL' && !dryRun) {
+    throw new ApprovalPauseError(`policy-req-${randomUUID()}`);
+  }
+
+  const result = await _dispatchNodeImpl(ctx, cb);
+
+  if (!dryRun) {
+    await ActionLedger.record({
+      userId: identity.userId,
+      workspaceId: identity.workspaceId,
+      tool: actionName,
+      action: actionName,
+      resource: 'workflow_node',
+      resourceType: node.type,
+      taskId: workflowId,
+      capability,
+      policyDecision: result.status === 'success' ? 'ALLOW' : 'DENY',
+      riskLevel: risk,
+      executionEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      durationMs: typeof result.durationMs === 'number' ? result.durationMs : 0,
+      result: result.status,
+      error: typeof result.error === 'string' ? result.error : undefined,
+    });
+  }
+
+  return result;
+}
+
+async function _dispatchNodeImpl(
   ctx: DispatchNodeContext,
   cb: DispatchCallbacks
 ): Promise<NodeResult> {

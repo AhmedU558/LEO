@@ -177,8 +177,10 @@ export interface SchedulerConfig {
   historyFilePath?: string;
   /** Max history entries to keep per task */
   maxHistoryPerTask?: number;
-  /** Default timeout for tasks in ms */
+  /** Default execution timeout (ms) */
   defaultTimeout?: number;
+  /** Max concurrent tasks */
+  maxConcurrentTasks?: number;
   /** Check interval in ms */
   checkInterval?: number;
 }
@@ -549,7 +551,8 @@ export class Scheduler {
       historyFilePath: config.historyFilePath ?? path.join(dataDir, 'task-history.json'),
       maxHistoryPerTask: config.maxHistoryPerTask ?? 100,
       defaultTimeout: config.defaultTimeout ?? 300000, // 5 minutes
-      checkInterval: config.checkInterval ?? 60000, // 1 minute
+      checkInterval: config.checkInterval ?? 60000,
+      maxConcurrentTasks: config.maxConcurrentTasks ?? 5,
     };
   }
 
@@ -758,6 +761,7 @@ export class Scheduler {
    */
   private async checkAndRunTasks(): Promise<void> {
     const now = new Date();
+    if (this.runningTasks.size >= this.config.maxConcurrentTasks) return;
 
     for (const task of this.tasks.values()) {
       if (!task.enabled || !task.nextRun) {
@@ -923,6 +927,7 @@ export class Scheduler {
    */
   private updateNextRunTimes(): void {
     const now = new Date();
+    if (this.runningTasks.size >= this.config.maxConcurrentTasks) return;
     for (const task of this.tasks.values()) {
       if (task.enabled) {
         task.nextRun = getNextRunTime(task.cron, now)?.toISOString();
