@@ -952,12 +952,8 @@ export class WorkflowService implements IWorkflowService {
       import('../../db/repositories/workflows/approvals.js').then(
         ({ createWorkflowApprovalsRepository }) => {
           const repo = createWorkflowApprovalsRepository('system');
-          repo.listByWorkflow(workflowId).then((approvals) => {
-            approvals.forEach((app) => {
-              if (app.status === 'pending') {
-                repo.updateStatus(app.id, 'denied', 'Workflow cancelled');
-              }
-            });
+          repo.rejectByWorkflow(workflowId).catch((err) => {
+            console.error('Failed to invalidate approvals for cancelled workflow', err);
           });
         }
       );

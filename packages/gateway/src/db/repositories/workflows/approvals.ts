@@ -119,10 +119,18 @@ export class WorkflowApprovalsRepository extends BaseRepository {
   async decide(id: string, status: 'approved' | 'rejected'): Promise<WorkflowApproval | null> {
     const now = new Date().toISOString();
     await this.execute(
-      `UPDATE workflow_approvals SET status = $1, decided_at = $2 WHERE id = $3 AND user_id = $4 AND status = 'pending'`,
+      `UPDATE workflow_approvals SET status = $1, decided_at = $2 WHERE id = $3 AND user_id = $4`,
       [status, now, id, this.userId]
     );
     return this.get(id);
+  }
+
+  async rejectByWorkflow(workflowId: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.execute(
+      `UPDATE workflow_approvals SET status = 'rejected', decided_at = $1 WHERE workflow_id = $2 AND status = 'pending'`,
+      [now, workflowId]
+    );
   }
 
   async getPending(limit = 20, offset = 0): Promise<WorkflowApproval[]> {
