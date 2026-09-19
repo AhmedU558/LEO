@@ -60,6 +60,7 @@ export const NAV_DESCRIPTIONS: Record<string, string> = {
   '/settings/model-routing': 'Route tasks to the best model automatically',
   '/settings/security': 'Set, change, or remove UI password protection',
   '/settings/security-scanner': 'Scan platform for security vulnerabilities',
+  '/settings/action-ledger': 'Immutable audit trail of all agent and workflow executions',
   '/settings/tool-groups': 'Organize tools into permission groups',
   '/settings/cli-tools': 'Register CLI tools for AI use',
   '/settings/coding-agents': 'Configure coding agent environments',

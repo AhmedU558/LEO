@@ -152,6 +152,7 @@ export const navGroups: NavGroup[] = [
       // Security & access
       { to: '/settings/security', icon: Lock, label: 'Auth & Password' },
       { to: '/settings/security-scanner', icon: Shield, label: 'Security Scanner' },
+      { to: '/settings/action-ledger', icon: Activity, label: 'Action Ledger' },
       { to: '/settings/tool-groups', icon: Wrench, label: 'Tool Groups' },
       // Tools & integrations
       { to: '/settings/cli-tools', icon: Code, label: 'CLI Tools' },

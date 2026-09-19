@@ -25,6 +25,7 @@ import {
   databaseRoutes,
   dashboardRoutes,
   securityRoutes,
+  ledgerRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -110,6 +111,9 @@ export function registerV2Routes(app: Hono): void {
 
   // Security
   app.route('/api/v2/security', securityRoutes);
+
+  // Ledger
+  app.route('/api/v2/ledger', ledgerRoutes);
 
   // Plugins
   app.route('/api/v2/plugins', pluginsRoutes);

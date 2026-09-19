@@ -151,6 +151,9 @@ const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default:
 const SecurityPage = lazy(() =>
   import('./pages/SecurityPage').then((m) => ({ default: m.SecurityPage }))
 );
+const ActionLedgerPage = lazy(() =>
+  import('./pages/ActionLedgerPage').then((m) => ({ default: m.ActionLedgerPage }))
+);
 const SecurityDashboardPage = lazy(() =>
   import('./pages/SecurityDashboardPage').then((m) => ({ default: m.SecurityDashboardPage }))
 );
@@ -311,6 +314,7 @@ export function App() {
         <Route path="settings/workflow-tools" element={page(<WorkflowToolSettingsPage />)} />
         <Route path="settings/security" element={page(<SecurityPage />)} />
         <Route path="settings/security-scanner" element={page(<SecurityDashboardPage />)} />
+        <Route path="settings/action-ledger" element={page(<ActionLedgerPage />)} />
         <Route path="settings/system" element={page(<SystemPage />)} />
         <Route path="settings/layout" element={page(<LayoutConfigPage />)} />
         <Route path="about" element={page(<AboutPage />)} />
