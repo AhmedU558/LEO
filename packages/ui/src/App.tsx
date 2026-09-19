@@ -154,6 +154,9 @@ const SecurityPage = lazy(() =>
 const ActionLedgerPage = lazy(() =>
   import('./pages/ActionLedgerPage').then((m) => ({ default: m.ActionLedgerPage }))
 );
+const ComputerControlPage = lazy(() =>
+  import('./pages/ComputerControlPage').then((m) => ({ default: m.ComputerControlPage }))
+);
 const SocialPage = lazy(() =>
   import('./pages/SocialPage').then((m) => ({ default: m.SocialPage }))
 );
@@ -292,6 +295,7 @@ export function App() {
         <Route path="agents" element={page(<AgentsPage />)} />
         <Route path="tools" element={page(<ToolsPage />)} />
         <Route path="social" element={page(<SocialPage />)} />
+        <Route path="computer" element={page(<ComputerControlPage />)} />
         <Route path="custom-tools" element={page(<CustomToolsPage />)} />
         <Route path="plugins" element={page(<PluginsPage />)} />
         <Route

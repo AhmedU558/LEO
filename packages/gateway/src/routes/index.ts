@@ -68,3 +68,4 @@ export { pulseRoutes } from './pulse.js';
 export { tunnelRoutes } from './tunnel.js';
 export { ledgerRoutes } from './ledger.js';
 export { socialRoutes } from './social.js';
+export { computerRoutes } from './computer.js';

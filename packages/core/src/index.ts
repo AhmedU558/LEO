@@ -70,3 +70,4 @@ export * from './edge/index.js';
 // sub-path instead of importing the full barrel just to read the version.
 export { VERSION } from './version.js';
 export * as social from './social/index.js';
+export * as computer from './computer/index.js';

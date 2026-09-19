@@ -27,6 +27,7 @@ import {
   securityRoutes,
   ledgerRoutes,
   socialRoutes,
+  computerRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -118,6 +119,9 @@ export function registerV2Routes(app: Hono): void {
 
   // Social
   app.route('/api/v2/social', socialRoutes);
+
+  // Computer
+  app.route('/api/v2/computer', computerRoutes);
 
   // Plugins
   app.route('/api/v2/plugins', pluginsRoutes);
