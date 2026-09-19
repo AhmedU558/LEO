@@ -43,6 +43,26 @@ function rowToAgent(row: AgentRow): AgentRecord {
 }
 
 export class AgentsRepository extends BaseRepository {
+  // v1.1 Optimization: Safe caching for static Agent Profiles
+  private cache = new Map<string, { data: AgentRecord; expires: number }>();
+  private cacheTtlMs = 60000; // 1 minute
+
+  private getCached(id: string): AgentRecord | null {
+    const entry = this.cache.get(id);
+    if (entry && entry.expires > Date.now()) {
+      return entry.data;
+    }
+    return null;
+  }
+
+  private setCache(id: string, record: AgentRecord) {
+    this.cache.set(id, { data: record, expires: Date.now() + this.cacheTtlMs });
+  }
+
+  private invalidateCache(id: string) {
+    this.cache.delete(id);
+  }
+
   async create(data: {
     id: string;
     name: string;
@@ -71,8 +91,15 @@ export class AgentsRepository extends BaseRepository {
   }
 
   async getById(id: string): Promise<AgentRecord | null> {
+    const cached = this.getCached(id);
+    if (cached) return cached;
+
     const row = await this.queryOne<AgentRow>(`SELECT * FROM agents WHERE id = $1`, [id]);
-    return row ? rowToAgent(row) : null;
+    if (!row) return null;
+    
+    const record = rowToAgent(row);
+    this.setCache(id, record);
+    return record;
   }
 
   async getByName(name: string): Promise<AgentRecord | null> {
@@ -103,6 +130,7 @@ export class AgentsRepository extends BaseRepository {
       config?: Record<string, unknown>;
     }
   ): Promise<AgentRecord | null> {
+    this.invalidateCache(id);
     const existing = await this.getById(id);
     if (!existing) return null;
 
@@ -149,6 +177,7 @@ export class AgentsRepository extends BaseRepository {
     model: string;
     config?: Record<string, unknown>;
   }): Promise<void> {
+    this.invalidateCache(data.id);
     const configJson = JSON.stringify(data.config ?? {});
     await this.execute(
       `INSERT INTO agents (id, name, system_prompt, provider, model, config)
@@ -161,6 +190,7 @@ export class AgentsRepository extends BaseRepository {
   }
 
   async delete(id: string): Promise<boolean> {
+    this.invalidateCache(id);
     const result = await this.execute(`DELETE FROM agents WHERE id = $1`, [id]);
     return result.changes > 0;
   }

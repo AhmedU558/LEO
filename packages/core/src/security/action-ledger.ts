@@ -33,6 +33,10 @@ export class ActionLedger {
   private static lastHash: string = 'genesis';
   // Note: in memory for phase 2. Would use PG in production.
   private static entries: ActionLedgerEntry[] = [];
+  
+  // v1.1 Optimization: Indexes for growing datasets
+  private static indexByWorkspace: Map<string, ActionLedgerEntry[]> = new Map();
+  private static indexByActionId: Map<string, ActionLedgerEntry> = new Map();
 
   public static async record(
     entryData: Omit<ActionLedgerEntry, 'actionId' | 'timestamp' | 'previousHash' | 'hash'>
@@ -56,15 +60,35 @@ export class ActionLedger {
 
     this.entries.push(entry);
     this.lastHash = hash;
+    
+    // Update indexes
+    this.indexByActionId.set(actionId, entry);
+    if (!this.indexByWorkspace.has(entry.workspaceId)) {
+      this.indexByWorkspace.set(entry.workspaceId, []);
+    }
+    this.indexByWorkspace.get(entry.workspaceId)!.push(entry);
+
     return entry;
   }
 
   public static getEntries(): ActionLedgerEntry[] {
     return [...this.entries];
   }
+  
+  // v1.1 Optimized query
+  public static getByWorkspaceId(workspaceId: string): ActionLedgerEntry[] {
+    return this.indexByWorkspace.get(workspaceId) || [];
+  }
+  
+  // v1.1 Optimized query
+  public static getByActionId(actionId: string): ActionLedgerEntry | undefined {
+    return this.indexByActionId.get(actionId);
+  }
 
   public static clear(): void {
     this.entries = [];
     this.lastHash = 'genesis';
+    this.indexByWorkspace.clear();
+    this.indexByActionId.clear();
   }
 }
