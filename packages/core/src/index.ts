@@ -69,3 +69,4 @@ export * from './edge/index.js';
 // Re-exported from ./version.ts so consumers can use @ownpilot/core/version
 // sub-path instead of importing the full barrel just to read the version.
 export { VERSION } from './version.js';
+export * as social from './social/index.js';

@@ -154,6 +154,9 @@ const SecurityPage = lazy(() =>
 const ActionLedgerPage = lazy(() =>
   import('./pages/ActionLedgerPage').then((m) => ({ default: m.ActionLedgerPage }))
 );
+const SocialPage = lazy(() =>
+  import('./pages/SocialPage').then((m) => ({ default: m.SocialPage }))
+);
 const SecurityDashboardPage = lazy(() =>
   import('./pages/SecurityDashboardPage').then((m) => ({ default: m.SecurityDashboardPage }))
 );
@@ -288,6 +291,7 @@ export function App() {
         <Route path="history" element={page(<ChatHistoryPage />)} />
         <Route path="agents" element={page(<AgentsPage />)} />
         <Route path="tools" element={page(<ToolsPage />)} />
+        <Route path="social" element={page(<SocialPage />)} />
         <Route path="custom-tools" element={page(<CustomToolsPage />)} />
         <Route path="plugins" element={page(<PluginsPage />)} />
         <Route

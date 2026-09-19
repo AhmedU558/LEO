@@ -24,6 +24,7 @@ import {
   dashboardRoutes,
   securityRoutes,
   ledgerRoutes,
+  socialRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -67,6 +68,9 @@ export function registerPlatformRoutes(app: Hono): void {
 
   // Action Ledger (audit logging)
   app.route('/api/v1/ledger', ledgerRoutes);
+
+  // Social Automation
+  app.route('/api/v1/social', socialRoutes);
 
   // Plugins (extensible plugin system)
   app.route('/api/v1/plugins', pluginsRoutes);

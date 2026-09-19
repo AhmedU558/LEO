@@ -67,3 +67,4 @@ export { agenticRoutes } from './agentic.js';
 export { pulseRoutes } from './pulse.js';
 export { tunnelRoutes } from './tunnel.js';
 export { ledgerRoutes } from './ledger.js';
+export { socialRoutes } from './social.js';
