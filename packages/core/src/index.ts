@@ -73,3 +73,4 @@ export * as social from './social/index.js';
 export * as computer from './computer/index.js';
 export * as voice from './voice/index.js';
 export * as autonomy from './autonomy/index.js';
+export * as analytics from './analytics/index.js';

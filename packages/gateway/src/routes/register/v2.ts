@@ -30,6 +30,7 @@ import {
   computerRoutes,
   voiceRoutes,
   autonomyRoutes,
+  analyticsRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -133,6 +134,9 @@ export function registerV2Routes(app: Hono): void {
 
   // Autonomy
   app.route('/api/v2/autonomy', autonomyRoutes);
+
+  // Analytics & Learning
+  app.route('/api/v2/analytics', analyticsRoutes);
 
   // Workspaces
   app.route('/api/v2/workspaces', workspaceRoutes);

@@ -71,3 +71,4 @@ export { socialRoutes } from './social.js';
 export { computerRoutes } from './computer.js';
 export { voiceRoutes } from './voice.js';
 export { autonomyRoutes } from './autonomy.js';
+export { analyticsRoutes } from './analytics.js';

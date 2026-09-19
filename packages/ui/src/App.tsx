@@ -54,6 +54,9 @@ const TriggersPage = lazy(() =>
   import('./pages/TriggersPage').then((m) => ({ default: m.TriggersPage }))
 );
 const PlansPage = lazy(() => import('./pages/PlansPage').then((m) => ({ default: m.PlansPage })));
+const AnalyticsPage = lazy(() =>
+  import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage }))
+);
 const AutonomyPage = lazy(() =>
   import('./pages/AutonomyPage').then((m) => ({ default: m.AutonomyPage }))
 );
@@ -153,6 +156,9 @@ const SecurityPage = lazy(() =>
 );
 const ActionLedgerPage = lazy(() =>
   import('./pages/ActionLedgerPage').then((m) => ({ default: m.ActionLedgerPage }))
+);
+const AnalyticsPage = lazy(() =>
+  import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage }))
 );
 const AutonomyPage = lazy(() =>
   import('./pages/AutonomyPage').then((m) => ({ default: m.AutonomyPage }))
@@ -257,6 +263,7 @@ export function App() {
         <Route path="triggers" element={page(<TriggersPage />)} />
         <Route path="plans" element={page(<PlansPage />)} />
         <Route path="autonomy" element={page(<AutonomyPage />)} />
+        <Route path="analytics" element={page(<AnalyticsPage />)} />
         <Route path="workflows" element={page(<WorkflowsPage />)} />
         <Route path="workflows/:id" element={page(<WorkflowEditorPage />)} />
         <Route path="workflows/logs/:logId" element={page(<WorkflowLogViewerPage />)} />
@@ -302,6 +309,7 @@ export function App() {
         <Route path="computer" element={page(<ComputerControlPage />)} />
         <Route path="voice" element={page(<VoicePage />)} />
         <Route path="autonomy" element={page(<AutonomyPage />)} />
+        <Route path="analytics" element={page(<AnalyticsPage />)} />
         <Route path="custom-tools" element={page(<CustomToolsPage />)} />
         <Route path="plugins" element={page(<PluginsPage />)} />
         <Route

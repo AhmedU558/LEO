@@ -28,6 +28,7 @@ import {
   computerRoutes,
   voiceRoutes,
   autonomyRoutes,
+  analyticsRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -83,6 +84,9 @@ export function registerPlatformRoutes(app: Hono): void {
 
   // Advanced Autonomy
   app.route('/api/v1/autonomy', autonomyRoutes);
+
+  // Analytics & Learning
+  app.route('/api/v1/analytics', analyticsRoutes);
 
   // Plugins (extensible plugin system)
   app.route('/api/v1/plugins', pluginsRoutes);
