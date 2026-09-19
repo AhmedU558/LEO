@@ -9,6 +9,7 @@ import {
   Share2,
   Monitor,
   Mic,
+  Bot,
   History,
   Bot,
   Wrench,
@@ -70,7 +71,7 @@ export interface NavGroup {
 
 // Main navigation items (always visible)
 export const mainItems: NavItem[] = [
-  { to: '/', icon: MessageSquare, Share2, Monitor, Mic, label: 'Chat' },
+  { to: '/', icon: MessageSquare, Share2, Monitor, Mic, Bot, label: 'Chat' },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/analytics', icon: Activity, label: 'Analytics' },
   { to: '/channels', icon: Send, label: 'Channels' },
@@ -107,7 +108,7 @@ export const navGroups: NavGroup[] = [
       { to: '/agentic', icon: Brain, label: 'Agentic Center' },
       { to: '/autonomous', icon: Bot, label: 'Soul & Crew Hub' },
       { to: '/mission-control', icon: Activity, label: 'Mission Control' },
-      { to: '/social', icon: Share2, Monitor, Mic, label: 'Social' },
+      { to: '/social', icon: Share2, Monitor, Mic, Bot, label: 'Social' },
       { to: '/claws', icon: Zap, label: 'Claw Runners' },
       { to: '/coding-agents', icon: Terminal, label: 'Code Runners (CLI)' },
       { to: '/artifacts', icon: LayoutTemplate, label: 'Artifacts' },

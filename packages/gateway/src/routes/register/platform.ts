@@ -27,6 +27,7 @@ import {
   socialRoutes,
   computerRoutes,
   voiceRoutes,
+  autonomyRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -79,6 +80,9 @@ export function registerPlatformRoutes(app: Hono): void {
 
   // Voice Foundation
   app.route('/api/v1/voice', voiceRoutes);
+
+  // Advanced Autonomy
+  app.route('/api/v1/autonomy', autonomyRoutes);
 
   // Plugins (extensible plugin system)
   app.route('/api/v1/plugins', pluginsRoutes);
