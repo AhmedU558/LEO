@@ -173,6 +173,36 @@
         "default": "./dist/assistant/index.js"
       }
     },
+    "./social": {
+      "import": {
+        "types": "./dist/social/index.d.ts",
+        "default": "./dist/social/index.js"
+      }
+    },
+    "./computer": {
+      "import": {
+        "types": "./dist/computer/index.d.ts",
+        "default": "./dist/computer/index.js"
+      }
+    },
+    "./voice": {
+      "import": {
+        "types": "./dist/voice/index.d.ts",
+        "default": "./dist/voice/index.js"
+      }
+    },
+    "./autonomy": {
+      "import": {
+        "types": "./dist/autonomy/index.d.ts",
+        "default": "./dist/autonomy/index.js"
+      }
+    },
+    "./analytics": {
+      "import": {
+        "types": "./dist/analytics/index.d.ts",
+        "default": "./dist/analytics/index.js"
+      }
+    },
     "./version": {
       "import": {
         "types": "./dist/version.d.ts",

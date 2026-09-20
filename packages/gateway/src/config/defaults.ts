@@ -18,6 +18,11 @@
  */
 export const LOCAL_OWNER_ID = 'default';
 
+/**
+ * Similarly, the gateway uses a single workspace for all local operations.
+ */
+export const LOCAL_WORKSPACE_ID = 'default';
+
 // ============================================================================
 // Database
 // ============================================================================

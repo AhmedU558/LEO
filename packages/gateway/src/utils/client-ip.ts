@@ -55,23 +55,40 @@ function warnIfMisconfigured(): void {
   }
 }
 
+import type { Context } from 'hono';
+import { getConnInfo } from '@hono/node-server/conninfo';
+
 /**
- * Get a stable client identity from a Hono-style header reader.
+ * Get a stable client identity from a Hono Context.
  *
  * Returns:
  *   - Last entry of `X-Forwarded-For` (or `X-Real-IP`) when proxy trust is
- *     correctly configured.
- *   - 'direct' otherwise (single-bucket fallback). When this happens, callers
- *     that care about per-client granularity should be aware that all
- *     attackers share the same bucket — but that's safer than the alternative
- *     (every attacker rotates X-Forwarded-For and bypasses the limiter).
+ *     correctly configured and the socket IP matches TRUSTED_PROXY_IPS.
+ *   - The socket peer IP otherwise.
+ *   - 'direct' as an absolute fallback.
  */
-export function getClientIp(req: { header: (name: string) => string | undefined }): string {
+export function getClientIp(c: Context): string {
   warnIfMisconfigured();
 
-  if (!isProxyAwareConfigured()) return 'direct';
+  let socketIp = 'direct';
+  try {
+    const info = getConnInfo(c);
+    if (info?.remote?.address) {
+      socketIp = info.remote.address;
+    }
+  } catch {
+    // getConnInfo throws if not running in a node-server environment
+    // or if the request doesn't have socket info (e.g. tests)
+  }
 
-  const xff = req.header('X-Forwarded-For');
+  if (!isProxyAwareConfigured()) return socketIp;
+
+  // QA-021: Verify the immediate upstream proxy is trusted before honoring X-Forwarded-For
+  if (!TRUST_ANY && !TRUSTED_PROXY_IPS.includes(socketIp)) {
+    return socketIp; // Untrusted upstream, ignore headers
+  }
+
+  const xff = c.req.header('X-Forwarded-For');
   if (xff) {
     const parts = xff
       .split(',')
@@ -81,8 +98,8 @@ export function getClientIp(req: { header: (name: string) => string | undefined 
     if (last) return last;
   }
 
-  const xrealip = req.header('X-Real-IP');
+  const xrealip = c.req.header('X-Real-IP');
   if (xrealip) return xrealip.trim();
 
-  return 'direct';
+  return socketIp;
 }

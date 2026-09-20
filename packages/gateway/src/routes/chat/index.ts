@@ -206,7 +206,7 @@ chatRoutes.post('/', async (c) => {
   // Per-IP throttle — see chatThrottle declaration. Skip in test env so
   // sequential test runs don't collide on the shared in-memory bucket.
   if (process.env.NODE_ENV !== 'test') {
-    const ip = getClientIp(c.req);
+    const ip = getClientIp(c);
     const throttleResult = chatThrottle.check(ip);
     if (!throttleResult.allowed) {
       c.header('Retry-After', String(Math.ceil(throttleResult.retryAfterMs / 1000)));

@@ -58,8 +58,10 @@ import {
   getRequiredPermission,
   logPermissionDenied,
 } from '../extension/permissions.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getIdempotencyKeysRepository } from '../../db/repositories/idempotency-keys.js';
+import { getJobsRepository } from '../../db/repositories/jobs.js';
+import { jobExecutionContext } from '../job-queue-service.js';
 
 const log = getLog('ToolExecutor');
 
@@ -69,6 +71,7 @@ const log = getLog('ToolExecutor');
 
 export interface ToolExecutionResult {
   success: boolean;
+  outcome?: 'success' | 'failed' | 'cancelled' | 'pending' | 'unknown';
   result?: unknown;
   error?: string;
 }
@@ -603,36 +606,86 @@ export async function executeTool(
     }
   }
 
-  // Check for cached result. The key is hashed over a *canonical* JSON form
-  // (stableStringify) so permuted argument keys collapse to the same hash:
-  // `{a:1,b:2}` and `{b:2,a:1}` are the same invocation for cache purposes
-  // (Plan 11 IDEMP-001).
-  const idempotencyKey = `tool:${createHash('sha256')
-    .update(`${userId}:${toolName}:${stableStringify(args)}`)
-    .digest('hex')}`;
-  try {
-    const idempotencyRepo = getIdempotencyKeysRepository();
-    const cached = await idempotencyRepo.getRecord(userId, idempotencyKey);
-    if (cached) {
-      log.debug(`Idempotency hit for ${toolName}`);
-      return cached.result as ToolExecutionResult;
-    }
-  } catch {
-    // Idempotency failures should not block tool execution
-  }
+  const job = jobExecutionContext?.getStore();
+  const signal = job?.signal ?? execContext?.signal;
+  const operationId =
+    execContext?.operationId ?? (job ? `job:${job.jobId}:effect:${job.effectIndex++}` : undefined);
 
+  const requestHash = createHash('sha256')
+    .update(stableStringify({ toolName, args }))
+    .digest('hex');
   const start = Date.now();
-  const result = await executeToolInternal(toolName, args, userId, executionPermissions);
+  const idempotencyRepo = getIdempotencyKeysRepository();
+  let result: ToolExecutionResult;
 
-  // Store result
-  try {
-    const idempotencyRepo = getIdempotencyKeysRepository();
-    idempotencyRepo.setRecord(userId, idempotencyKey, result).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.warn(`[executor] idempotency record failed: ${msg}`);
-    });
-  } catch {
-    // Idempotency store failures should not affect tool result
+  if (operationId) {
+    // Phase 2: Atomic operation claim (QA-016)
+    const owner = randomUUID();
+    try {
+      signal?.throwIfAborted();
+      const claimOperation = () =>
+        idempotencyRepo.claimOperation(userId, operationId, requestHash, owner);
+      const claim = job
+        ? await getJobsRepository().withLease(job.jobId, job.leaseToken, claimOperation)
+        : await claimOperation();
+
+      if (claim.requestHash !== requestHash) {
+        return {
+          success: false,
+          outcome: 'failed',
+          error: 'Operation identity reused with different arguments',
+        };
+      }
+      if (!claim.claimed) {
+        if (claim.state === 'success') return claim.result as ToolExecutionResult;
+        return {
+          success: false,
+          outcome: claim.state,
+          error: `Operation is ${claim.state}; automatic replay denied`,
+        };
+      }
+
+      signal?.throwIfAborted();
+      result = await executeToolInternal(toolName, args, userId, executionPermissions, signal);
+      const outcome = signal?.aborted ? 'cancelled' : result.success ? 'success' : 'failed';
+      if (outcome === 'cancelled') result = { ...result, success: false, outcome };
+
+      await idempotencyRepo.finishOperation(userId, operationId, owner, outcome, result);
+    } catch (error) {
+      const outcome = signal?.aborted ? 'cancelled' : 'unknown';
+      result = { success: false, outcome, error: getErrorMessage(error) };
+      try {
+        await idempotencyRepo.finishOperation(userId, operationId, owner, outcome, result);
+      } catch {
+        /* Pending claim continues to block replay */
+      }
+    }
+  } else {
+    // Legacy idempotency cache (fire-and-forget)
+    const idempotencyKey = `tool:${createHash('sha256')
+      .update(`${userId}:${toolName}:${stableStringify(args)}`)
+      .digest('hex')}`;
+
+    try {
+      const cached = await idempotencyRepo.getRecord(userId, idempotencyKey);
+      if (cached) {
+        log.debug(`Idempotency hit for ${toolName}`);
+        return cached.result as ToolExecutionResult;
+      }
+    } catch {
+      // Ignore cache read failures
+    }
+
+    result = await executeToolInternal(toolName, args, userId, executionPermissions, signal);
+
+    try {
+      idempotencyRepo.setRecord(userId, idempotencyKey, result).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn(`[executor] idempotency record failed: ${msg}`);
+      });
+    } catch {
+      // Ignore cache write failures
+    }
   }
 
   // Fire-and-forget audit log

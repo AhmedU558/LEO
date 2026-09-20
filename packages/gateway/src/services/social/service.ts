@@ -21,7 +21,6 @@ export class SocialService {
         userId,
         workspaceId,
         roles: ['user'],
-        permissions: [capability],
       },
       action,
       resource: content.id,
@@ -33,7 +32,7 @@ export class SocialService {
     });
 
     // 2. Action Ledger entry (pending)
-    const ledgerEntry = ActionLedger.record({
+    const ledgerEntry = await ActionLedger.record({
       userId,
       workspaceId,
       tool: 'social_service',
@@ -44,7 +43,6 @@ export class SocialService {
       policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: 'production',
-      context: { platform: account.platform },
     });
 
     if (policyResult.decision === 'DENY') {
@@ -87,8 +85,8 @@ export class SocialService {
   }
 
   private async simulateProviderPublish(
-    content: SocialContent,
-    account: SocialAccount
+    _content: SocialContent,
+    _account: SocialAccount
   ): Promise<SocialPublishResult> {
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500));

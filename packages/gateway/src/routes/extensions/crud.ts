@@ -57,7 +57,7 @@ async function uninstallExtension(c: Context) {
   // Audit extension uninstall — removes code, triggers, granted
   // permissions, and any DB state the extension owned.
   getEventSystem().emit('audit.extension.uninstalled', 'extensions', {
-    ip: getClientIp(c.req),
+    ip: getClientIp(c),
     extensionId: id,
     userId,
   });
@@ -292,7 +292,7 @@ crudRoutes.post('/:id/enable', async (c) => {
     // Audit extension enable — re-activates tools, triggers, and any
     // granted permissions the extension holds.
     getEventSystem().emit('audit.extension.enabled', 'extensions', {
-      ip: getClientIp(c.req),
+      ip: getClientIp(c),
       extensionId: id,
       userId,
     });
@@ -330,7 +330,7 @@ crudRoutes.post('/:id/disable', async (c) => {
     // Audit extension disable — silences tools/triggers but does not
     // remove the extension or its DB state.
     getEventSystem().emit('audit.extension.disabled', 'extensions', {
-      ip: getClientIp(c.req),
+      ip: getClientIp(c),
       extensionId: id,
       userId,
     });

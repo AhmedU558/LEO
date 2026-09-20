@@ -60,7 +60,6 @@ import {
   triggersRoutes,
   plansRoutes,
   workflowRoutes,
-  autonomyRoutes,
   executionPermissionsRoutes,
   // Integration
   channelRoutes,
@@ -73,7 +72,6 @@ import {
   cliToolsRoutes,
   cliChatRoutes,
   browserRoutes,
-  voiceRoutes,
   edgeRoutes,
   bridgeRoutes,
   extensionsRoutes,
@@ -200,7 +198,6 @@ export function registerV2Routes(app: Hono): void {
   app.route('/api/v2/triggers', triggersRoutes);
   app.route('/api/v2/plans', plansRoutes);
   app.route('/api/v2/workflows', workflowRoutes);
-  app.route('/api/v2/autonomy', autonomyRoutes);
   app.route('/api/v2/execution-permissions', executionPermissionsRoutes);
 
   // ── Integration Domain ──────────────────────────────────────────────────────
@@ -238,9 +235,6 @@ export function registerV2Routes(app: Hono): void {
 
   // Browser
   app.route('/api/v2/browser', browserRoutes);
-
-  // Voice
-  app.route('/api/v2/voice', voiceRoutes);
 
   // Edge
   app.route('/api/v2/edge', edgeRoutes);

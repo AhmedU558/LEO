@@ -24,7 +24,7 @@ export class ComputerService {
       case 'scroll':
       case 'hover':
       case 'screenshot':
-        return 'browser';
+        return 'browser.navigate';
       case 'press_key':
         return 'app_control';
       default:
@@ -48,7 +48,6 @@ export class ComputerService {
         userId,
         workspaceId,
         roles: ['user'],
-        permissions: [capability],
       },
       action: actionName,
       resource: task.id,
@@ -60,7 +59,7 @@ export class ComputerService {
     });
 
     // 2. Action Ledger entry
-    const ledgerEntry = ActionLedger.record({
+    const ledgerEntry = await ActionLedger.record({
       userId,
       workspaceId,
       tool: 'computer_service',

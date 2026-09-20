@@ -25,7 +25,6 @@ export class AutonomyService implements AutonomyEngine {
         userId: task.userId,
         workspaceId: task.workspaceId,
         roles: ['user'],
-        permissions: [capability],
       },
       action,
       resource: task.id,
@@ -36,7 +35,7 @@ export class AutonomyService implements AutonomyEngine {
       requestedParameters: { goal: task.goal },
     });
 
-    const ledgerEntry = ActionLedger.record({
+    const ledgerEntry = await ActionLedger.record({
       userId: task.userId,
       workspaceId: task.workspaceId,
       tool: 'autonomy_engine',
@@ -47,7 +46,6 @@ export class AutonomyService implements AutonomyEngine {
       policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: 'production',
-      context: { goal: task.goal },
     });
 
     if (policyResult.decision === 'DENY' || policyResult.decision === 'REQUIRE_APPROVAL') {

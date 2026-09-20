@@ -21,7 +21,6 @@ export class VoiceService {
         userId,
         workspaceId,
         roles: ['user'],
-        permissions: [capability],
       },
       action,
       resource: sessionId,
@@ -33,7 +32,7 @@ export class VoiceService {
     });
 
     // 2. Audit Log
-    const ledgerEntry = ActionLedger.record({
+    const ledgerEntry = await ActionLedger.record({
       userId,
       workspaceId,
       tool: toolName,
@@ -44,7 +43,6 @@ export class VoiceService {
       policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: 'production',
-      context: { toolArgs },
     });
 
     if (policyResult.decision === 'DENY') {

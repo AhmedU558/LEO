@@ -1,4 +1,4 @@
-import type { Capability, LeoRiskLevel } from './capabilities.js';
+import { type Capability, type LeoRiskLevel, CAPABILITY_RISKS } from './capabilities.js';
 import type { LeoIdentityContext } from './identity.js';
 
 export type PolicyDecisionType = 'ALLOW' | 'DENY' | 'REQUIRE_APPROVAL';
@@ -20,11 +20,21 @@ export interface PolicyRequest {
   requestedParameters: Record<string, unknown>;
 }
 
+const RISK_WEIGHTS: Record<LeoRiskLevel, number> = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  CRITICAL: 4,
+};
+
 export class PolicyEngine {
   /**
    * Deterministically evaluate whether a capability action should proceed.
    */
   public evaluate(request: PolicyRequest): PolicyDecision {
+    const intrinsicRisk = CAPABILITY_RISKS[request.capability];
+    const actualRisk =
+      RISK_WEIGHTS[intrinsicRisk] > RISK_WEIGHTS[request.risk] ? intrinsicRisk : request.risk;
     // 1. Identity validation
     if (!request.identity || !request.identity.userId) {
       return { decision: 'DENY', reason: 'Missing identity context' };
@@ -36,7 +46,7 @@ export class PolicyEngine {
     }
 
     // 3. Risk-based constraints
-    if (request.risk === 'CRITICAL') {
+    if (actualRisk === 'CRITICAL') {
       // Critical operations must always require explicit approval, even in autonomous mode
       return {
         decision: 'REQUIRE_APPROVAL',
@@ -45,7 +55,7 @@ export class PolicyEngine {
       };
     }
 
-    if (request.risk === 'HIGH' && request.autonomous) {
+    if (actualRisk === 'HIGH' && request.autonomous) {
       // High-risk autonomous actions require explicit approval.
       return {
         decision: 'REQUIRE_APPROVAL',

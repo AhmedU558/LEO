@@ -33,7 +33,13 @@ export class ToolService implements IToolService {
   async execute(
     name: string,
     args: Record<string, unknown>,
-    context?: { conversationId?: string; userId?: string; execSource?: string }
+    context?: {
+      conversationId?: string;
+      userId?: string;
+      execSource?: string;
+      operationId?: string;
+      signal?: AbortSignal;
+    }
   ): Promise<ToolServiceResult> {
     const userId = context?.userId ?? this.userId;
 
@@ -41,6 +47,8 @@ export class ToolService implements IToolService {
     if (context?.execSource) {
       const execContext: ToolExecContext = {
         source: context.execSource as ToolExecContext['source'],
+        operationId: context.operationId,
+        signal: context.signal,
       };
       const result = await executeTool(name, args, userId, undefined, execContext);
       return {

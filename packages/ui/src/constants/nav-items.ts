@@ -7,13 +7,8 @@ import type React from 'react';
 import {
   MessageSquare,
   Share2,
-  Monitor,
-  Mic,
   Bot,
-  LineChart,
   History,
-  Bot,
-  LineChart,
   Wrench,
   Cpu,
   DollarSign,
@@ -73,7 +68,7 @@ export interface NavGroup {
 
 // Main navigation items (always visible)
 export const mainItems: NavItem[] = [
-  { to: '/', icon: MessageSquare, Share2, Monitor, Mic, Bot, LineChart, label: 'Chat' },
+  { to: '/', icon: MessageSquare, label: 'Chat' },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/analytics', icon: Activity, label: 'Analytics' },
   { to: '/channels', icon: Send, label: 'Channels' },
@@ -108,9 +103,9 @@ export const navGroups: NavGroup[] = [
       { to: '/triggers', icon: Zap, label: 'Triggers' },
       { to: '/workflows', icon: GitBranch, label: 'Workflows' },
       { to: '/agentic', icon: Brain, label: 'Agentic Center' },
-      { to: '/autonomous', icon: Bot, LineChart, label: 'Soul & Crew Hub' },
+      { to: '/autonomous', icon: Bot, label: 'Soul & Crew Hub' },
       { to: '/mission-control', icon: Activity, label: 'Mission Control' },
-      { to: '/social', icon: Share2, Monitor, Mic, Bot, LineChart, label: 'Social' },
+      { to: '/social', icon: Share2, label: 'Social' },
       { to: '/claws', icon: Zap, label: 'Claw Runners' },
       { to: '/coding-agents', icon: Terminal, label: 'Code Runners (CLI)' },
       { to: '/artifacts', icon: LayoutTemplate, label: 'Artifacts' },
@@ -135,7 +130,7 @@ export const navGroups: NavGroup[] = [
     label: 'System',
     icon: Cpu,
     items: [
-      { to: '/agents', icon: Bot, LineChart, label: 'Agent Presets' },
+      { to: '/agents', icon: Bot, label: 'Agent Presets' },
       { to: '/wizards', icon: Sparkles, label: 'Wizards' },
       { to: '/workspaces', icon: HardDrive, label: 'Workspaces' },
       { to: '/custom-data', icon: Database, label: 'Custom Data' },

@@ -96,7 +96,7 @@ export class AgentsRepository extends BaseRepository {
 
     const row = await this.queryOne<AgentRow>(`SELECT * FROM agents WHERE id = $1`, [id]);
     if (!row) return null;
-    
+
     const record = rowToAgent(row);
     this.setCache(id, record);
     return record;

@@ -582,7 +582,24 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
     let resultCost: number | undefined = undefined;
     let resultError: Error | undefined = undefined;
 
-    // 5. Tool Executor
+    // 5. Pre-execution Action Ledger Recording (Transaction Boundary Start)
+    const ledgerEntry = await ActionLedger.record({
+      userId: state.task.identity?.userId ?? 'unknown',
+      workspaceId: state.task.identity?.workspaceId ?? 'unknown',
+      taskId: state.task.id,
+      tool: step.executorKind,
+      action,
+      resource: step.providerId,
+      resourceType: 'tool',
+      capability: capabilityId,
+      policyDecision: decision.decision,
+      riskLevel: risk,
+      executionEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      durationMs: 0,
+      costUsd: 0,
+    });
+
+    // 6. Tool Executor
     try {
       if (this.stepHandler) {
         const result = await this.stepHandler(step, signal);
@@ -605,24 +622,21 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
       resultError = err instanceof Error ? err : new Error(String(err));
       throw resultError;
     } finally {
-      // 6. Action Ledger Recording (always happens, success or failure)
-      await ActionLedger.record({
-        userId: state.task.identity?.userId ?? 'unknown',
-        workspaceId: state.task.identity?.workspaceId ?? 'unknown',
-        taskId: state.task.id,
-        tool: step.executorKind,
-        action,
-        resource: step.providerId,
-        resourceType: 'tool',
-        capability: capabilityId,
-        policyDecision: decision.decision,
-        riskLevel: risk,
-        executionEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
-        result: resultError ? undefined : 'success',
-        error: resultError?.message,
-        durationMs: Date.now() - startMs,
-        costUsd: resultCost,
-      });
+      // 7. Post-execution Action Ledger Update (Transaction Boundary End)
+      await ActionLedger.updateResult(
+        ledgerEntry.actionId,
+        {
+          result: resultError ? undefined : 'success',
+          error: resultError?.message,
+        },
+        Date.now() - startMs
+      );
+      // Cost update isn't supported by updateResult yet, but keeping the format
+      if (resultCost !== undefined) {
+        // We'll just patch the entry manually for now since updateResult doesn't take costUsd
+        const entry = ActionLedger.getByActionId(ledgerEntry.actionId);
+        if (entry) entry.costUsd = resultCost;
+      }
     }
 
     return { output: resultOutput, costUsd: resultCost };

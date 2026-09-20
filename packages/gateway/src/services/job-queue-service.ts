@@ -7,9 +7,18 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage } from '@ownpilot/core/services';
 import { getLog } from './log.js';
 import { getJobsRepository, type CreateJobInput, type JobRecord } from '../db/repositories/jobs.js';
+import { getIdempotencyKeysRepository } from '../db/repositories/idempotency-keys.js';
+
+export const jobExecutionContext = new AsyncLocalStorage<{
+  jobId: string;
+  leaseToken: string;
+  signal: AbortSignal;
+  effectIndex: number;
+}>();
 
 const log = getLog('JobQueueService');
 
@@ -23,7 +32,7 @@ interface EnqueueOptions {
   runAfter?: Date;
 }
 
-type JobHandler = (job: JobRecord) => Promise<Record<string, unknown>>;
+type JobHandler = (job: JobRecord, signal: AbortSignal) => Promise<Record<string, unknown>>;
 
 interface WorkerOptions {
   queue?: string;
@@ -69,6 +78,10 @@ export class JobQueueService {
   private workers: Map<string, RunningWorker> = new Map();
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private repo = getJobsRepository();
+  private executions = new Map<
+    string,
+    { workerId: string; controller: AbortController; done: Promise<void> }
+  >();
 
   static getInstance(): JobQueueService {
     if (!JobQueueService._instance) {
@@ -145,6 +158,9 @@ export class JobQueueService {
     const worker = this.workers.get(workerId);
     if (!worker) return;
     worker.stopped = true;
+    for (const execution of this.executions.values()) {
+      if (execution.workerId === workerId) execution.controller.abort();
+    }
     this.workers.delete(workerId);
     log.info('Worker stopped', { workerId });
     if (this.workers.size === 0 && this.pollInterval) {
@@ -186,29 +202,88 @@ export class JobQueueService {
       const availableSlots = worker.concurrency - worker.activeJobs.size;
       for (let i = 0; i < availableSlots; i++) {
         if (worker.stopped) break;
-        const job = await this.repo.claimJob(worker.queue, 0);
+        const job = await this.repo.claimJob(worker.queue);
         if (!job) break;
+
+        if (worker.stopped) {
+          await this.repo.fail(job.id, 'Worker stopped before execution', job.leaseToken!);
+          break;
+        }
 
         worker.activeJobs.add(job.id);
         // executeJob is guaranteed not to reject (it swallows + logs its own
         // errors); the finally frees the slot and re-polls via safePoll.
-        this.executeJob(worker, job).finally(() => {
+        const controller = new AbortController();
+        const done = this.executeJob(worker, job, controller).finally(() => {
           worker.activeJobs.delete(job.id);
+          this.executions.delete(job.id);
           this.safePoll(worker);
         });
+        this.executions.set(job.id, { workerId: worker.id, controller, done });
       }
     } finally {
       worker.polling = false;
     }
   }
 
-  private async executeJob(worker: RunningWorker, job: JobRecord): Promise<void> {
+  private async executeJob(
+    worker: RunningWorker,
+    job: JobRecord,
+    controller = new AbortController()
+  ): Promise<void> {
     const logCtx = { workerId: worker.id, jobId: job.id, name: job.name };
     log.debug('Job started', logCtx);
 
+    let renewing = false;
+    const heartbeat = setInterval(async () => {
+      if (renewing || controller.signal.aborted) return;
+      renewing = true;
+      try {
+        if (!(await this.repo.renewLease(job.id, job.leaseToken!))) controller.abort();
+      } catch {
+        controller.abort();
+      } finally {
+        renewing = false;
+      }
+    }, 1000);
+    heartbeat.unref?.();
     try {
-      const result = await worker.handler(job);
-      await this.repo.complete(job.id, result);
+      controller.signal.throwIfAborted();
+      const result = await jobExecutionContext.run(
+        { jobId: job.id, leaseToken: job.leaseToken!, signal: controller.signal, effectIndex: 0 },
+        async () => {
+          const operations = getIdempotencyKeysRepository();
+          const operationId = `job:${job.id}`;
+          const owner = job.leaseToken!;
+          const claim = await this.repo.withLease(job.id, owner, () =>
+            operations.claimOperation('job-queue', operationId, job.name, owner)
+          );
+          if (!claim.claimed) {
+            if (claim.state === 'success') return claim.result as Record<string, unknown>;
+            throw new Error(`Job outcome ${claim.state}; reconciliation required before replay`);
+          }
+          try {
+            controller.signal.throwIfAborted();
+            const value = await worker.handler(job, controller.signal);
+            controller.signal.throwIfAborted();
+            await operations.finishOperation('job-queue', operationId, owner, 'success', value);
+            return value;
+          } catch (error) {
+            await operations.finishOperation(
+              'job-queue',
+              operationId,
+              owner,
+              controller.signal.aborted ? 'cancelled' : 'unknown',
+              { error: getErrorMessage(error) }
+            );
+            throw error;
+          }
+        }
+      );
+      controller.signal.throwIfAborted();
+      if (!(await this.repo.complete(job.id, result, job.leaseToken!))) {
+        throw new Error('Job lease lost before completion');
+      }
       log.debug('Job completed', { ...logCtx });
     } catch (err) {
       const error = getErrorMessage(err);
@@ -219,14 +294,26 @@ export class JobQueueService {
       // executeJob never rejects and the slot is still freed by the caller's
       // finally.
       try {
-        await this.repo.fail(job.id, error);
+        if (controller.signal.aborted) {
+          // Stop local execution without cancelling a newer owner's claim.
+          await this.repo.cancelClaim(job.id, job.leaseToken!);
+        } else {
+          await this.repo.fail(job.id, error, job.leaseToken!);
+        }
       } catch (failErr) {
         log.error('Failed to persist job failure', {
           ...logCtx,
           error: getErrorMessage(failErr),
         });
       }
+    } finally {
+      clearInterval(heartbeat);
     }
+  }
+
+  async cancel(jobId: string): Promise<void> {
+    await this.repo.cancel(jobId);
+    this.executions.get(jobId)?.controller.abort();
   }
 
   /**
@@ -247,6 +334,15 @@ export class JobQueueService {
     for (const [id] of this.workers) {
       this.stopWorker(id);
     }
+    // Bound shutdown even if a trusted handler ignores cancellation.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.allSettled([...this.executions.values()].map((entry) => entry.done)),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 5000);
+      }),
+    ]);
+    clearTimeout(timer);
     log.info('JobQueueService shut down');
   }
 }

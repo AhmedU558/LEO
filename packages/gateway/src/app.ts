@@ -288,6 +288,7 @@ export function createApp(config: Partial<GatewayConfig> = {}): Hono {
     '/api/*',
     createUiSessionMiddleware({
       allowImplicitOwnerWithoutPassword: authType === 'none' || isLoopbackBind,
+      apiAuthEnabled: authType !== 'none',
     })
   );
 

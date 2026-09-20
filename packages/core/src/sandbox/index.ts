@@ -82,6 +82,7 @@ export {
   executeInSandbox,
   executePythonSandbox,
   executeJavaScriptSandbox,
+  executeIsolatedJavaScript,
   executeShellSandbox,
   // Health check and diagnostics
   checkSandboxHealth,

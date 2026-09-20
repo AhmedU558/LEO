@@ -43,8 +43,9 @@ import { getClientIp as getClientIpShared } from '../utils/client-ip.js';
  * proxy-trust requires both TRUSTED_PROXY=true and TRUSTED_PROXY_IPS to be
  * configured; absence of either falls back to a single 'direct' bucket.
  */
-function getClientIpHttp(c: { req: { header: (name: string) => string | undefined } }): string {
-  return getClientIpShared(c.req);
+import type { Context } from 'hono';
+function getClientIpHttp(c: Context): string {
+  return getClientIpShared(c);
 }
 
 const loginThrottle = createLoginThrottle({

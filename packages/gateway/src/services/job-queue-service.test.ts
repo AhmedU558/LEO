@@ -20,13 +20,25 @@ const mockRepo = {
       attempts: 0,
       maxAttempts: 3,
       status: 'active',
+      leaseToken: 'lease',
     };
   }),
-  complete: vi.fn(async () => {}),
+  complete: vi.fn(async () => true),
+  renewLease: vi.fn(async () => true),
+  withLease: vi.fn(async (_id: string, _token: string, claim: () => Promise<unknown>) => claim()),
+  cancel: vi.fn(async () => {}),
+  cancelClaim: vi.fn(async () => {}),
   fail: vi.fn(async () => {}),
   create: vi.fn(),
   getStats: vi.fn(),
 };
+
+vi.mock('../db/repositories/idempotency-keys.js', () => ({
+  getIdempotencyKeysRepository: () => ({
+    claimOperation: async () => ({ claimed: true, state: 'pending' }),
+    finishOperation: async () => {},
+  }),
+}));
 
 vi.mock('../db/repositories/jobs.js', () => ({
   getJobsRepository: () => mockRepo,
@@ -154,14 +166,14 @@ describe('JobQueueService error resilience', () => {
     polling: false,
     ...over,
   });
-  const job = { id: 'job-x', name: 'test', queue: 'q', payload: {} };
+  const job = { id: 'job-x', name: 'test', queue: 'q', payload: {}, leaseToken: 'lease' };
 
   it('executeJob does not reject when repo.complete throws', async () => {
     mockRepo.complete.mockRejectedValueOnce(new Error('db down'));
     const svc = new JobQueueService() as unknown as Svc;
     // Resolves (not rejects); falls back to repo.fail for retry.
     await expect(svc.executeJob(makeWorker(), job)).resolves.toBeUndefined();
-    expect(mockRepo.fail).toHaveBeenCalledWith('job-x', 'db down');
+    expect(mockRepo.fail).toHaveBeenCalledWith('job-x', 'db down', 'lease');
   });
 
   it('executeJob does not reject when repo.fail also throws (no unhandled rejection)', async () => {
@@ -197,5 +209,48 @@ describe('JobQueueService error resilience', () => {
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
+  });
+});
+
+describe('JobQueueService cancellation', () => {
+  it('shutdown aborts and drains an active handler without completing it', async () => {
+    available = 1;
+    const service = new JobQueueService();
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let aborted = false;
+    service.startWorker(async (_job, signal) => {
+      started();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          'abort',
+          () => {
+            aborted = true;
+            resolve();
+          },
+          { once: true }
+        )
+      );
+      return {};
+    });
+    await ready;
+    await service.shutdown();
+    expect(aborted).toBe(true);
+    expect(mockRepo.complete).not.toHaveBeenCalled();
+    expect(mockRepo.cancelClaim).toHaveBeenCalledWith('job-1', 'lease');
+  });
+
+  it('does not start a handler when the database fence rejects ownership', async () => {
+    available = 1;
+    mockRepo.withLease.mockRejectedValueOnce(new Error('Job lease lost'));
+    const service = new JobQueueService();
+    const handler = vi.fn(async () => ({}));
+    const stop = service.startWorker(handler);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    stop();
+    expect(handler).not.toHaveBeenCalled();
+    await service.shutdown();
   });
 });

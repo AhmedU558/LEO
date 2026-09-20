@@ -114,7 +114,6 @@ export class AnalyticsService implements AnalyticsEngine {
       policyDecision: 'ALLOW',
       riskLevel: 'LOW',
       executionEnvironment: 'production',
-      context: { status },
     });
 
     return rec;

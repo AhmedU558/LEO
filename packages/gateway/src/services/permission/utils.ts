@@ -28,6 +28,9 @@ export function downgradePromptToBlocked(perms: ExecutionPermissions): Execution
  * context-appropriate permission enforcement.
  */
 export interface ToolExecContext {
+  /** Stable caller-generated effect identity, reused only for retries of this operation. */
+  operationId?: string;
+  signal?: AbortSignal;
   /** The execution source requesting the tool */
   source: 'chat' | 'trigger' | 'plan' | 'workflow' | 'skill' | 'coding-agent' | 'system' | 'mcp';
   /** Code-execution category permissions (from user settings) */

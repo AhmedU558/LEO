@@ -156,6 +156,12 @@ vi.mock('../../tools/overrides/audio.js', () => ({
 vi.mock('../../tools/overrides/expense.js', () => ({ registerExpenseOverrides: vi.fn() }));
 
 const mockIdempotencyRepo = {
+  claimOperation: vi.fn(async (_user: string, _operation: string, requestHash: string) => ({
+    claimed: true,
+    state: 'pending',
+    requestHash,
+  })),
+  finishOperation: vi.fn(async () => {}),
   getRecord: vi.fn(async () => null),
   setRecord: vi.fn(async () => {}),
 };

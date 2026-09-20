@@ -10,15 +10,17 @@
  * - Timeout enforcement
  */
 
-import { spawn, exec } from 'child_process';
+import { spawn, exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { randomUUID } from 'node:crypto';
 import { getLog } from '../services/get-log.js';
 import { getErrorMessage } from '../services/error-utils.js';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const log = getLog('Sandbox');
 
 // Sandbox configuration
@@ -275,7 +277,8 @@ export async function ensureImage(image: string): Promise<boolean> {
 export async function executeInSandbox(
   code: string,
   language: 'python' | 'javascript' | 'shell',
-  config: SandboxConfig = {}
+  config: SandboxConfig = {},
+  signal?: AbortSignal
 ): Promise<SandboxResult> {
   const startTime = Date.now();
 
@@ -291,26 +294,12 @@ export async function executeInSandbox(
     };
   }
 
-  // Auto-detect if relaxed security is needed (only test once)
-  let useRelaxedSecurity = config.relaxedSecurity ?? false;
-  if (!useRelaxedSecurity && securityFlagsSupported === null) {
-    // First run - test security flags
-    const flagsSupported = await testSecurityFlags();
-    if (!flagsSupported) {
-      log.info('Auto-enabling relaxed security mode due to Docker compatibility');
-      useRelaxedSecurity = true;
-    }
-  } else if (!useRelaxedSecurity && securityFlagsSupported === false) {
-    // Already tested and not supported
-    useRelaxedSecurity = true;
-  }
-
   // Merge config with defaults
   const cfg: Required<SandboxConfig> = {
     ...DEFAULT_CONFIG,
     ...config,
     image: config.image ?? DEFAULT_IMAGES[language] ?? DEFAULT_CONFIG.image,
-    relaxedSecurity: useRelaxedSecurity,
+    relaxedSecurity: false,
   };
 
   // Ensure image is available
@@ -338,7 +327,7 @@ export async function executeInSandbox(
     const dockerArgs = buildDockerArgs(tempDir, language, cfg);
 
     // Execute in container
-    const result = await runDockerContainer(dockerArgs, cfg.timeout);
+    const result = await runDockerContainer(dockerArgs, cfg.timeout, signal);
 
     return {
       ...result,
@@ -412,7 +401,6 @@ function buildDockerArgs(
   // Add security flags unless relaxedSecurity is enabled
   // Some Docker versions/configurations don't support --no-new-privileges
   if (!config.relaxedSecurity) {
-    args.push('--no-new-privileges'); // Prevent privilege escalation
     args.push('--cap-drop=ALL'); // Drop all capabilities
     args.push('--security-opt=no-new-privileges:true');
   } else {
@@ -451,7 +439,8 @@ function buildDockerArgs(
  */
 function runDockerContainer(
   args: string[],
-  timeout: number
+  timeout: number,
+  signal?: AbortSignal
 ): Promise<Omit<SandboxResult, 'executionTimeMs'>> {
   return new Promise((resolve) => {
     let stdout = '';
@@ -459,15 +448,32 @@ function runDockerContainer(
     let killed = false;
     let timedOut = false;
 
-    const child = spawn('docker', args, {
+    const name = `leo-sandbox-${randomUUID()}`;
+    const removeContainer = async () => {
+      try {
+        await execFileAsync('docker', ['rm', '--force', name], { timeout: 5000 });
+      } catch (error) {
+        // --rm normally removes an exited container before this final cleanup.
+        if (!getErrorMessage(error).includes('No such container')) throw error;
+      }
+    };
+    const child = spawn('docker', [args[0]!, '--name', name, ...args.slice(1)], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const abort = () => {
+      killed = true;
+      child.kill('SIGKILL');
+      void removeContainer().catch((error: unknown) => {
+        log.error('Failed to terminate sandbox container', { name, error: getErrorMessage(error) });
+      });
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
 
     // Timeout handler
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      killed = true;
-      child.kill('SIGKILL');
+      abort();
     }, timeout);
 
     // Capture stdout
@@ -476,8 +482,7 @@ function runDockerContainer(
       // Limit output size
       if (stdout.length > 1024 * 1024) {
         stdout = stdout.slice(0, 1024 * 1024) + '\n[Output truncated]';
-        killed = true;
-        child.kill('SIGKILL');
+        abort();
       }
     });
 
@@ -490,30 +495,42 @@ function runDockerContainer(
     });
 
     // Handle completion
-    child.on('close', (exitCode: number | null) => {
+    child.on('close', async (exitCode: number | null) => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abort);
+      let cleanupError: string | undefined;
+      try {
+        await removeContainer();
+      } catch (error) {
+        cleanupError = `Sandbox cleanup failed: ${getErrorMessage(error)}`;
+      }
 
       // Check for OOM kill (exit code 137)
       const memoryExceeded = exitCode === 137;
 
       resolve({
-        success: exitCode === 0 && !killed,
+        success: exitCode === 0 && !killed && !cleanupError,
         stdout: stdout.trim(),
         stderr: stderr.trim(),
         exitCode,
         timedOut,
         memoryExceeded,
-        error: timedOut
-          ? 'Execution timed out'
-          : memoryExceeded
-            ? 'Memory limit exceeded'
-            : undefined,
+        error:
+          cleanupError ??
+          (signal?.aborted
+            ? 'Execution cancelled'
+            : timedOut
+              ? 'Execution timed out'
+              : memoryExceeded
+                ? 'Memory limit exceeded'
+                : undefined),
       });
     });
 
     // Handle spawn errors
     child.on('error', (error: Error) => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abort);
       resolve({
         success: false,
         stdout: '',
@@ -543,6 +560,46 @@ export async function executeJavaScriptSandbox(
   config?: SandboxConfig
 ): Promise<SandboxResult> {
   return executeInSandbox(code, 'javascript', config);
+}
+
+/** JSON-only boundary for user JavaScript. No host functions, mounts, or credentials. */
+export async function executeIsolatedJavaScript(
+  code: string,
+  globals: Record<string, unknown> = {},
+  options: { timeout?: number; memoryMB?: number; signal?: AbortSignal } = {}
+): Promise<unknown> {
+  options.signal?.throwIfAborted();
+  const timeout = Math.min(30_000, Math.max(1, options.timeout ?? 5000));
+  const memoryMB = Math.min(256, Math.max(32, options.memoryMB ?? 128));
+  const data = JSON.stringify(globals, (_key, value) => {
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      throw new Error('Host functions cannot cross the isolated execution boundary');
+    }
+    return value;
+  });
+  const runner = `
+const vm = require('node:vm');
+const context = vm.createContext({}, { codeGeneration: { strings: false, wasm: false } });
+new vm.Script('Object.assign(globalThis, JSON.parse(' + ${JSON.stringify(JSON.stringify(data))} + '))').runInContext(context);
+new vm.Script(${JSON.stringify(`(async () => {\n${code}\n})()`)}).runInContext(context, { timeout: ${timeout} })
+  .then(value => process.stdout.write(JSON.stringify({ value })))
+  .catch(error => { process.stderr.write(String(error)); process.exitCode = 1; });
+`;
+  const result = await executeInSandbox(
+    runner,
+    'javascript',
+    {
+      timeout,
+      memoryMB,
+      networkEnabled: false,
+      env: {},
+      relaxedSecurity: false,
+    },
+    options.signal
+  );
+  if (!result.success)
+    throw new Error(result.error ?? result.stderr ?? 'Isolated execution failed');
+  return (JSON.parse(result.stdout) as { value?: unknown }).value;
 }
 
 /**

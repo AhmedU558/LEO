@@ -57,7 +57,7 @@ function checkInstallThrottle(c: Context): Response | null {
   // commit); per-route tests focus on the actual install logic.
   if (process.env.NODE_ENV === 'test') return null;
 
-  const ip = getClientIp(c.req);
+  const ip = getClientIp(c);
   const result = installThrottle.check(ip);
   if (!result.allowed) {
     c.header('Retry-After', String(Math.ceil(result.retryAfterMs / 1000)));
@@ -235,7 +235,7 @@ installRoutes.post('/install', async (c) => {
     // Audit extension install — registers new code, tools, and triggers
     // in the runtime, plus any permissions the manifest declared.
     getEventSystem().emit('audit.extension.installed', 'extensions', {
-      ip: getClientIp(c.req),
+      ip: getClientIp(c),
       extensionId: record.id,
       source: 'path',
       userId,
@@ -416,7 +416,7 @@ installRoutes.post('/upload', async (c) => {
           id: record.id,
         });
         getEventSystem().emit('audit.extension.installed', 'extensions', {
-          ip: getClientIp(c.req),
+          ip: getClientIp(c),
           extensionId: record.id,
           source: ext === '.skill' ? 'upload-skill' : 'upload-zip',
           userId,
@@ -476,7 +476,7 @@ installRoutes.post('/upload', async (c) => {
           id: record.id,
         });
         getEventSystem().emit('audit.extension.installed', 'extensions', {
-          ip: getClientIp(c.req),
+          ip: getClientIp(c),
           extensionId: record.id,
           source: ext === '.md' ? 'upload-md' : 'upload-json',
           userId,

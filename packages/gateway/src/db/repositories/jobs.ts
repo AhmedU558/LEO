@@ -4,6 +4,7 @@
  */
 
 import { BaseRepository } from './base.js';
+import { randomUUID } from 'node:crypto';
 
 const JOBS_TABLE = 'jobs';
 const JOB_HISTORY_TABLE = 'job_history';
@@ -25,6 +26,8 @@ export interface JobRecord {
   maxAttempts: number;
   createdAt: Date;
   updatedAt: Date;
+  leaseToken?: string;
+  leaseExpiresAt?: Date;
   /**
    * For workflow_node jobs: the workflow run log ID (wfLog.id).
    * Extracted from payload.workflowRunId for type-safe access.
@@ -65,7 +68,7 @@ export interface JobStats {
   cancelled: number;
 }
 
-class JobsRepository extends BaseRepository {
+export class JobsRepository extends BaseRepository {
   /**
    * Claim the next available job using FOR UPDATE SKIP LOCKED.
    * Returns null if no jobs are available to claim.
@@ -74,7 +77,17 @@ class JobsRepository extends BaseRepository {
    * eliminating the TOCTOU window between SELECT and UPDATE that existed
    * when these were two separate queries.
    */
-  async claimJob(queue = 'default', priority = 0): Promise<JobRecord | null> {
+  async claimJob(queue = 'default', leaseMs = 30_000): Promise<JobRecord | null> {
+    if (!Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 300_000) {
+      throw new Error('Job lease must be between 1000 and 300000 milliseconds');
+    }
+    const leaseToken = randomUUID();
+    await this.execute(
+      `UPDATE ${JOBS_TABLE} SET status = 'failed', updated_at = NOW(),
+       result = COALESCE(result, '{}'::jsonb) || '{"outcome":"unknown","error":"Lease expired after final attempt"}'::jsonb
+       WHERE queue = $1 AND status = 'active' AND lease_expires_at <= NOW() AND attempts >= max_attempts`,
+      [queue]
+    );
     // Atomic claim-and-update via CTE: SELECT FOR UPDATE locks the row, then UPDATE
     // modifies it — all in one round-trip. This prevents two workers from claiming
     // the same job even under concurrent execution.
@@ -84,11 +97,15 @@ class JobsRepository extends BaseRepository {
                run_after, started_at, completed_at, attempts, max_attempts,
                created_at, updated_at
         FROM ${JOBS_TABLE}
-        WHERE status = 'available'
+        WHERE (status = 'available' OR (status = 'active' AND lease_expires_at <= NOW()))
           AND queue = $1
-          AND priority <= $2
+          AND attempts < max_attempts
           AND run_after <= NOW()
-        ORDER BY priority DESC, run_after ASC
+        -- After five minutes of eligibility, FIFO takes precedence over priority.
+        -- This bounds overtaking by newly arriving high-priority jobs.
+        ORDER BY (run_after <= NOW() - INTERVAL '5 minutes') DESC,
+                 CASE WHEN run_after <= NOW() - INTERVAL '5 minutes' THEN run_after END ASC,
+                 priority DESC, run_after ASC, created_at ASC, id ASC
         LIMIT 1
         FOR UPDATE SKIP LOCKED
       )
@@ -96,13 +113,15 @@ class JobsRepository extends BaseRepository {
       SET status = 'active',
           started_at = NOW(),
           attempts = c.attempts + 1,
+          lease_token = $2,
+          lease_expires_at = NOW() + INTERVAL '1 millisecond' * $3,
           updated_at = NOW()
       FROM claimed AS c
       WHERE j.id = c.id
       RETURNING
         j.id, j.name, j.queue, j.priority, j.payload, j.result,
         j.status, j.run_after, j.started_at, j.completed_at,
-        j.attempts, j.max_attempts, j.created_at, j.updated_at
+        j.attempts, j.max_attempts, j.created_at, j.updated_at, j.lease_expires_at
     `;
     const rows = await this.query<{
       id: string;
@@ -119,13 +138,16 @@ class JobsRepository extends BaseRepository {
       max_attempts: number;
       created_at: Date;
       updated_at: Date;
-    }>(sql, [queue, priority]);
+      lease_expires_at: Date;
+    }>(sql, [queue, leaseToken, leaseMs]);
 
     if (rows.length === 0) return null;
 
     const r = rows[0]!;
     return {
       id: r.id,
+      leaseToken,
+      leaseExpiresAt: r.lease_expires_at,
       name: r.name,
       queue: r.queue,
       priority: r.priority,
@@ -204,11 +226,39 @@ class JobsRepository extends BaseRepository {
   /**
    * Mark a job as completed.
    */
-  async complete(jobId: string, result: Record<string, unknown>): Promise<void> {
-    await this.execute(
-      `UPDATE ${JOBS_TABLE} SET status = 'completed', result = $2, completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
-      [jobId, JSON.stringify(result)]
+  async complete(
+    jobId: string,
+    result: Record<string, unknown>,
+    leaseToken: string
+  ): Promise<boolean> {
+    const updated = await this.execute(
+      `UPDATE ${JOBS_TABLE} SET status = 'completed', result = $2, completed_at = NOW(), updated_at = NOW(), lease_token = NULL, lease_expires_at = NULL
+       WHERE id = $1 AND status = 'active' AND lease_token = $3 AND lease_expires_at > NOW()`,
+      [jobId, JSON.stringify(result), leaseToken]
     );
+    return updated.changes === 1;
+  }
+
+  async renewLease(jobId: string, leaseToken: string, leaseMs = 30_000): Promise<boolean> {
+    const updated = await this.execute(
+      `UPDATE ${JOBS_TABLE} SET lease_expires_at = NOW() + INTERVAL '1 millisecond' * $3
+       WHERE id = $1 AND status = 'active' AND lease_token = $2 AND lease_expires_at > NOW()`,
+      [jobId, leaseToken, leaseMs]
+    );
+    return updated.changes === 1;
+  }
+
+  /** Fence a durable effect claim in the same transaction as the ownership check. */
+  async withLease<T>(jobId: string, leaseToken: string, claim: () => Promise<T>): Promise<T> {
+    return this.transaction(async () => {
+      const owned = await this.queryOne(
+        `SELECT id FROM ${JOBS_TABLE} WHERE id = $1 AND status = 'active'
+         AND lease_token = $2 AND lease_expires_at > NOW() FOR UPDATE`,
+        [jobId, leaseToken]
+      );
+      if (!owned) throw new Error('Job lease lost');
+      return claim();
+    });
   }
 
   /**
@@ -222,7 +272,7 @@ class JobsRepository extends BaseRepository {
    * completed. Wrap the whole sequence in a transaction with `SELECT ...
    * FOR UPDATE` so the decision and writes are atomic.
    */
-  async fail(jobId: string, error: string): Promise<void> {
+  async fail(jobId: string, error: string, leaseToken: string): Promise<void> {
     await this.transaction(async () => {
       const lockedRow = await this.queryOne<{
         attempts: number;
@@ -233,9 +283,9 @@ class JobsRepository extends BaseRepository {
       }>(
         `SELECT attempts, max_attempts, name, queue, payload
            FROM ${JOBS_TABLE}
-          WHERE id = $1
+          WHERE id = $1 AND status = 'active' AND lease_token = $2 AND lease_expires_at > NOW()
           FOR UPDATE`,
-        [jobId]
+        [jobId, leaseToken]
       );
       if (!lockedRow) return; // Already deleted / never existed — idempotent.
 
@@ -268,7 +318,8 @@ class JobsRepository extends BaseRepository {
         const runAfter = new Date(Date.now() + backoffMs).toISOString();
         await this.execute(
           `UPDATE ${JOBS_TABLE}
-              SET status = 'available', result = $2, run_after = $3, updated_at = $4
+              SET status = 'available', result = $2, run_after = $3, updated_at = $4,
+                  lease_token = NULL, lease_expires_at = NULL
             WHERE id = $1`,
           [jobId, JSON.stringify({ error }), runAfter, now]
         );
@@ -281,8 +332,17 @@ class JobsRepository extends BaseRepository {
    */
   async cancel(jobId: string): Promise<void> {
     await this.execute(
-      `UPDATE ${JOBS_TABLE} SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+      `UPDATE ${JOBS_TABLE} SET status = 'cancelled', updated_at = NOW(), lease_token = NULL, lease_expires_at = NULL
+       WHERE id = $1 AND status IN ('available', 'active')`,
       [jobId]
+    );
+  }
+
+  async cancelClaim(jobId: string, leaseToken: string): Promise<void> {
+    await this.execute(
+      `UPDATE ${JOBS_TABLE} SET status = 'cancelled', updated_at = NOW(), lease_token = NULL, lease_expires_at = NULL
+       WHERE id = $1 AND status = 'active' AND lease_token = $2`,
+      [jobId, leaseToken]
     );
   }
 
@@ -359,7 +419,7 @@ class JobsRepository extends BaseRepository {
       where.push(`queue = $2`);
       params.push(queue);
     }
-    where.push(`LIMIT $${params.length + 1}`);
+    const limitParameter = `$${params.length + 1}`;
     params.push(limit);
 
     const rows = await this.query<{
@@ -379,7 +439,7 @@ class JobsRepository extends BaseRepository {
       updated_at: Date;
     }>(
       `SELECT id, name, queue, priority, payload, result, status, run_after, started_at, completed_at, attempts, max_attempts, created_at, updated_at
-       FROM ${JOBS_TABLE} WHERE ${where.join(' AND ')} ORDER BY created_at DESC`,
+       FROM ${JOBS_TABLE} WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id ASC LIMIT ${limitParameter}`,
       params
     );
     return rows.map((r) => ({
