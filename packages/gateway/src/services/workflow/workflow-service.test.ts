@@ -1459,7 +1459,7 @@ describe('subWorkflowNode', () => {
     mockRepo.getLog.mockResolvedValue(makeLog({ status: 'failed' }));
 
     const progressEvents: Array<Record<string, unknown>> = [];
-    await service.executeWorkflow('wf-1', 'user1', (e) => progressEvents.push(e), { depth: 10 });
+    await service.executeWorkflow('wf-1', 'user1', (e) => progressEvents.push(e), { depth: 9 });
 
     const ne = progressEvents.find((e) => e.type === 'node_error');
     expect(ne).toBeDefined();

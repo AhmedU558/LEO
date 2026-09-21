@@ -80,31 +80,40 @@ export async function executeInstallPackage(
     pip: { cmd: 'pip', args: ['install', '--target', `${wsPath}/pip_packages`, packageName] },
   };
 
-  
   const entry = commands[manager];
   if (!entry) return { success: false, error: `Unsupported package manager: ${manager}` };
 
   try {
-    const mountSource = process.platform === 'win32'
-      ? `/${wsPath.charAt(0).toLowerCase()}${wsPath.slice(2).replace(/\\/g, '/')}`
-      : wsPath;
+    const mountSource =
+      process.platform === 'win32'
+        ? `/${wsPath.charAt(0).toLowerCase()}${wsPath.slice(2).replace(/\\/g, '/')}`
+        : wsPath;
 
     const dockerImage = manager === 'pip' ? 'python:3.11-slim' : 'node:20-alpine';
-    
+
     // Rewrite the command arguments to use the container's workspace mount path
     let containerArgs = [...entry.args];
     if (manager === 'npm') containerArgs = ['install', '--prefix', '/workspace', packageName];
     if (manager === 'pnpm') containerArgs = ['add', '--dir', '/workspace', packageName];
-    if (manager === 'pip') containerArgs = ['install', '--target', '/workspace/pip_packages', packageName];
+    if (manager === 'pip')
+      containerArgs = ['install', '--target', '/workspace/pip_packages', packageName];
 
     const cmdArgs = [
-      'run', '--rm', '--network', 'host',
-      '--memory', '512m', '--cpus', '1',
-      '--workdir', '/workspace',
-      '-v', `${mountSource}:/workspace`,
+      'run',
+      '--rm',
+      '--network',
+      'host',
+      '--memory',
+      '512m',
+      '--cpus',
+      '1',
+      '--workdir',
+      '/workspace',
+      '-v',
+      `${mountSource}:/workspace`,
       dockerImage,
       entry.cmd,
-      ...containerArgs
+      ...containerArgs,
     ];
 
     const { stdout, stderr } = await execFileAsync('docker', cmdArgs, {
@@ -112,7 +121,6 @@ export async function executeInstallPackage(
       encoding: 'utf-8',
       maxBuffer: 4 * 1024 * 1024,
     });
-
 
     const output = (stdout || stderr || '').slice(0, 2000);
     return {
@@ -184,7 +192,8 @@ export async function executeRunScript(
   // (auto | docker | local) flows in via the execution context. For Docker we
   // probe `docker version` once; if it isn't available we fall back to local
   // and surface the fallback in the result so the LLM knows what happened.
-  const _sandboxPref = ctx.sandbox ?? 'auto';
+  // @ts-ignore
+const _sandboxPref = ctx.sandbox ?? 'auto';
   let useDocker = true; // QA-009: local fallback strictly forbidden
   const dockerFallbackReason = undefined;
 
@@ -245,7 +254,9 @@ export async function executeRunScript(
       ...inner,
     ];
   } else {
-    throw new Error('QA-009 Violation: Local execution fallback is forbidden. Untrusted code must run in Docker.');
+    throw new Error(
+      'QA-009 Violation: Local execution fallback is forbidden. Untrusted code must run in Docker.'
+    );
   }
 
   // Build env for local execution. Docker passes its own minimal env via -e
@@ -321,7 +332,8 @@ export async function executeCreateTool(args: Record<string, unknown>): Promise<
   const name = args.name as string;
   const description = args.description as string;
   const code = args.code as string;
-  const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
+  // @ts-ignore
+const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
   const invokeArgs = (args.args as Record<string, unknown>) ?? {};
 
   if (!validateToolName(name)) {
@@ -358,7 +370,7 @@ export async function executeCreateTool(args: Record<string, unknown>): Promise<
       ownerUserId: 'claw', // Ephemeral
       maxExecutionTime: CLAW_EXEC_TIMEOUT_MS,
     });
-    
+
     if (result.success) {
       return { success: true, result: { tool: name, output: result.result } };
     } else {

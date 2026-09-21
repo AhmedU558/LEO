@@ -1,4 +1,4 @@
-import { invalidateAgentCache } from '../agents/index.js';
+import { invalidateAgentCache } from './agents/index.js';
 import { getUserId } from './helpers.js';
 /**
  * File Workspaces Routes

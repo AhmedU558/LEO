@@ -1306,9 +1306,9 @@ describe('Dashboard Service', () => {
         undefined,
         null,
         'dashboard-briefing',
-          undefined,
-          'user-1',
-          'default'
+        undefined,
+        'user-1',
+        'default'
       );
     });
 
@@ -1364,9 +1364,9 @@ describe('Dashboard Service', () => {
         undefined,
         null,
         'dashboard-briefing',
-          undefined,
-          'user-1',
-          'default'
+        undefined,
+        'user-1',
+        'default'
       );
     });
 

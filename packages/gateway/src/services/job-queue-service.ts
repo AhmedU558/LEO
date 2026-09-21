@@ -108,7 +108,9 @@ export class JobQueueService {
     const context = jobExecutionContext.getStore();
     const currentDepth = context?.depth ?? 0;
     if (currentDepth >= MAX_JOB_DEPTH_LIMIT) {
-      throw new Error(`Job execution blocked: MAX_JOB_DEPTH_LIMIT (${MAX_JOB_DEPTH_LIMIT}) exceeded (recursive autonomous loop)`);
+      throw new Error(
+        `Job execution blocked: MAX_JOB_DEPTH_LIMIT (${MAX_JOB_DEPTH_LIMIT}) exceeded (recursive autonomous loop)`
+      );
     }
     const payloadWithDepth = { ...payload, _depth: currentDepth + 1 } as Record<string, unknown>;
     const jobInput: CreateJobInput = {
@@ -126,7 +128,13 @@ export class JobQueueService {
       return job.id;
     } catch (error: unknown) {
       // Catch PostgreSQL UNIQUE constraint violation (23505) for idempotent enqueues
-      if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === '23505' && options.id) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code?: string }).code === '23505' &&
+        options.id
+      ) {
         log.debug('Job already enqueued, returning existing id', { jobId: options.id, name });
         return options.id;
       }
@@ -273,14 +281,25 @@ export class JobQueueService {
     const timeoutId = setTimeout(() => {
       if (!controller.signal.aborted) {
         log.warn('Job exceeded max execution time', logCtx);
-        controller.abort(new Error(`Job exceeded MAX_EXECUTION_TIME_MS (${MAX_EXECUTION_TIME_MS}ms)`));
+        controller.abort(
+          new Error(`Job exceeded MAX_EXECUTION_TIME_MS (${MAX_EXECUTION_TIME_MS}ms)`)
+        );
       }
     }, MAX_EXECUTION_TIME_MS);
     timeoutId.unref?.();
     try {
       controller.signal.throwIfAborted();
       const result = await jobExecutionContext.run(
-        { jobId: job.id, leaseToken: job.leaseToken!, signal: controller.signal, effectIndex: 0, depth: typeof job.payload === 'object' && job.payload !== null && '_depth' in job.payload ? (job.payload as { _depth: number })._depth : 0 },
+        {
+          jobId: job.id,
+          leaseToken: job.leaseToken!,
+          signal: controller.signal,
+          effectIndex: 0,
+          depth:
+            typeof job.payload === 'object' && job.payload !== null && '_depth' in job.payload
+              ? (job.payload as { _depth: number })._depth
+              : 0,
+        },
         async () => {
           const operations = getIdempotencyKeysRepository();
           const operationId = `job:${job.id}`;

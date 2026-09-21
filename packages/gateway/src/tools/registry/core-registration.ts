@@ -198,9 +198,9 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
             ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
             : 0;
             
-          const perm = await checkToolPermission(context.userId ?? userId, toolDef.name, {
+          const perm = await checkToolPermission(context?.userId ?? userId, toolDef.name, {
             source: 'chat',
-            executionPermissions: context.executionPermissions
+            executionPermissions: context?.executionPermissions
           });
           if (!perm.allowed) {
             return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });
@@ -227,9 +227,9 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
           ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
           : 0;
           
-        const perm = await checkToolPermission(context.userId ?? userId, toolDef.name, {
+        const perm = await checkToolPermission(context?.userId ?? userId, toolDef.name, {
           source: 'chat',
-          executionPermissions: context.executionPermissions
+          executionPermissions: context?.executionPermissions
         });
         if (!perm.allowed) {
           return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });
@@ -276,9 +276,9 @@ export async function registerDynamicTools(
           ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
           : 0;
           
-        const perm = await checkToolPermission(_context.userId ?? userId, toolDef.name, {
+        const perm = await checkToolPermission(_context?.userId ?? userId, toolDef.name, {
           source: 'chat',
-          executionPermissions: _context.executionPermissions
+          executionPermissions: _context?.executionPermissions
         });
         if (!perm.allowed) {
           return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });
@@ -349,9 +349,9 @@ export async function registerDynamicTools(
           ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
           : 0;
           
-        const perm = await checkToolPermission(_context.userId ?? userId, toolDef.name, {
+        const perm = await checkToolPermission(_context?.userId ?? userId, toolDef.name, {
           source: 'chat',
-          executionPermissions: _context.executionPermissions
+          executionPermissions: _context?.executionPermissions
         });
         if (!perm.allowed) {
           return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });

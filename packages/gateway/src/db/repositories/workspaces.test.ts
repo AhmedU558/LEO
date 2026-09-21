@@ -671,7 +671,7 @@ describe('WorkspacesRepository', () => {
       expect(sql).toContain('code_executions');
       expect(sql).toContain('WHERE workspace_id = $1');
       const params = mockAdapter.queryOne.mock.calls[0]![1] as unknown[];
-      expect(params).toEqual(['ws-1']);
+      expect(params).toEqual(['ws-1', 'user-1']);
     });
   });
 

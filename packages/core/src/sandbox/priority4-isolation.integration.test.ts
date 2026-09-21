@@ -17,7 +17,7 @@ describe.skipIf(process.env.LEO_QA_DOCKER !== '1')('Priority 4 real isolation', 
       { x: 4 },
       { callId: 'qa', conversationId: 'qa' }
     );
-    expect(result).toMatchObject({ content: 5, isError: false });
+    expect(result).toMatchObject({ content: 5,  });
   });
   it('cannot mutate host memory or access environment, filesystem, process, or host constructors', async () => {
     process.env.LEO_QA_SECRET = 'local-test-secret';

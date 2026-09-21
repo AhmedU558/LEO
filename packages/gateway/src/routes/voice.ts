@@ -44,7 +44,7 @@ if (typeof voiceThrottleCleanup === 'object' && 'unref' in voiceThrottleCleanup)
 
 voiceRoutes.get('/config', async (c) => {
   try {
-    const userId = getUserId(c);
+    const userId = getUserId(c as any);
     // IDOR-017: Reject unauthenticated requests
     if (userId === 'default' && !c.get('sessionAuthenticated')) {
       return apiError(
@@ -63,7 +63,7 @@ voiceRoutes.get('/config', async (c) => {
 
 voiceRoutes.get('/status', async (c) => {
   try {
-    const userId = getUserId(c);
+    const userId = getUserId(c as any);
     // IDOR-017: Reject unauthenticated requests
     if (userId === 'default' && !c.get('sessionAuthenticated')) {
       return apiError(
@@ -82,7 +82,7 @@ voiceRoutes.get('/status', async (c) => {
 
 voiceRoutes.get('/voices', async (c) => {
   try {
-    const userId = getUserId(c);
+    const userId = getUserId(c as any);
     // IDOR-017: Reject unauthenticated requests
     if (userId === 'default' && !c.get('sessionAuthenticated')) {
       return apiError(
@@ -105,7 +105,7 @@ voiceRoutes.get('/voices', async (c) => {
 
 voiceRoutes.get('/diagnostics', async (c) => {
   try {
-    const userId = getUserId(c);
+    const userId = getUserId(c as any);
     // IDOR-017: Reject unauthenticated requests
     if (userId === 'default' && !c.get('sessionAuthenticated')) {
       return apiError(
@@ -128,7 +128,7 @@ voiceRoutes.get('/diagnostics', async (c) => {
 
 voiceRoutes.post('/transcribe', async (c) => {
   try {
-    const userId = getUserId(c);
+    const userId = getUserId(c as any);
     // IDOR-017: Reject unauthenticated requests
     if (userId === 'default' && !c.get('sessionAuthenticated')) {
       return apiError(
@@ -216,7 +216,7 @@ voiceRoutes.post('/transcribe', async (c) => {
 
 voiceRoutes.post('/synthesize', async (c) => {
   try {
-    const userId = getUserId(c);
+    const userId = getUserId(c as any);
     // IDOR-017: Reject unauthenticated requests
     if (userId === 'default' && !c.get('sessionAuthenticated')) {
       return apiError(
@@ -281,17 +281,17 @@ const voiceService2 = new VoiceService();
 const sessions: VoiceSession[] = [];
 
 voiceRoutes.get('/sessions', (c) => {
-  const userSessions = sessions.filter((s) => s.userId === getUserId(c));
+  const userSessions = sessions.filter((s) => s.userId === getUserId(c as any));
   return apiResponse(c, { sessions: userSessions });
 });
 
 voiceRoutes.post('/sessions', async (c) => {
-  const userId = getUserId(c);
+  const userId = getUserId(c as any);
   if (userId === 'default' && !c.get('sessionAuthenticated'))
     return apiError(c, { code: ERROR_CODES.UNAUTHORIZED, message: 'Authentication required' }, 401);
   const newSession: VoiceSession = {
     id: 'voice_' + Date.now(),
-    userId: getUserId(c),
+    userId: getUserId(c as any),
     status: 'connecting',
     messages: [],
     startedAt: new Date().toISOString(),
@@ -301,7 +301,7 @@ voiceRoutes.post('/sessions', async (c) => {
 });
 
 voiceRoutes.post('/sessions/:id/tool_call', async (c) => {
-  const userId = getUserId(c);
+  const userId = getUserId(c as any);
   if (userId === 'default' && !c.get('sessionAuthenticated'))
     return apiError(c, { code: ERROR_CODES.UNAUTHORIZED, message: 'Authentication required' }, 401);
   const id = c.req.param('id');
@@ -317,8 +317,8 @@ voiceRoutes.post('/sessions/:id/tool_call', async (c) => {
   }
 
   const result = await voiceService2.handleVoiceToolCall(
-    getUserId(c),
-    getWorkspaceId(c),
+    getUserId(c as any),
+    getWorkspaceId(c as any),
     session.id,
     body.toolName,
     body.toolArgs

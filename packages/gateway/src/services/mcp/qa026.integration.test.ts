@@ -5,6 +5,7 @@ import { getMcpServersRepo } from '../../db/repositories/mcp-servers.js';
 import { getSharedToolRegistry } from '../tool/executor.js';
 
 let mockClientInstance: any;
+export const connectMock = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
   StdioClientTransport: class StdioClientTransportMock { constructor() {} }
@@ -14,7 +15,7 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => {
   return {
     Client: class ClientMock {
       constructor() { mockClientInstance = this; }
-      connect = vi.fn().mockResolvedValue(undefined);
+      connect = connectMock;
       listTools = vi.fn().mockResolvedValue({
         tools: [{ name: 'test-tool', description: 'desc', inputSchema: {} }],
       });
@@ -115,7 +116,7 @@ describe('QA-026: MCP Provider Status and Integration', () => {
     vi.mocked(getMcpServersRepo).mockReturnValue(repoMock as any);
     
     // Simulate connection failure (e.g., spawn ENOENT)
-    mockClientInstance.connect.mockRejectedValueOnce(new Error('spawn node ENOENT'));
+    connectMock.mockRejectedValueOnce(new Error('spawn node ENOENT'));
     
     await expect(mcpClient.connect(server)).rejects.toThrow('spawn node ENOENT');
     expect(repoMock.updateStatus).toHaveBeenCalledWith(server.id, 'error');

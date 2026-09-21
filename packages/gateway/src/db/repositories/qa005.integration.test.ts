@@ -101,7 +101,7 @@ describe.skipIf(!url)('QA-005 Integration: Cross-user authorization boundaries (
     (repoA as any).adapter = adapter;
     (repoB as any).adapter = adapter;
 
-    const memory = await repoB.create({ content: 'Secret Memory', source: 'test' });
+    const memory = await repoB.create({ content: 'Secret Memory', source: 'test', type: 'fact' });
 
     expect(await repoA.get(memory.id)).toBeNull();
     expect((await repoA.list({}))).toHaveLength(0);
@@ -143,8 +143,8 @@ describe.skipIf(!url)('QA-005 Integration: Cross-user authorization boundaries (
     
     expect(await repoA.countExecutions(wsB.id)).toBe(0);
     
-    // Wait, updateExecutionResult needs ID
-    const updateResult = await repoA.updateExecutionResult(execB.id, 'failed');
+    // Wait, updateExecution needs ID
+    const updateResult = await repoA.updateExecution(execB.id, 'failed');
     expect(updateResult).toBe(false);
   });
 });

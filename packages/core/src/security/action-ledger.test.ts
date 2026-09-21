@@ -53,7 +53,7 @@ describe('ActionLedger', () => {
     for (let i = 0; i < 2000; i++) {
       await record(`bulk-${i}`);
     }
-    expect(ActionLedger.getEntries()).toHaveLength(2000);
+    expect(await ActionLedger.getEntries()).toHaveLength(2000);
   });
 
   it('chains each entry to its predecessor', async () => {
@@ -81,6 +81,6 @@ describe('ActionLedger', () => {
     const afterClear = await record('b');
 
     expect(afterClear.previousHash).toBe('genesis');
-    expect(ActionLedger.getEntries()).toHaveLength(1);
+    expect(await ActionLedger.getEntries()).toHaveLength(1);
   });
 });

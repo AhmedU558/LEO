@@ -61,8 +61,8 @@ export function createAuthMiddleware(config: AuthConfig) {
 
     // Skip auth if type is 'none'
     if (config.type === 'none') {
-      return next();
-    }
+        return next();
+      }
 
     const authHeader = c.req.header('Authorization');
 
@@ -155,8 +155,8 @@ export async function validateJWT(
 export function createOptionalAuthMiddleware(config: AuthConfig) {
   return createMiddleware(async (c, next) => {
     if (config.type === 'none') {
-      return next();
-    }
+        return next();
+      }
 
     const authHeader = c.req.header('Authorization');
 

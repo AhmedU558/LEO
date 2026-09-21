@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerGatewayTools, registerDynamicTools } from './core-registration.js';
 import { ToolRegistry } from '@ownpilot/core/tools';
 import * as permissionService from '../../services/tool/permission.js';
@@ -25,7 +25,7 @@ describe('core-registration (QA-007)', () => {
     registerGatewayTools(tools, 'user-123', false);
     
     // Pick any registered tool, e.g., 'core.read_file'
-    const tool = tools.getTool('core.read_file');
+    const tool = tools.get('core.read_file');
     if (!tool) throw new Error('Tool not registered');
 
     // Execute the native tool directly on the registry
