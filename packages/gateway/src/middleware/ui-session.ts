@@ -21,13 +21,13 @@ import { getRequestOrigin } from '../utils/trusted-proxy.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+import type { Context } from 'hono';
+
 // H-S8: requestOrigin only honors X-Forwarded-* when TRUSTED_PROXY is set.
 // Otherwise an attacker could spoof those headers to make their origin match
 // our canonical origin and bypass the CSRF same-origin check.
-function requestOrigin(c: {
-  req: { url: string; header: (name: string) => string | undefined };
-}): string {
-  return getRequestOrigin(c.req);
+function requestOrigin(c: Context): string {
+  return getRequestOrigin(c);
 }
 
 function configuredOrigins(): Set<string> {

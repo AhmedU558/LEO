@@ -1,8 +1,8 @@
+import { getUserId, getWorkspaceId } from './helpers.js';
 ﻿import { Hono } from 'hono';
 import { apiResponse, apiError, ERROR_CODES, parseJsonBody } from './helpers.js';
 import { ComputerService } from '../services/computer/service.js';
 import type { ComputerTask, ComputerAction } from '@ownpilot/core/computer';
-import { LOCAL_OWNER_ID, LOCAL_WORKSPACE_ID } from '../config/defaults.js';
 
 export const computerRoutes = new Hono();
 const computerService = new ComputerService();
@@ -18,8 +18,7 @@ computerRoutes.post('/tasks', async (c) => {
   const body = (await parseJsonBody(c)) as Partial<ComputerTask> | null;
 
   const newTask: ComputerTask = {
-    id: 'ctask_' + Date.now(),
-    userId: LOCAL_OWNER_ID,
+    id: 'ctask_' + Date.now(), userId: getUserId(c),
     status: 'pending',
     actions: [],
     results: [],
@@ -44,12 +43,7 @@ computerRoutes.post('/tasks/:id/execute', async (c) => {
   task.status = 'running';
   task.actions.push(body.action);
 
-  const result = await computerService.executeTaskAction(
-    LOCAL_OWNER_ID,
-    LOCAL_WORKSPACE_ID,
-    task,
-    body.action
-  );
+  const result = await computerService.executeTaskAction(getUserId(c), getWorkspaceId(c), task, body.action);
 
   task.results.push(result);
   task.status = result.success ? 'completed' : 'failed';

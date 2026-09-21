@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Heartbeats Routes
  *
@@ -8,7 +9,6 @@
  * validation and error handling), and the import/export/enable/disable endpoints.
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import { getHeartbeatService, Services } from '@ownpilot/core/services';
 import { HeartbeatServiceError } from '../../services/heartbeat/service.js';
@@ -38,7 +38,7 @@ const getService = getHeartbeatService;
  * (Custom: uses enabled filter and listHeartbeats-specific API)
  */
 heartbeatsRoutes.get('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const enabled = c.req.query('enabled');
   const limit = getIntParam(c, 'limit', 20, 1, 100);
 
@@ -56,7 +56,7 @@ heartbeatsRoutes.get('/', async (c) => {
  * (Custom: has manual field validation and HeartbeatServiceError handling)
  */
 heartbeatsRoutes.post('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody(c);
 
   if (!body) {
@@ -121,7 +121,7 @@ heartbeatsRoutes.post('/', async (c) => {
  * (Static route: must be defined before parametric /:id routes)
  */
 heartbeatsRoutes.post('/import', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody(c);
 
   if (!body || typeof (body as { markdown?: string }).markdown !== 'string') {
@@ -143,7 +143,7 @@ heartbeatsRoutes.post('/import', async (c) => {
  * (Static route: must be defined before parametric /:id routes)
  */
 heartbeatsRoutes.get('/export', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   const service = getService();
   const markdown = await service.exportMarkdown(userId);
@@ -176,7 +176,7 @@ heartbeatsRoutes.route('/', crudRoutes);
  * (Custom: catches HeartbeatServiceError for domain-specific error codes)
  */
 heartbeatsRoutes.patch('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const body = await parseJsonBody(c);
 
@@ -217,7 +217,7 @@ heartbeatsRoutes.patch('/:id', async (c) => {
  * POST /:id/enable - Enable heartbeat + trigger
  */
 heartbeatsRoutes.post('/:id/enable', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getService();
@@ -236,7 +236,7 @@ heartbeatsRoutes.post('/:id/enable', async (c) => {
  * POST /:id/disable - Disable heartbeat + trigger
  */
 heartbeatsRoutes.post('/:id/disable', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getService();

@@ -170,7 +170,6 @@ export type { DispatchNodeContext, DispatchCallbacks } from './workflow-context.
 
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
 import type { Capability } from '@ownpilot/core/security';
-import { randomUUID } from 'crypto';
 
 export async function dispatchNode(
   ctx: DispatchNodeContext,
@@ -179,10 +178,19 @@ export async function dispatchNode(
   const { node, userId, dryRun, workflowId } = ctx;
   const identity = { userId, workspaceId: 'default', roles: [] };
 
-  // Map Node to Capability
+  // Map Node to Capability.
+  //
+  // QA-007: the label must match the concrete effect. A `codeNode` dispatches
+  // to execute_javascript / execute_python / execute_shell depending on its
+  // `language`, so only the shell variant is a shell effect. Classifying every
+  // codeNode as `shell.execute` made all of them CRITICAL, which meant every
+  // code node paused for approval — and, before the fix below, paused on an
+  // approval id that was never persisted and so could never be resolved.
   let capability: Capability = 'workflow.execute';
   if (node.type === 'llmNode') capability = 'agent.execute';
-  else if (node.type === 'codeNode') capability = 'shell.execute';
+  else if (node.type === 'codeNode') {
+    capability = nodeDataField(node, 'language') === 'shell' ? 'shell.execute' : 'workflow.execute';
+  }
 
   const actionName = ((node.data as Record<string, unknown>).toolName as string) || node.type;
 
@@ -210,13 +218,31 @@ export async function dispatchNode(
   }
 
   if (policyResult.decision === 'REQUIRE_APPROVAL' && !dryRun) {
-    throw new ApprovalPauseError(`policy-req-${randomUUID()}`);
+    // QA-013: persist a real approval row rather than pausing on a synthetic
+    // `policy-req-<uuid>` id. The synthetic id matched no record, so the
+    // execution paused on an approval that could never be listed, approved or
+    // rejected — and cancelling the workflow could not invalidate it either.
+    // This mirrors what the approvalNode path already does.
+    const approval = await createWorkflowApprovalsRepository(userId).create({
+      workflowLogId: ctx.logId,
+      workflowId,
+      nodeId: node.id,
+      context: {
+        reason: policyResult.reason,
+        capability,
+        riskLevel: risk,
+        nodeType: node.type,
+        action: actionName,
+      },
+      message: policyResult.reason ?? `Approval required for ${actionName}`,
+    });
+    throw new ApprovalPauseError(approval.id);
   }
 
-  const result = await _dispatchNodeImpl(ctx, cb);
+  let ledgerEntryId: string | undefined;
 
   if (!dryRun) {
-    await ActionLedger.record({
+    const ledgerEntry = await ActionLedger.record({
       userId: identity.userId,
       workspaceId: identity.workspaceId,
       tool: actionName,
@@ -225,13 +251,34 @@ export async function dispatchNode(
       resourceType: node.type,
       taskId: workflowId,
       capability,
-      policyDecision: result.status === 'success' ? 'ALLOW' : 'DENY',
+      policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
-      durationMs: typeof result.durationMs === 'number' ? result.durationMs : 0,
-      result: result.status,
-      error: typeof result.error === 'string' ? result.error : undefined,
+      durationMs: 0,
     });
+    ledgerEntryId = ledgerEntry.actionId;
+  }
+
+  const startTime = Date.now();
+  let result: NodeResult;
+  try {
+    result = await _dispatchNodeImpl(ctx, cb);
+  } catch (err) {
+    if (ledgerEntryId) {
+      await ActionLedger.updateResult(ledgerEntryId, { error: err instanceof Error ? err.message : String(err) }, Date.now() - startTime);
+    }
+    throw err;
+  }
+
+  if (ledgerEntryId) {
+    await ActionLedger.updateResult(
+      ledgerEntryId,
+      {
+        result: result.status === 'success' ? 'success' : undefined,
+        error: typeof result.error === 'string' ? result.error : undefined,
+      },
+      typeof result.durationMs === 'number' ? result.durationMs : Date.now() - startTime
+    );
   }
 
   return result;

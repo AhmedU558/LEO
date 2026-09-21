@@ -487,6 +487,71 @@ describe('AgentsRepository', () => {
   // count
   // =========================================================================
 
+  // =========================================================================
+  // QA-015 — cache coherence around update()
+  // =========================================================================
+
+  describe('update cache coherence (QA-015)', () => {
+    it('does not serve the pre-update row from cache after a successful update', async () => {
+      // Warm the cache with the original row.
+      mockAdapter.queryOne.mockResolvedValueOnce(makeAgentRow());
+      expect((await repo.getById('agent-1'))!.name).toBe('TestAgent');
+
+      // update(): existence SELECT, UPDATE, post-write SELECT.
+      mockAdapter.queryOne.mockResolvedValueOnce(makeAgentRow());
+      mockAdapter.execute.mockResolvedValueOnce({ changes: 1 });
+      mockAdapter.queryOne.mockResolvedValueOnce(makeAgentRow({ name: 'UpdatedBot' }));
+
+      expect((await repo.update('agent-1', { name: 'UpdatedBot' }))!.name).toBe('UpdatedBot');
+
+      // The very next read is served from the cache — and the cache must now
+      // hold the post-update row. Nothing further is queued, so if the entry
+      // were stale (or missing, forcing a DB round-trip) this fails.
+      expect((await repo.getById('agent-1'))!.name).toBe('UpdatedBot');
+    });
+
+    it('invalidates only after the write, never before the existence check', async () => {
+      mockAdapter.queryOne.mockResolvedValueOnce(makeAgentRow());
+      mockAdapter.execute.mockResolvedValueOnce({ changes: 1 });
+      mockAdapter.queryOne.mockResolvedValueOnce(makeAgentRow({ model: 'claude-3' }));
+
+      await repo.update('agent-1', { model: 'claude-3' });
+
+      // Two SELECTs: the existence check and the post-write re-read. A third
+      // would mean the existence check went through the caching getById().
+      expect(mockAdapter.queryOne).toHaveBeenCalledTimes(2);
+      const order = mockAdapter.execute.mock.invocationCallOrder[0]!;
+      expect(mockAdapter.queryOne.mock.invocationCallOrder[1]!).toBeGreaterThan(order);
+    });
+
+    it('drops a racing read that would re-cache the pre-update row', async () => {
+      // A getById() whose SELECT is still in flight when an update commits must
+      // not win the cache afterwards.
+      let releaseRead: (row: unknown) => void = () => {};
+      mockAdapter.queryOne.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseRead = resolve;
+          })
+      );
+      const racingRead = repo.getById('agent-1');
+
+      // The update completes entirely while that read is parked.
+      mockAdapter.queryOne.mockResolvedValueOnce(makeAgentRow());
+      mockAdapter.execute.mockResolvedValueOnce({ changes: 1 });
+      mockAdapter.queryOne.mockResolvedValueOnce(makeAgentRow({ name: 'UpdatedBot' }));
+      await repo.update('agent-1', { name: 'UpdatedBot' });
+
+      // Now the stale read resolves and tries to cache the old row.
+      releaseRead(makeAgentRow({ name: 'TestAgent' }));
+      await racingRead;
+
+      // The cached entry must still be the post-update row, not the stale one
+      // the racing read carried. Nothing more is queued.
+      expect((await repo.getById('agent-1'))!.name).toBe('UpdatedBot');
+    });
+  });
+
   describe('count', () => {
     it('should return the count', async () => {
       mockAdapter.queryOne.mockResolvedValueOnce({ count: '5' });

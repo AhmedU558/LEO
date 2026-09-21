@@ -112,6 +112,7 @@ export const navGroups: NavGroup[] = [
       { to: '/canvas', icon: LayoutTemplate, label: 'Live Canvas' },
       { to: '/approvals', icon: ShieldCheck, label: 'Approvals' },
       { to: '/autonomy', icon: Shield, label: 'Autonomy' },
+      { to: '/learning', icon: Brain, label: 'Learning' },
     ],
   },
   {

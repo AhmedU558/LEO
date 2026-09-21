@@ -349,3 +349,17 @@ export async function parseJsonBody<T = unknown>(
     );
   }
 }
+
+export function getUserId(c: Context): string {
+  const userId = c.get('userId');
+  if (!userId) {
+    throw new Error('Authentication required: Missing userId in context. Middleware failed to block unauthenticated request.');
+  }
+  return userId;
+}
+
+export function getWorkspaceId(c: Context): string {
+  const workspaceId = c.req.header('X-Workspace-ID') || 'default';
+  return workspaceId;
+}
+

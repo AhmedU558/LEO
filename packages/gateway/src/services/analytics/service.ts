@@ -114,6 +114,8 @@ export class AnalyticsService implements AnalyticsEngine {
       policyDecision: 'ALLOW',
       riskLevel: 'LOW',
       executionEnvironment: 'production',
+      // Recorded up-front; ActionLedger.updateResult() fills the real duration.
+      durationMs: 0,
     });
 
     return rec;

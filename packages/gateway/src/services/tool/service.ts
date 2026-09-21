@@ -13,11 +13,29 @@
  *   await tools.execute('get_current_time', {});
  */
 
-import { randomUUID } from 'node:crypto';
 import type { IToolService, ToolServiceResult } from '@ownpilot/core/services';
 import type { ToolDefinition, ToolMiddleware, ToolSource } from '@ownpilot/core/tools';
 import { getSharedToolRegistry, executeTool } from './executor.js';
 import type { ToolExecContext } from '../permission/utils.js';
+
+/**
+ * Render a tool result as the string content callers expect.
+ *
+ * A string passes through unchanged (including ''); anything else is JSON, so
+ * an object result stays inspectable instead of collapsing to
+ * '[object Object]'. `null` and `undefined` render as '' — that is what the
+ * chat/plan/workflow callers already saw for an empty result and changing it
+ * would alter their rendered output.
+ */
+function stringifyContent(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === undefined || value === null) return '';
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
 
 // ============================================================================
 // ToolService Adapter
@@ -43,52 +61,34 @@ export class ToolService implements IToolService {
   ): Promise<ToolServiceResult> {
     const userId = context?.userId ?? this.userId;
 
-    // When execSource is provided, route through executeTool() for permission enforcement
-    if (context?.execSource) {
-      const execContext: ToolExecContext = {
-        source: context.execSource as ToolExecContext['source'],
-        operationId: context.operationId,
-        signal: context.signal,
-      };
-      const result = await executeTool(name, args, userId, undefined, execContext);
-      return {
-        content: result.success
-          ? String(result.result ?? '')
-          : (result.error ?? 'Tool execution failed'),
-        isError: !result.success,
-      };
-    }
+    // QA-016 / QA-007: every call routes through executeTool().
+    //
+    // This used to branch: with `execSource` it went through executeTool() and
+    // got permission enforcement, the atomic idempotency claim and the audit
+    // record; without it, it dropped straight to registry.executeToolCall()
+    // and got none of them. That made the protection a property of the caller
+    // rather than of the effect boundary — any caller could opt out of policy
+    // and idempotency by simply omitting one optional field. `system` is the
+    // default source for callers that do not declare one.
+    const execContext: ToolExecContext = {
+      source: (context?.execSource as ToolExecContext['source']) ?? 'system',
+      operationId: context?.operationId,
+      signal: context?.signal,
+    };
 
-    // Direct registry execution (backward compatible for callers without execSource)
-    let argsJson: string;
+    // Reject unserialisable arguments before claiming an operation: the claim
+    // fingerprints the arguments, so they must be representable.
     try {
-      argsJson = JSON.stringify(args);
+      JSON.stringify(args);
     } catch {
       return { content: 'Invalid tool arguments: cannot serialize to JSON', isError: true };
     }
 
-    const result = await this.registry.executeToolCall(
-      {
-        id: `call_${randomUUID()}`,
-        name,
-        arguments: argsJson,
-      },
-      context?.conversationId ?? 'service',
-      userId
-    );
-
-    let content: string;
-    if (typeof result.content === 'string') {
-      content = result.content;
-    } else {
-      try {
-        content = JSON.stringify(result.content);
-      } catch {
-        content = String(result.content);
-      }
+    const result = await executeTool(name, args, userId, undefined, execContext);
+    if (!result.success) {
+      return { content: result.error ?? 'Tool execution failed', isError: true };
     }
-
-    return { content, isError: result.isError };
+    return { content: stringifyContent(result.result), isError: false };
   }
 
   getDefinition(name: string): ToolDefinition | undefined {

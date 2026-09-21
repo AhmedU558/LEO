@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { generateId } from '../services/id-utils.js';
 import type { Capability, LeoRiskLevel } from './capabilities.js';
 import type { PolicyDecisionType } from './policy-engine.js';
@@ -29,46 +30,78 @@ export interface ActionLedgerEntry {
   hash: string;
 }
 
-export class ActionLedger {
-  private static lastHash: string = 'genesis';
-  // Note: in memory for phase 2. Would use PG in production.
-  private static entries: ActionLedgerEntry[] = [];
+export interface ActionLedgerProvider {
+  record(
+    entryData: Omit<ActionLedgerEntry, 'actionId' | 'timestamp' | 'previousHash' | 'hash'>
+  ): Promise<ActionLedgerEntry>;
+  updateResult(
+    actionId: string,
+    resultData: { result?: string; error?: string },
+    durationMs: number
+  ): Promise<ActionLedgerEntry | undefined>;
+  getEntries(userId?: string): Promise<ActionLedgerEntry[]>;
+  getByWorkspaceId(workspaceId: string, userId?: string): Promise<ActionLedgerEntry[]>;
+  getByActionId(actionId: string, userId?: string): Promise<ActionLedgerEntry | undefined>;
+  clear(): Promise<void>;
+}
 
-  // v1.1 Optimization: Indexes for growing datasets
+export class ActionLedger {
+  private static provider: ActionLedgerProvider | null = null;
+  
+  // In-memory fallback for tests or edge execution
+  private static lastHash: string = 'genesis';
+  private static entries: ActionLedgerEntry[] = [];
   private static indexByWorkspace: Map<string, ActionLedgerEntry[]> = new Map();
   private static indexByActionId: Map<string, ActionLedgerEntry> = new Map();
+  
+  // Queue to serialize local in-memory writes
+  private static writeQueue: Promise<void> = Promise.resolve();
+
+  public static setProvider(provider: ActionLedgerProvider) {
+    this.provider = provider;
+  }
 
   public static async record(
     entryData: Omit<ActionLedgerEntry, 'actionId' | 'timestamp' | 'previousHash' | 'hash'>
   ): Promise<ActionLedgerEntry> {
-    const actionId = generateId('act');
-    const timestamp = new Date();
-    const previousHash = this.lastHash;
-
-    // Simulate tamper-evident hash
-    const hashData = `${actionId}:${timestamp.toISOString()}:${previousHash}:${entryData.userId}:${entryData.action}`;
-    // Fast pseudo-hash for tests without native crypto dependency
-    const hash = Buffer.from(hashData).toString('base64');
-
-    const entry: ActionLedgerEntry = {
-      ...entryData,
-      actionId,
-      timestamp,
-      previousHash,
-      hash,
-    };
-
-    this.entries.push(entry);
-    this.lastHash = hash;
-
-    // Update indexes
-    this.indexByActionId.set(actionId, entry);
-    if (!this.indexByWorkspace.has(entry.workspaceId)) {
-      this.indexByWorkspace.set(entry.workspaceId, []);
+    if (this.provider) {
+      return this.provider.record(entryData);
     }
-    this.indexByWorkspace.get(entry.workspaceId)!.push(entry);
+    
+    return new Promise((resolve, reject) => {
+      this.writeQueue = this.writeQueue.then(async () => {
+        try {
+          const actionId = generateId('act');
+          const timestamp = new Date();
+          const previousHash = this.lastHash;
+          
+          const hashData = `${actionId}:${timestamp.toISOString()}:${previousHash}:${entryData.userId}:${entryData.action}`;
+          const hash = createHash('sha256').update(hashData).digest('hex');
 
-    return entry;
+          const entry: ActionLedgerEntry = {
+            ...entryData,
+            actionId,
+            timestamp,
+            previousHash,
+            hash,
+          };
+
+          // Deep copy to prevent mutation
+          this.entries.push(Object.freeze({ ...entry }));
+          this.lastHash = hash;
+
+          this.indexByActionId.set(actionId, entry);
+          if (!this.indexByWorkspace.has(entry.workspaceId)) {
+            this.indexByWorkspace.set(entry.workspaceId, []);
+          }
+          this.indexByWorkspace.get(entry.workspaceId)!.push(entry);
+
+          resolve(entry);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
   }
 
   public static async updateResult(
@@ -76,30 +109,63 @@ export class ActionLedger {
     resultData: { result?: string; error?: string },
     durationMs: number
   ): Promise<ActionLedgerEntry | undefined> {
+    if (this.provider) {
+      return this.provider.updateResult(actionId, resultData, durationMs);
+    }
+
     const entry = this.indexByActionId.get(actionId);
     if (!entry) return undefined;
-    Object.assign(entry, { ...resultData, durationMs });
-    return entry;
+    
+    // Create new object to prevent mutating frozen stored objects
+    const updated = Object.freeze({ ...entry, ...resultData, durationMs });
+    
+    // Update indexes
+    this.indexByActionId.set(actionId, updated);
+    
+    const wsArray = this.indexByWorkspace.get(updated.workspaceId);
+    if (wsArray) {
+      const idx = wsArray.findIndex(e => e.actionId === actionId);
+      if (idx !== -1) wsArray[idx] = updated;
+    }
+    
+    const entriesIdx = this.entries.findIndex(e => e.actionId === actionId);
+    if (entriesIdx !== -1) this.entries[entriesIdx] = updated;
+
+    return updated;
   }
 
-  public static getEntries(): ActionLedgerEntry[] {
-    return [...this.entries];
+  public static async getEntries(userId?: string): Promise<ActionLedgerEntry[]> {
+    if (this.provider) return this.provider.getEntries(userId);
+    const filtered = userId ? this.entries.filter(e => e.userId === userId) : this.entries;
+    // Return deep copies so callers cannot mutate the ledger
+    return filtered.map(e => ({ ...e }));
   }
 
-  // v1.1 Optimized query
-  public static getByWorkspaceId(workspaceId: string): ActionLedgerEntry[] {
-    return this.indexByWorkspace.get(workspaceId) || [];
+  public static async getByWorkspaceId(workspaceId: string, userId?: string): Promise<ActionLedgerEntry[]> {
+    if (this.provider) return this.provider.getByWorkspaceId(workspaceId, userId);
+    let arr = this.indexByWorkspace.get(workspaceId) || [];
+    if (userId) arr = arr.filter(e => e.userId === userId);
+    return arr.map(e => ({ ...e }));
   }
 
-  // v1.1 Optimized query
-  public static getByActionId(actionId: string): ActionLedgerEntry | undefined {
-    return this.indexByActionId.get(actionId);
+  public static async getByActionId(actionId: string, userId?: string): Promise<ActionLedgerEntry | undefined> {
+    if (this.provider) return this.provider.getByActionId(actionId, userId);
+    const entry = this.indexByActionId.get(actionId);
+    if (entry && (!userId || entry.userId === userId)) {
+      return { ...entry };
+    }
+    return undefined;
   }
 
-  public static clear(): void {
+  public static async clear(): Promise<void> {
+    if (this.provider) {
+      await this.provider.clear();
+      return;
+    }
     this.entries = [];
     this.lastHash = 'genesis';
     this.indexByWorkspace.clear();
     this.indexByActionId.clear();
+    this.writeQueue = Promise.resolve();
   }
 }

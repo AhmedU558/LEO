@@ -46,6 +46,8 @@ export class AutonomyService implements AutonomyEngine {
       policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: 'production',
+      // Recorded up-front; ActionLedger.updateResult() fills the real duration.
+      durationMs: 0,
     });
 
     if (policyResult.decision === 'DENY' || policyResult.decision === 'REQUIRE_APPROVAL') {

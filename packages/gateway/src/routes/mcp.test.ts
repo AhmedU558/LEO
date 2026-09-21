@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * MCP Routes Tests
  *
@@ -1005,7 +1006,7 @@ describe('MCP Routes', () => {
     });
 
     it('returns 404 when the server is owned by a non-local userId', async () => {
-      // Single-tenant: requests resolve to LOCAL_OWNER_ID; the residual guard
+      // Single-tenant: requests resolve to getUserId(c); the residual guard
       // 404s a server row owned by any other userId.
       mockRepo.getById.mockResolvedValue({ ...sampleServer, userId: 'user-2' });
 

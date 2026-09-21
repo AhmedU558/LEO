@@ -138,4 +138,94 @@ describe.skipIf(!url)('Priority 4 PostgreSQL claims', () => {
     }
     expect(await operations.purgeExpired()).toBe(0);
   });
+
+  // QA-016: the claim is what stands between a retry storm and a duplicated
+  // side effect, so exercise it against a real side-effect counter rather than
+  // only asserting on the returned claim flags. `executeTool()` runs exactly
+  // this sequence — claim, execute only when claimed, finish — and its unit
+  // tests pin that it has no path around it.
+  describe('effect admission under concurrency', () => {
+    /** Stands in for a non-idempotent effect: a charge, a send, a publish. */
+    let effects: string[];
+
+    async function admitAndRun(operationId: string, requestHash: string, payload: string) {
+      const operations = new Operations();
+      const owner = randomUUID();
+      const claim = await operations.claimOperation('user', operationId, requestHash, owner);
+      if (claim.requestHash !== requestHash) return { admitted: false, reason: 'args-mismatch' };
+      if (!claim.claimed) {
+        return claim.state === 'success'
+          ? { admitted: false, replayed: claim.result }
+          : { admitted: false, reason: claim.state };
+      }
+      effects.push(payload);
+      const result = { success: true, result: payload };
+      await operations.finishOperation('user', operationId, owner, 'success', result);
+      return { admitted: true, result };
+    }
+
+    beforeEach(() => {
+      effects = [];
+    });
+
+    it('runs the effect once when 12 retries race on one operation id', async () => {
+      const outcomes = await Promise.all(
+        Array.from({ length: 12 }, () => admitAndRun('op-charge', 'hash-a', 'charged'))
+      );
+
+      expect(effects).toEqual(['charged']);
+      expect(outcomes.filter((o) => o.admitted)).toHaveLength(1);
+    });
+
+    it('replays the recorded success for a later retry instead of re-running it', async () => {
+      await admitAndRun('op-charge', 'hash-a', 'charged');
+      const retry = await admitAndRun('op-charge', 'hash-a', 'charged');
+
+      expect(effects).toEqual(['charged']);
+      expect(retry.admitted).toBe(false);
+      expect(retry.replayed).toMatchObject({ result: 'charged' });
+    });
+
+    it('runs distinct operation ids independently even with identical arguments', async () => {
+      await Promise.all([
+        admitAndRun('op-1', 'hash-a', 'charged'),
+        admitAndRun('op-2', 'hash-a', 'charged'),
+      ]);
+
+      // Two intentional sends are two sends, not a deduplicated one.
+      expect(effects).toEqual(['charged', 'charged']);
+    });
+
+    it('refuses an operation id replayed with different arguments', async () => {
+      await admitAndRun('op-charge', 'hash-a', 'charged-10');
+      const reused = await admitAndRun('op-charge', 'hash-b', 'charged-9999');
+
+      expect(reused).toMatchObject({ admitted: false, reason: 'args-mismatch' });
+      expect(effects).toEqual(['charged-10']);
+    });
+
+    it.each(['failed', 'cancelled', 'unknown'] as const)(
+      'never re-runs or reports success after a %s outcome',
+      async (state) => {
+        const operations = new Operations();
+        const owner = randomUUID();
+        await operations.claimOperation('user', `op-${state}`, 'hash-a', owner);
+        await operations.finishOperation('user', `op-${state}`, owner, state, { success: false });
+
+        const retry = await admitAndRun(`op-${state}`, 'hash-a', 'charged');
+
+        expect(retry).toMatchObject({ admitted: false, reason: state });
+        expect(effects).toEqual([]);
+      }
+    );
+
+    it('keeps one user’s operation id from blocking another’s', async () => {
+      await admitAndRun('shared-id', 'hash-a', 'user-effect');
+
+      const other = new Operations();
+      const claim = await other.claimOperation('other-user', 'shared-id', 'hash-a', randomUUID());
+
+      expect(claim.claimed).toBe(true);
+    });
+  });
 });

@@ -1,34 +1,43 @@
-﻿import type {
-  ComputerAction,
-  ComputerActionResult,
-  ComputerCapability,
-  ComputerTask,
-} from '@ownpilot/core/computer';
+﻿import type { ComputerAction, ComputerActionResult, ComputerTask } from '@ownpilot/core/computer';
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
+import type { Capability } from '@ownpilot/core/security';
 
 export class ComputerService {
   private policyEngine = new PolicyEngine();
   private riskEngine = new RiskEngine();
 
-  // Route action to required capability
-  private determineCapability(actionType: string): ComputerCapability {
+  /**
+   * Route an action to the global Capability the policy layer authorises.
+   *
+   * QA-007: this returned `ComputerCapability` ('shell', 'file_operations',
+   * 'app_control', 'system_control'), which is a different, coarser vocabulary
+   * than the one PolicyEngine / RiskEngine / ActionLedger grade. Feeding it in
+   * meant the risk table never matched and every action fell through to the
+   * unknown-capability path. The mapping below names the concrete effect, and
+   * splits read from write rather than grading both as one bucket.
+   */
+  private determineCapability(actionType: string): Capability {
     switch (actionType) {
       case 'execute_shell':
-        return 'shell';
+        return 'shell.execute';
       case 'read_file':
+        return 'filesystem.read';
       case 'write_file':
-        return 'file_operations';
+        return 'filesystem.write';
+      case 'screenshot':
+        return 'browser.read';
       case 'navigate':
       case 'click':
       case 'type':
       case 'scroll':
       case 'hover':
-      case 'screenshot':
         return 'browser.navigate';
+      // Synthetic keystrokes reach whatever application holds focus, so this
+      // is host control, not a browser action.
       case 'press_key':
-        return 'app_control';
+        return 'computer.control';
       default:
-        return 'system_control';
+        return 'computer.control';
     }
   }
 
@@ -70,7 +79,8 @@ export class ComputerService {
       policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: 'production',
-      context: action.params,
+      // Recorded up-front; ActionLedger.updateResult() fills the real duration.
+      durationMs: 0,
     });
 
     if (policyResult.decision === 'DENY') {
@@ -95,7 +105,7 @@ export class ComputerService {
       if (providerResult.success) {
         ActionLedger.updateResult(
           ledgerEntry.actionId,
-          { result: 'Executed successfully', data: providerResult.data },
+          { result: `Executed successfully: ${JSON.stringify(providerResult.data ?? null)}` },
           duration
         );
       } else {

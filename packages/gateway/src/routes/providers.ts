@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Providers routes
  *
@@ -5,7 +6,6 @@
  * Provider configs are loaded from JSON files in the core package
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import { loadProviderConfig, getAvailableProviders } from '@ownpilot/core/agent';
 import {
@@ -220,7 +220,7 @@ function getProviderIds(): string[] {
  * GET /providers - List all available providers
  */
 app.get('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const providerIds = getProviderIds();
 
   // Get all user overrides at once for efficiency
@@ -374,7 +374,7 @@ app.get('/categories', (c) => {
  */
 app.get('/:id', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   // Check CLI chat providers first (cli-claude, cli-codex, cli-gemini)
   const cliProviders = detectCliChatProviders();
@@ -495,7 +495,7 @@ app.get('/:id/models', (c) => {
  */
 app.get('/:id/config', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   // Handle CLI providers (cli-claude, cli-codex, cli-gemini)
   const cliProviders = detectCliChatProviders();
@@ -572,7 +572,7 @@ app.get('/:id/config', async (c) => {
  */
 app.put('/:id/config', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   // CLI providers and regular providers both support config overrides
   const config = loadProviderConfig(id);
@@ -634,7 +634,7 @@ app.put('/:id/config', async (c) => {
  */
 app.delete('/:id/config', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   const deleted = await modelConfigsRepo.deleteUserProviderConfig(userId, id);
 
@@ -649,7 +649,7 @@ app.delete('/:id/config', async (c) => {
  */
 app.patch('/:id/toggle', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const config = loadProviderConfig(id);
   const isCli = !config && detectCliChatProviders().some((p) => p.id === id);
 
@@ -695,7 +695,7 @@ app.patch('/:id/toggle', async (c) => {
  * GET /providers/overrides - Get all user provider overrides
  */
 app.get('/overrides/all', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const overrides = await modelConfigsRepo.listUserProviderConfigs(userId);
 
   return apiResponse(c, {

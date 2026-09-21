@@ -116,15 +116,35 @@ export class WorkflowApprovalsRepository extends BaseRepository {
     return row ? mapApproval(row) : null;
   }
 
+  /**
+   * Record a decision on a pending approval.
+   *
+   * QA-012: the UPDATE is fenced on `status = 'pending'` and on the approval
+   * still being live. Without the fence, a decision arriving after the
+   * workflow was cancelled (which rejects its approvals) would overwrite that
+   * terminal state and resume an execution the user had already stopped, and
+   * an expired gate could be approved arbitrarily late. A decision that loses
+   * the race changes nothing and `get()` returns the state that won.
+   */
   async decide(id: string, status: 'approved' | 'rejected'): Promise<WorkflowApproval | null> {
     const now = new Date().toISOString();
     await this.execute(
-      `UPDATE workflow_approvals SET status = $1, decided_at = $2 WHERE id = $3 AND user_id = $4`,
+      `UPDATE workflow_approvals SET status = $1, decided_at = $2 WHERE id = $3 AND user_id = $4 AND status = 'pending' AND (expires_at IS NULL OR expires_at > NOW())`,
       [status, now, id, this.userId]
     );
     return this.get(id);
   }
 
+  /**
+   * Reject every still-pending approval for a workflow — used when the
+   * workflow execution is cancelled, so a late approval cannot resume it.
+   *
+   * Scoped by `workflow_id` rather than `user_id` on purpose: `workflows` has
+   * a single `user_id` owner, so a workflow id already identifies one tenant.
+   * That lets the cancellation path (which runs as the system actor and has no
+   * user context) invalidate the owner's approvals without a cross-tenant
+   * write being possible.
+   */
   async rejectByWorkflow(workflowId: string): Promise<void> {
     const now = new Date().toISOString();
     await this.execute(
@@ -134,8 +154,11 @@ export class WorkflowApprovalsRepository extends BaseRepository {
   }
 
   async getPending(limit = 20, offset = 0): Promise<WorkflowApproval[]> {
+    // QA-013: an approval past its expiry is not actionable, so it must not be
+    // offered as pending work.
     const rows = await this.query<ApprovalRow>(
       `SELECT * FROM workflow_approvals WHERE user_id = $1 AND status = 'pending'
+       AND (expires_at IS NULL OR expires_at > NOW())
        ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
       [this.userId, limit, offset]
     );
@@ -144,7 +167,8 @@ export class WorkflowApprovalsRepository extends BaseRepository {
 
   async countPending(): Promise<number> {
     const row = await this.queryOne<{ count: string }>(
-      `SELECT COUNT(*) as count FROM workflow_approvals WHERE user_id = $1 AND status = 'pending'`,
+      `SELECT COUNT(*) as count FROM workflow_approvals WHERE user_id = $1 AND status = 'pending'
+       AND (expires_at IS NULL OR expires_at > NOW())`,
       [this.userId]
     );
     return parseInt(row?.count ?? '0', 10);

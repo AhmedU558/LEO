@@ -29,11 +29,7 @@ export async function executeDynamicTool(
   const pluginId = `dynamic:${tool.name}` as PluginId;
   const toolPermissions = tool.permissions ?? [];
 
-  // Opt-in Worker-isolated path (enforces maxMemory — the vm path below cannot).
-  // Default stays on the vm path so existing behavior is unchanged until custom
-  // tools are validated against the worker; flip OWNPILOT_TOOL_SANDBOX=worker to
-  // enable. Shape parity (utils/crypto/__args__/config/callTool) is covered by
-  // worker-sandbox.integration.test.ts.
+  // Opt-in Worker-isolated path
   if (process.env.OWNPILOT_TOOL_SANDBOX === 'worker') {
     return executeDynamicToolInWorker(
       tool,
@@ -45,6 +41,41 @@ export async function executeDynamicTool(
     );
   }
 
+  // Legacy VM path for tests that explicitly require host APIs (config, callTool)
+  if (process.env.OWNPILOT_TOOL_SANDBOX === 'vm') {
+    return executeDynamicToolInVm(
+      tool,
+      args,
+      context,
+      pluginId,
+      toolPermissions,
+      callableTools
+    );
+  }
+
+  // Default: QA-009 TRUE UNTRUSTED EXECUTION ISOLATION via Docker
+  try {
+    const { executeIsolatedJavaScript } = await import('../../sandbox/docker.js');
+    const globals = { args, context: { toolName: tool.name, callId: context.callId, conversationId: context.conversationId, userId: context.userId } };
+    const result = await executeIsolatedJavaScript(
+      tool.code,
+      globals,
+      { timeout: 30000, memoryMB: 50 }
+    );
+    return { content: result };
+  } catch (error) {
+    return { content: getErrorMessage(error, 'Tool execution failed'), isError: true };
+  }
+}
+
+async function executeDynamicToolInVm(
+  tool: DynamicToolDefinition,
+  args: Record<string, unknown>,
+  context: ToolContext,
+  pluginId: PluginId,
+  toolPermissions: DynamicToolPermission[],
+  callableTools?: Array<{ definition: ToolDefinition; executor: ToolExecutor }>
+): Promise<ToolExecutionResult> {
   // Create sandbox with appropriate permissions
   const sandbox = createSandbox({
     pluginId,

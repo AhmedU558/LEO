@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Mic, MicOff, Settings, Activity, Square, Play } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
-import type { VoiceSession } from '@ownpilot/core/voice';
+import type { VoiceSession } from '../types/leo';
 
 export function VoicePage() {
   const toast = useToast();

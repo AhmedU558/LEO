@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Goals Routes
  *
@@ -9,7 +10,6 @@
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import type { StepStatus, CreateStepInput } from '../db/repositories/goals.js';
 import { GoalServiceError } from '../services/goal-service.js';
@@ -43,7 +43,7 @@ export const goalsRoutes = new Hono();
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.get('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const status = validateQueryEnum(c.req.query('status'), [
     'active',
     'paused',
@@ -73,7 +73,7 @@ goalsRoutes.get('/', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.post('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const rawBody = await parseJsonBody(c);
   const { validateBody, createGoalSchema } = await import('../middleware/validation.js');
   const body = validateBody(createGoalSchema, rawBody);
@@ -113,7 +113,7 @@ goalsRoutes.post('/', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.get('/stats', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const service = getGoalService();
   const stats = await service.getStats(userId);
 
@@ -126,7 +126,7 @@ goalsRoutes.get('/stats', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.get('/next-actions', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const limit = getIntParam(c, 'limit', 5, 1, 20);
 
   const service = getGoalService();
@@ -144,7 +144,7 @@ goalsRoutes.get('/next-actions', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.get('/upcoming', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const days = getIntParam(c, 'days', 7, 1, MAX_DAYS_LOOKBACK);
 
   const service = getGoalService();
@@ -162,7 +162,7 @@ goalsRoutes.get('/upcoming', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.get('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getGoalService();
@@ -181,7 +181,7 @@ goalsRoutes.get('/:id', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.patch('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const rawBody = await parseJsonBody(c);
   const { validateBody, updateGoalSchema } = await import('../middleware/validation.js');
@@ -217,7 +217,7 @@ goalsRoutes.route('/', goalCrudRoutes);
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.post('/:id/steps', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const goalId = c.req.param('id');
   const rawBody = await parseJsonBody(c);
   const { validateBody, createGoalStepsSchema } = await import('../middleware/validation.js');
@@ -259,7 +259,7 @@ goalsRoutes.post('/:id/steps', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.get('/:id/steps', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const goalId = c.req.param('id');
 
   const service = getGoalService();
@@ -278,7 +278,7 @@ goalsRoutes.get('/:id/steps', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.patch('/:goalId/steps/:stepId', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const stepId = c.req.param('stepId');
   const rawBody = await parseJsonBody(c);
   const { validateBody, updateGoalStepSchema } = await import('../middleware/validation.js');
@@ -311,7 +311,7 @@ goalsRoutes.patch('/:goalId/steps/:stepId', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.post('/:goalId/steps/:stepId/complete', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const stepId = c.req.param('stepId');
   const rawBody = (await parseJsonBody(c)) ?? {};
   const { validateBody, completeGoalStepSchema } = await import('../middleware/validation.js');
@@ -342,7 +342,7 @@ goalsRoutes.post('/:goalId/steps/:stepId/complete', async (c) => {
  * Trust boundary: Goal step payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the goal-execution input. The Zod schema is the trust boundary.
  */
 goalsRoutes.delete('/:goalId/steps/:stepId', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const stepId = c.req.param('stepId');
 
   const service = getGoalService();

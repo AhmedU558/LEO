@@ -21,11 +21,11 @@ import { log, safeVmEval } from './utils.js';
 /**
  * Execute a condition node: evaluate a JS expression, return which branch to take.
  */
-export function executeConditionNode(
+export async function executeConditionNode(
   node: WorkflowNode,
   nodeOutputs: Record<string, NodeResult>,
   variables: Record<string, unknown>
-): NodeResult {
+): Promise<NodeResult> {
   const startTime = Date.now();
   try {
     const data = node.data as ConditionNodeData;
@@ -42,7 +42,7 @@ export function executeConditionNode(
     evalContext.data = lastOutput;
 
     const vmTimeout = (node.data as ConditionNodeData).timeoutMs ?? 5000;
-    const result = safeVmEval(resolvedExpr, evalContext, vmTimeout);
+    const result = await safeVmEval(resolvedExpr, evalContext, vmTimeout);
     const branch = Boolean(result);
     const durationMs = Date.now() - startTime;
 
@@ -76,11 +76,11 @@ export function executeConditionNode(
 /**
  * Execute a Switch node: evaluate expression, match against cases.
  */
-export function executeSwitchNode(
+export async function executeSwitchNode(
   node: WorkflowNode,
   nodeOutputs: Record<string, NodeResult>,
   variables: Record<string, unknown>
-): NodeResult {
+): Promise<NodeResult> {
   const startTime = Date.now();
   try {
     const data = node.data as SwitchNodeData;
@@ -97,7 +97,7 @@ export function executeSwitchNode(
     evalContext.data = lastOutput;
 
     const vmTimeout = data.timeoutMs ?? 5000;
-    const result = safeVmEval(resolvedExpr, evalContext, vmTimeout);
+    const result = await safeVmEval(resolvedExpr, evalContext, vmTimeout);
     const resultStr = String(result);
 
     const matchedCase = data.cases.find((c) => c.value === resultStr);

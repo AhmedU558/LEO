@@ -1,8 +1,8 @@
+import { getUserId, getWorkspaceId } from './helpers.js';
 import { Hono } from 'hono';
 import { apiResponse, apiError, ERROR_CODES, parseJsonBody } from './helpers.js';
 import { SocialService } from '../services/social/service.js';
 import type { SocialContent, SocialAccount } from '@ownpilot/core/social';
-import { LOCAL_OWNER_ID, LOCAL_WORKSPACE_ID } from '../config/defaults.js';
 
 export const socialRoutes = new Hono();
 const socialService = new SocialService();
@@ -26,8 +26,7 @@ socialRoutes.post('/accounts', async (c) => {
   }
 
   const newAccount: SocialAccount = {
-    id: 'acc_' + Date.now(),
-    userId: LOCAL_OWNER_ID,
+    id: 'acc_' + Date.now(), userId: getUserId(c),
     platform: body.platform as import('@ownpilot/core/social').SocialPlatform,
     accountId: 'provider_' + Date.now(),
     accountName: body.accountName,
@@ -51,8 +50,7 @@ socialRoutes.post('/content', async (c) => {
 
   const newContent: SocialContent = {
     id: 'cnt_' + Date.now(),
-    userId: LOCAL_OWNER_ID,
-    accountId: body.accountId,
+    userId: getUserId(c), accountId: body.accountId,
     platform: body.platform as import('@ownpilot/core/social').SocialPlatform,
     status: 'draft',
     text: body.text,
@@ -77,12 +75,7 @@ socialRoutes.post('/content/:id/publish', async (c) => {
 
   content.status = 'publishing';
 
-  const result = await socialService.publishWithPolicy(
-    LOCAL_OWNER_ID,
-    LOCAL_WORKSPACE_ID,
-    content,
-    account
-  );
+  const result = await socialService.publishWithPolicy(getUserId(c), getWorkspaceId(c), content, account);
 
   if (result.success) {
     content.status = 'published';

@@ -1,10 +1,10 @@
+import { getUserId } from './helpers.js';
 /**
  * Edge Routes
  *
  * REST API for managing IoT/edge devices, commands, and telemetry.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import type { EdgeDeviceType, EdgeDeviceStatus, UpdateDeviceInput } from '@ownpilot/core/edge';
 import { getEdgeService } from '../services/edge/service.js';
@@ -63,7 +63,7 @@ edgeRoutes.get('/mqtt/status', (c) => {
 
 edgeRoutes.get('/', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const { limit, offset } = getPaginationParams(c);
     const type = validateQueryEnum(c.req.query('type'), VALID_TYPES) as EdgeDeviceType | undefined;
     const status = validateQueryEnum(c.req.query('status'), VALID_STATUSES) as
@@ -91,7 +91,7 @@ edgeRoutes.get('/', async (c) => {
 
 edgeRoutes.post('/', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const body = validateBody(createEdgeDeviceSchema, await c.req.json());
 
     const service = getEdgeService();
@@ -115,7 +115,7 @@ edgeRoutes.post('/', async (c) => {
 
 edgeRoutes.get('/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = sanitizeId(c.req.param('id'));
 
     const service = getEdgeService();
@@ -134,7 +134,7 @@ edgeRoutes.get('/:id', async (c) => {
 
 edgeRoutes.patch('/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = sanitizeId(c.req.param('id'));
     const body = validateBody(updateEdgeDeviceSchema, await c.req.json());
 
@@ -164,7 +164,7 @@ edgeRoutes.patch('/:id', async (c) => {
 
 edgeRoutes.delete('/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = sanitizeId(c.req.param('id'));
 
     const service = getEdgeService();
@@ -184,7 +184,7 @@ edgeRoutes.delete('/:id', async (c) => {
 edgeRoutes.post('/:id/command', async (c) => {
   const id = sanitizeId(c.req.param('id'));
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const body = validateBody(edgeDeviceCommandSchema, await c.req.json());
     const commandType = body.commandType;
 
@@ -211,7 +211,7 @@ edgeRoutes.post('/:id/command', async (c) => {
 
 edgeRoutes.get('/:id/commands', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = sanitizeId(c.req.param('id'));
     const limit = getIntParam(c, 'limit', 50, 1, 200);
 
@@ -230,7 +230,7 @@ edgeRoutes.get('/:id/commands', async (c) => {
 
 edgeRoutes.get('/:id/telemetry', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = sanitizeId(c.req.param('id'));
 
     const service = getEdgeService();
@@ -248,7 +248,7 @@ edgeRoutes.get('/:id/telemetry', async (c) => {
 
 edgeRoutes.get('/:id/telemetry/:sensorId', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = sanitizeId(c.req.param('id'));
     const sensorId = sanitizeId(c.req.param('sensorId'));
     const limit = getIntParam(c, 'limit', 100, 1, 500);

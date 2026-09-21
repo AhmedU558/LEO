@@ -105,13 +105,38 @@ export async function executeUseTool(
 
     // Apply max limits for list-returning tools (e.g. cap list_emails limit to 50)
     const cappedArgs = applyToolLimits(tool_name, toolArgs);
-    // Forward the parent context so inner tools inherit executionPermissions, requestApproval, etc.
-    const result = await tools.execute(tool_name, cappedArgs, context);
-    if (result.ok) {
-      return result.value;
+
+    // QA-016: use_tool is how the model invokes any tool by name, so it is an
+    // effect boundary. It used to call the registry directly — which forwarded
+    // the parent context but skipped the atomic idempotency claim and the audit
+    // record entirely. Going through executeTool() restores both; parentContext
+    // carries executionPermissions / requestApproval / workspace root through,
+    // which is why calling the registry direct was tempting in the first place.
+    // Dynamic import: this module is loaded while the shared registry is being
+    // built, and a static import would close that cycle.
+    const { executeTool } = await import('../../services/tool/executor.js');
+    const result = await executeTool(
+      tool_name,
+      cappedArgs,
+      context.userId ?? 'default',
+      context.executionPermissions,
+      {
+        source: execSource,
+        parentContext: context as unknown as Record<string, unknown>,
+        registry: tools,
+      }
+    );
+    if (result.success) {
+      // Preserve the tool's own metadata (custom tools attach diagnostics).
+      return result.metadata
+        ? { content: result.result, metadata: result.metadata }
+        : { content: result.result };
     }
     // Include parameter help on execution error so LLM can retry correctly
-    return { content: result.error.message + buildToolHelpText(tools, tool_name), isError: true };
+    return {
+      content: (result.error ?? 'Tool execution failed') + buildToolHelpText(tools, tool_name),
+      isError: true,
+    };
   } catch (error) {
     const msg = getErrorMessage(error, 'Tool execution failed');
     return { content: msg + buildToolHelpText(tools, tool_name), isError: true };
@@ -203,20 +228,34 @@ export async function executeBatchUseTool(
         }
 
         const cappedArgs = applyToolLimits(tool_name, toolArgs);
-        // Forward the parent context so inner tools inherit executionPermissions, etc.
-        const result = await tools.execute(tool_name, cappedArgs, context);
-        if (result.ok) {
+        // QA-016: same effect boundary as single use_tool above — each call in
+        // the batch is separately admitted. Distinct entries get distinct
+        // operation identities, so a batch that legitimately repeats the same
+        // call twice still performs both effects.
+        const { executeTool } = await import('../../services/tool/executor.js');
+        const result = await executeTool(
+          tool_name,
+          cappedArgs,
+          context.userId ?? 'default',
+          context.executionPermissions,
+          {
+            source: execSource,
+            parentContext: context as unknown as Record<string, unknown>,
+            registry: tools,
+          }
+        );
+        if (result.success) {
           return {
             idx,
             tool_name,
             ok: true,
             content:
-              typeof result.value.content === 'string'
-                ? result.value.content
-                : JSON.stringify(result.value.content, null, 2),
+              typeof result.result === 'string'
+                ? result.result
+                : JSON.stringify(result.result, null, 2),
           };
         }
-        return { idx, tool_name, ok: false, content: result.error.message };
+        return { idx, tool_name, ok: false, content: result.error ?? 'Tool execution failed' };
       } catch (error) {
         const msg = getErrorMessage(error, 'Execution failed');
         return { idx, tool_name, ok: false, content: msg };

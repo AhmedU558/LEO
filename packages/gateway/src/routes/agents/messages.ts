@@ -1,8 +1,8 @@
+import { getUserId } from '../helpers.js';
 /**
  * Agent Messages Routes — inter-agent communication API
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import type { AgentMessageType } from '@ownpilot/core/agent';
 import { getAgentMessagesRepository } from '../../db/repositories/agents/messages.js';
@@ -73,7 +73,7 @@ agentMessageRoutes.get('/crew/:id', async (c) => {
 agentMessageRoutes.post('/', async (c) => {
   try {
     const body = validateBody(sendAgentMessageSchema, await c.req.json());
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
 
     const message = {
       id: crypto.randomUUID(),

@@ -1,12 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { Context } from 'hono';
+
 const ENV_KEYS = ['TRUSTED_PROXY', 'TRUSTED_PROXY_IPS'] as const;
 
-function request(url: string, headers: Record<string, string> = {}) {
+function request(url: string, headers: Record<string, string> = {}, remoteAddress: string = '127.0.0.1'): Context {
   return {
-    url,
-    header: (name: string) => headers[name.toLowerCase()],
-  };
+    req: {
+      url,
+      header: (name: string) => headers[name.toLowerCase()],
+    },
+    env: {
+      incoming: {
+        socket: {
+          remoteAddress,
+        }
+      }
+    }
+  } as unknown as Context;
 }
 
 async function loadIsSecureRequest() {

@@ -9,9 +9,8 @@
  * Also exports the constants shared between filter/map/aggregate/etc.
  */
 
-import vm from 'node:vm';
+import { validateToolCode, executeIsolatedJavaScript } from '@ownpilot/core/sandbox';
 import type { IToolService, ToolServiceResult } from '@ownpilot/core/services';
-import { validateToolCode } from '@ownpilot/core/sandbox';
 import { getLog } from '../../log.js';
 import type { ToolExecutionResult } from '../types.js';
 
@@ -24,23 +23,13 @@ export const MAX_ARRAY_EVAL_SIZE = 10_000;
 const MAX_EXPRESSION_LENGTH = 10_000;
 
 /**
- * Safe VM expression evaluator — hardens against prototype-chain sandbox escapes.
- *
- * Defenses:
- * - `codeGeneration.strings: false` blocks dynamic-code constructors inside the sandbox
- * - SECURITY (RCE-001/RCE-003): context values are serialized to JSON and
- *   re-parsed INSIDE the vm, so every binding the expression can reach is a
- *   *context-realm* object whose `.constructor` is the context Function (blocked
- *   by the codegen flag). The previous implementation injected `structuredClone`
- *   results, which are HOST-realm objects — `data['con'+'structor']['con'+'structor']('return process')()`
- *   walked their constructor chain to the host Function and escaped the sandbox.
- * - Timeout prevents infinite loops.
+ * Safe VM expression evaluator — isolated via Docker to satisfy QA-009 requirements.
  */
-export function safeVmEval(
+export async function safeVmEval(
   expression: string,
   context: Record<string, unknown>,
   timeoutMs: number
-): unknown {
+): Promise<unknown> {
   if (expression.length > MAX_EXPRESSION_LENGTH) {
     throw new Error(`Expression exceeds maximum length of ${MAX_EXPRESSION_LENGTH} characters`);
   }
@@ -50,32 +39,16 @@ export function safeVmEval(
     throw new Error(`Expression blocked: ${validation.errors.join('; ')}`);
   }
 
-  // Serialize the whole context to JSON. Functions/Symbols are dropped and
-  // circular structures throw — both surfaced as the JSON-serializable error,
-  // matching the documented contract.
-  let ctxJson: string | undefined;
+  // Ensure JSON-serializable context
   try {
-    ctxJson = JSON.stringify(context ?? {});
+    JSON.stringify(context ?? {});
   } catch {
     throw new Error(
       'Transformer input must be JSON-serializable. Functions, Symbols, and circular values are not supported.'
     );
   }
-  if (ctxJson === undefined) ctxJson = '{}';
 
-  const vmContext = vm.createContext(
-    { __ctxJson: ctxJson },
-    { codeGeneration: { strings: false, wasm: false } }
-  );
-
-  // Bootstrap: re-parse the context inside the vm (values become context-realm),
-  // bind each key as a global, then sever the raw JSON payload.
-  vm.runInContext(
-    `(() => { const c = JSON.parse(__ctxJson); for (const k of Object.keys(c)) globalThis[k] = c[k]; delete globalThis.__ctxJson; })();`,
-    vmContext
-  );
-
-  return vm.runInContext(expression, vmContext, { timeout: timeoutMs });
+  return await executeIsolatedJavaScript(`return (${expression});`, context, { timeout: timeoutMs });
 }
 
 /** Convert ToolServiceResult to ToolExecutionResult. */

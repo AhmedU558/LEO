@@ -5,7 +5,7 @@
  *         success/failure result handling, globals injection, callTool, listTools, config bridge
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mock variables
@@ -117,8 +117,11 @@ function makeContext(overrides: Partial<ToolContext> = {}): ToolContext {
 // ---------------------------------------------------------------------------
 
 describe('executeDynamicTool', () => {
+  const OLD_ENV = process.env.OWNPILOT_TOOL_SANDBOX;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.OWNPILOT_TOOL_SANDBOX = 'vm';
     mockMapPermissions.mockReturnValue({
       network: false,
       fsRead: false,
@@ -127,6 +130,10 @@ describe('executeDynamicTool', () => {
       env: false,
     });
     mockIsToolCallAllowed.mockReturnValue({ allowed: true });
+  });
+
+  afterEach(() => {
+    process.env.OWNPILOT_TOOL_SANDBOX = OLD_ENV;
   });
 
   // --- Success path ---

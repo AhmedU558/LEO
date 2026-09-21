@@ -23,7 +23,7 @@ function isSecureCookie(c: Context): boolean {
   // cookie without Secure, allowing capture on the plain-HTTP leg (CWE-614).
   if (process.env.HTTPS_ONLY === 'true') return true;
   // H-S8: X-Forwarded-Proto trusted only behind TRUSTED_PROXY config.
-  return isSecureRequest(c.req);
+  return isSecureRequest(c);
 }
 
 export function getUiSessionToken(c: Context, options?: UiSessionAuthOptions): string | undefined {

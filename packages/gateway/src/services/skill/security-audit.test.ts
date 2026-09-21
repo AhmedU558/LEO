@@ -274,6 +274,7 @@ describe('skill-security-audit', () => {
             description: 'Does something',
             parameters: { type: 'object', properties: {} },
             code: 'return "hello";',
+            permissions: ['network'],
             requires_approval: true,
           },
         ],

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Monitor, Play, Square, Globe, Keyboard, MousePointer2 } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
-import type { ComputerTask, ComputerAction } from '@ownpilot/core/computer';
+import type { ComputerTask, ComputerAction, ComputerActionType } from '../types/leo';
 
 export function ComputerControlPage() {
   const toast = useToast();
@@ -50,7 +50,7 @@ export function ComputerControlPage() {
     params: Record<string, unknown> = {}
   ) => {
     const action: ComputerAction = {
-      type: actionType as import('@ownpilot/core/computer').ComputerActionType,
+      type: actionType as ComputerActionType,
       params,
     };
     try {

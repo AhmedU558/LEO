@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Execution Permissions Routes
  *
@@ -5,7 +6,6 @@
  * Also handles resolving real-time approval requests.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import { executionPermissionsRepo } from '../db/repositories/execution-permissions.js';
 import { resolveApproval } from '../services/permission/execution-approval.js';
@@ -28,7 +28,7 @@ const app = new Hono();
  * GET / — Get current execution permissions
  */
 app.get('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const permissions = await executionPermissionsRepo.get(userId);
   return apiResponse(c, permissions);
 });
@@ -37,7 +37,7 @@ app.get('/', async (c) => {
  * PUT / — Update execution permissions (partial merge)
  */
 app.put('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await c.req.json<Record<string, unknown>>();
 
   // Validate: accept enabled (boolean), mode (string), and category permissions
@@ -73,7 +73,7 @@ app.put('/', async (c) => {
  * POST /reset — Reset permissions to all-blocked defaults
  */
 app.post('/reset', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   await executionPermissionsRepo.reset(userId);
   return apiResponse(c, { reset: true });
 });
@@ -84,7 +84,7 @@ app.post('/reset', async (c) => {
 app.post('/approvals/:id/resolve', async (c) => {
   const approvalId = c.req.param('id');
   const body = await c.req.json<{ approved: boolean }>();
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   if (typeof body.approved !== 'boolean') {
     return apiError(
@@ -125,7 +125,7 @@ app.post('/approvals/:id/resolve', async (c) => {
  * Returns what would happen for each category without actually executing any code.
  */
 app.get('/test', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const permissions = await executionPermissionsRepo.get(userId);
 
   const categories = [

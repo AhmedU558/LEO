@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bot, Play, Pause, Square, Activity, AlertCircle } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
-import type { AutonomousTask } from '@ownpilot/core/autonomy';
+import type { AutonomousTask } from '../types/leo';
 
 export function AutonomyPage() {
   const toast = useToast();

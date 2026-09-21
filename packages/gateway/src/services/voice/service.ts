@@ -43,6 +43,8 @@ export class VoiceService {
       policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: 'production',
+      // Recorded up-front; ActionLedger.updateResult() fills the real duration.
+      durationMs: 0,
     });
 
     if (policyResult.decision === 'DENY') {
@@ -62,7 +64,11 @@ export class VoiceService {
     try {
       const mockResult = { status: 'success', data: `Executed ${toolName}` };
       const duration = Date.now() - startTime;
-      ActionLedger.updateResult(ledgerEntry.actionId, { result: mockResult }, duration);
+      ActionLedger.updateResult(
+        ledgerEntry.actionId,
+        { result: JSON.stringify(mockResult) },
+        duration
+      );
       return { allowed: true, result: mockResult };
     } catch (err: unknown) {
       const duration = Date.now() - startTime;

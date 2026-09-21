@@ -269,6 +269,7 @@ describe('scanCustomTools', () => {
           name: 'my_tool',
           code: 'return 1;',
           status: 'active',
+          permissions: ['network'],
         },
       ]),
     });

@@ -77,6 +77,19 @@ const DEFAULT_CONFIG: Required<SandboxConfig> = {
 
 let dockerAvailable: boolean | null = null;
 let dockerCheckPromise: Promise<boolean> | null = null;
+/**
+ * When the last negative `docker info` probe was recorded.
+ *
+ * An unavailable answer must not be cached for the life of the process. The
+ * probe has a 5s timeout and `docker info` is slow under load, so one busy
+ * moment — several sandbox containers starting at once — used to latch
+ * `dockerAvailable = false` permanently, and every later isolated execution
+ * failed closed with "Docker is not available" until the process restarted.
+ * Availability is fail-closed but recoverable: a positive result is cached
+ * indefinitely, a negative one only until this window expires.
+ */
+let dockerUnavailableSince = 0;
+const DOCKER_UNAVAILABLE_RETRY_MS = 10_000;
 let securityFlagsSupported: boolean | null = null;
 let lastHealthCheck: SandboxHealthStatus | null = null;
 
@@ -97,8 +110,14 @@ export interface SandboxHealthStatus {
  * Check if Docker is available and running
  */
 export async function isDockerAvailable(): Promise<boolean> {
-  if (dockerAvailable !== null) {
-    return dockerAvailable;
+  if (dockerAvailable === true) return true;
+  // A negative answer expires, so a transient probe failure does not disable
+  // isolated execution for the rest of the process's life.
+  if (
+    dockerAvailable === false &&
+    Date.now() - dockerUnavailableSince < DOCKER_UNAVAILABLE_RETRY_MS
+  ) {
+    return false;
   }
 
   // Deduplicate concurrent checks — only one Docker probe runs at a time
@@ -113,6 +132,7 @@ export async function isDockerAvailable(): Promise<boolean> {
       return true;
     } catch {
       dockerAvailable = false;
+      dockerUnavailableSince = Date.now();
       return false;
     } finally {
       dockerCheckPromise = null;
@@ -240,6 +260,7 @@ export async function getSandboxStatus(forceRefresh = false): Promise<SandboxHea
  */
 export function resetSandboxCache(): void {
   dockerAvailable = null;
+  dockerUnavailableSince = 0;
   securityFlagsSupported = null;
   lastHealthCheck = null;
 }
@@ -449,13 +470,27 @@ function runDockerContainer(
     let timedOut = false;
 
     const name = `leo-sandbox-${randomUUID()}`;
-    const removeContainer = async () => {
-      try {
-        await execFileAsync('docker', ['rm', '--force', name], { timeout: 5000 });
-      } catch (error) {
-        // --rm normally removes an exited container before this final cleanup.
-        if (!getErrorMessage(error).includes('No such container')) throw error;
-      }
+
+    // Single-flight teardown. Cancellation and process close both want the
+    // container gone, and both used to run their own `docker rm --force`. The
+    // second one races the first, the daemon answers "removal ... is already in
+    // progress", that is not the tolerated "No such container", so it threw —
+    // the close handler reported a cleanup failure and resolved while the
+    // container was still being removed, leaving a live container behind after
+    // an aborted run. Sharing one promise means abort() starts teardown
+    // immediately, close() awaits that same teardown, and the container is gone
+    // before the result is returned.
+    let removal: Promise<void> | undefined;
+    const removeContainer = (): Promise<void> => {
+      removal ??= (async () => {
+        try {
+          await execFileAsync('docker', ['rm', '--force', name], { timeout: 5000 });
+        } catch (error) {
+          // --rm normally removes an exited container before this final cleanup.
+          if (!getErrorMessage(error).includes('No such container')) throw error;
+        }
+      })();
+      return removal;
     };
     const child = spawn('docker', [args[0]!, '--name', name, ...args.slice(1)], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -531,6 +566,14 @@ function runDockerContainer(
     child.on('error', (error: Error) => {
       clearTimeout(timeoutId);
       signal?.removeEventListener('abort', abort);
+      // `close` may never fire on a spawn failure, so this is the only chance
+      // to reap a container the daemon might already have created.
+      void removeContainer().catch((cleanupError: unknown) => {
+        log.error('Failed to remove sandbox container after spawn error', {
+          name,
+          error: getErrorMessage(cleanupError),
+        });
+      });
       resolve({
         success: false,
         stdout: '',

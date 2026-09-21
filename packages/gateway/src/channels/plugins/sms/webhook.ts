@@ -96,7 +96,7 @@ export function createSmsWebhookRoute(): Hono {
       // (TRUSTED_PROXY=true + TRUSTED_PROXY_IPS). When the gateway is directly
       // exposed, these headers are attacker-controllable and we use the
       // request's actual origin instead.
-      const webhookUrl = getRequestUrl(c.req, c.req.path);
+      const webhookUrl = getRequestUrl(c, c.req.path);
 
       if (!validateTwilioSignature(authToken, twilioSignature, webhookUrl, params)) {
         log.warn('Invalid Twilio signature', { url: webhookUrl });

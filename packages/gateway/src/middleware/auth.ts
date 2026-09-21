@@ -80,8 +80,8 @@ export function createAuthMiddleware(config: AuthConfig) {
         return apiError(c, { code: ERROR_CODES.ACCESS_DENIED, message: 'Invalid API key' }, 403);
       }
 
-      // Gateway operates in single-tenant mode, map valid keys to the default owner
-      c.set('userId', 'default');
+      // Could extract user info from API key mapping
+      c.set('userId', `apikey:${apiKey.slice(0, 8)}...`);
     } else if (config.type === 'jwt') {
       // JWT authentication
       if (!config.jwtSecret) {
@@ -103,16 +103,6 @@ export function createAuthMiddleware(config: AuthConfig) {
 
       try {
         const payload = await validateJWT(token, config.jwtSecret);
-        if (payload.sub !== 'default') {
-          return apiError(
-            c,
-            {
-              code: ERROR_CODES.ACCESS_DENIED,
-              message: 'Invalid identity for single-tenant gateway',
-            },
-            403
-          );
-        }
         c.set('userId', payload.sub);
         c.set('jwtPayload', payload);
       } catch (error) {
@@ -176,15 +166,13 @@ export function createOptionalAuthMiddleware(config: AuthConfig) {
         : c.req.header('X-API-Key');
 
       if (apiKey && config.apiKeys?.length && apiKeyMatches(apiKey, config.apiKeys)) {
-        c.set('userId', 'default');
+        c.set('userId', `apikey:${apiKey.slice(0, 8)}...`);
       }
     } else if (config.type === 'jwt' && config.jwtSecret && authHeader?.startsWith('Bearer ')) {
       try {
         const payload = await validateJWT(authHeader.slice(7), config.jwtSecret);
-        if (payload.sub === 'default') {
-          c.set('userId', payload.sub);
-          c.set('jwtPayload', payload);
-        }
+        c.set('userId', payload.sub);
+        c.set('jwtPayload', payload);
       } catch {
         // Ignore invalid tokens in optional auth
       }

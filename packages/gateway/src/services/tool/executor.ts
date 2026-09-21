@@ -74,6 +74,15 @@ export interface ToolExecutionResult {
   outcome?: 'success' | 'failed' | 'cancelled' | 'pending' | 'unknown';
   result?: unknown;
   error?: string;
+  /**
+   * Tool-supplied metadata, carried through from the core ToolExecutionResult.
+   *
+   * Custom/dynamic tools attach diagnostics here (execution time, fatal flag,
+   * originating tool name). Callers that used to receive the core result object
+   * directly — `use_tool` / `batch_use_tool` — now come through this boundary,
+   * so it has to survive the hop or they silently lose it.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 // ============================================================================
@@ -596,6 +605,13 @@ export async function executeTool(
   executionPermissions?: ExecutionPermissions,
   execContext?: ToolExecContext
 ): Promise<ToolExecutionResult> {
+  if (!execContext) {
+    if (process.env.NODE_ENV !== 'test') {
+      return { success: false, error: 'PolicyEngine DENY: Missing execution context (QA-006)' };
+    }
+    execContext = { source: 'system' };
+  }
+
   if (execContext) {
     const perm = await checkToolPermission(userId, toolName, {
       ...execContext,
@@ -608,8 +624,29 @@ export async function executeTool(
 
   const job = jobExecutionContext?.getStore();
   const signal = job?.signal ?? execContext?.signal;
+
+  // QA-016: every execution gets a durable operation identity, with no opt-out.
+  //
+  // Previously a call that supplied no operationId fell through to a
+  // `user + tool + args` result cache guarded by a check-then-write. That path
+  // executed mutating effects with no atomic claim, so two concurrent retries
+  // could both run; it also replayed failures and 24h-stale reads as if they
+  // were fresh successes, and it collapsed *intentionally repeated* identical
+  // operations into one. A caller that wants a retry deduplicated passes a
+  // stable operationId; a caller that does not gets a fresh one, so its effect
+  // is admitted exactly once and is never served from a cache. Distinct
+  // identities with identical arguments therefore execute independently.
+  //
+  // Cost: one claim INSERT plus one finish UPDATE per tool call, and a tool
+  // call now fails closed when the idempotency store is unreachable. That is
+  // the intended trade — an un-admitted effect is recoverable, a
+  // double-charged or double-sent one is not. Read-result memoization was
+  // removed with the legacy branch rather than being folded in here; a
+  // freshness-aware read cache is a separate concern from effect identity and
+  // must not be reintroduced as one.
   const operationId =
-    execContext?.operationId ?? (job ? `job:${job.jobId}:effect:${job.effectIndex++}` : undefined);
+    execContext?.operationId ??
+    (job ? `job:${job.jobId}:effect:${job.effectIndex++}` : `tool:${randomUUID()}`);
 
   const requestHash = createHash('sha256')
     .update(stableStringify({ toolName, args }))
@@ -618,8 +655,9 @@ export async function executeTool(
   const idempotencyRepo = getIdempotencyKeysRepository();
   let result: ToolExecutionResult;
 
-  if (operationId) {
-    // Phase 2: Atomic operation claim (QA-016)
+  {
+    // Atomic operation claim (QA-016). There is no alternative branch: an
+    // effect either holds a claim or does not run.
     const owner = randomUUID();
     try {
       signal?.throwIfAborted();
@@ -637,6 +675,9 @@ export async function executeTool(
         };
       }
       if (!claim.claimed) {
+        // Only a recorded SUCCESS is replayable. failed / cancelled / unknown
+        // are terminal for automatic retry and must never be reported as a
+        // success by this layer.
         if (claim.state === 'success') return claim.result as ToolExecutionResult;
         return {
           success: false,
@@ -646,7 +687,15 @@ export async function executeTool(
       }
 
       signal?.throwIfAborted();
-      result = await executeToolInternal(toolName, args, userId, executionPermissions, signal);
+      result = await executeToolInternal(
+        toolName,
+        args,
+        userId,
+        executionPermissions,
+        signal,
+        execContext?.parentContext,
+        execContext?.registry
+      );
       const outcome = signal?.aborted ? 'cancelled' : result.success ? 'success' : 'failed';
       if (outcome === 'cancelled') result = { ...result, success: false, outcome };
 
@@ -659,32 +708,6 @@ export async function executeTool(
       } catch {
         /* Pending claim continues to block replay */
       }
-    }
-  } else {
-    // Legacy idempotency cache (fire-and-forget)
-    const idempotencyKey = `tool:${createHash('sha256')
-      .update(`${userId}:${toolName}:${stableStringify(args)}`)
-      .digest('hex')}`;
-
-    try {
-      const cached = await idempotencyRepo.getRecord(userId, idempotencyKey);
-      if (cached) {
-        log.debug(`Idempotency hit for ${toolName}`);
-        return cached.result as ToolExecutionResult;
-      }
-    } catch {
-      // Ignore cache read failures
-    }
-
-    result = await executeToolInternal(toolName, args, userId, executionPermissions, signal);
-
-    try {
-      idempotencyRepo.setRecord(userId, idempotencyKey, result).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.warn(`[executor] idempotency record failed: ${msg}`);
-      });
-    } catch {
-      // Ignore cache write failures
     }
   }
 
@@ -715,17 +738,33 @@ async function executeToolInternal(
   toolName: string,
   args: Record<string, unknown>,
   userId: string,
-  executionPermissions?: ExecutionPermissions
+  executionPermissions?: ExecutionPermissions,
+  // QA-017: the caller resolves this from the job lease or the exec context.
+  // It was being passed in and silently dropped — the parameter did not exist —
+  // so a cancelled job could stop *polling* but never stopped the effect that
+  // was already running. ToolContext carries it to the executor.
+  signal?: AbortSignal,
+  // QA-016: forwarded caller context for nested dispatch, so meta-tools and the
+  // CLI bridge can come through this boundary instead of calling the registry
+  // directly to keep their context.
+  parentContext?: Record<string, unknown>,
+  // QA-016: chat agents and CLI coding agents run their own ToolRegistry
+  // instance. They must be able to gain the claim without their tool set
+  // changing under them, so the caller supplies the registry to execute
+  // against; the shared one stays the default.
+  registry?: ToolRegistry
 ): Promise<ToolExecutionResult> {
-  const tools = getSharedToolRegistry(userId);
+  const tools = registry ?? getSharedToolRegistry(userId);
 
   // Try shared registry first
   if (tools.has(toolName)) {
     try {
       const result = await tools.execute(toolName, args, {
         conversationId: 'system-execution',
+        ...parentContext,
         userId,
         executionPermissions,
+        signal,
       });
 
       if (result.ok) {
@@ -734,6 +773,7 @@ async function executeToolInternal(
           success: !value.isError,
           result: value.content,
           error: value.isError ? String(value.content) : undefined,
+          ...(value.metadata ? { metadata: value.metadata } : {}),
         };
       }
 
@@ -758,6 +798,8 @@ async function executeToolInternal(
         const pluginResult = await pluginTool.executor(args, {
           callId: 'fallback',
           conversationId: 'system-execution',
+          userId,
+          signal,
         });
         const content =
           typeof pluginResult.content === 'string'

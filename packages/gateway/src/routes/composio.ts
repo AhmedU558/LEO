@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Composio API Routes
  *
@@ -6,7 +7,6 @@
  * and handling OAuth callbacks.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import { composioService } from '../services/composio-service.js';
 import { getLog } from '../services/log.js';
@@ -75,7 +75,7 @@ composioRoutes.get('/apps', async (c) => {
 
 composioRoutes.get('/connections', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const connections = await composioService.getConnections(userId);
     return apiResponse(c, { connections, count: connections.length });
   } catch (err) {
@@ -108,7 +108,7 @@ composioRoutes.post('/connections', async (c) => {
       );
     }
 
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const result = await composioService.initiateConnection(userId, appName, redirectUrl);
 
     return apiResponse(c, {

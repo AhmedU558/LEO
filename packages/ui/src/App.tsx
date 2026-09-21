@@ -29,6 +29,18 @@ const DashboardPage = lazy(() =>
 const AnalyticsPage = lazy(() =>
   import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage }))
 );
+// nav-items.ts links /autonomy. The duplicate-declaration fix that unblocked
+// the app boot removed both copies of this lazy import along with its route,
+// which left that nav entry pointing at nothing.
+const AutonomyPage = lazy(() =>
+  import('./pages/AutonomyPage').then((m) => ({ default: m.AutonomyPage }))
+);
+// The LEO usage/learning-recommendation view. It shipped by overwriting the
+// cost/token analytics dashboard at /analytics; it is a different feature, so
+// it gets its own route instead of displacing that one.
+const LearningPage = lazy(() =>
+  import('./pages/LearningPage').then((m) => ({ default: m.LearningPage }))
+);
 const TasksPage = lazy(() => import('./pages/TasksPage').then((m) => ({ default: m.TasksPage })));
 const NotesPage = lazy(() => import('./pages/NotesPage').then((m) => ({ default: m.NotesPage })));
 const CalendarPage = lazy(() =>
@@ -244,6 +256,8 @@ export function App() {
         <Route index element={page(<ChatPage />)} />
         <Route path="dashboard" element={page(<DashboardPage />)} />
         <Route path="analytics" element={page(<AnalyticsPage />)} />
+        <Route path="autonomy" element={page(<AutonomyPage />)} />
+        <Route path="learning" element={page(<LearningPage />)} />
         <Route path="wizards" element={page(<WizardsPage />)} />
         <Route path="wizards/:wizardId" element={page(<WizardRouter />)} />
         <Route path="memories" element={page(<MemoriesPage />)} />

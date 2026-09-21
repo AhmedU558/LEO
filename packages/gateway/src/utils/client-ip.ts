@@ -63,29 +63,37 @@ import { getConnInfo } from '@hono/node-server/conninfo';
  *
  * Returns:
  *   - Last entry of `X-Forwarded-For` (or `X-Real-IP`) when proxy trust is
- *     correctly configured and the socket IP matches TRUSTED_PROXY_IPS.
+ *     correctly configured and the socket peer is an allowlisted proxy (or is
+ *     not observable through the current server adapter).
  *   - The socket peer IP otherwise.
  *   - 'direct' as an absolute fallback.
  */
 export function getClientIp(c: Context): string {
   warnIfMisconfigured();
 
-  let socketIp = 'direct';
+  // `null` distinguishes "no socket peer available" (not running under
+  // @hono/node-server — e.g. app.request() in tests, or a different adapter)
+  // from a real peer address. The two must not be conflated: an unknown peer
+  // cannot be checked against TRUSTED_PROXY_IPS, but it also must not make
+  // every client collapse into one bucket when proxy trust IS configured.
+  let socketIp: string | null = null;
   try {
     const info = getConnInfo(c);
     if (info?.remote?.address) {
       socketIp = info.remote.address;
     }
   } catch {
-    // getConnInfo throws if not running in a node-server environment
-    // or if the request doesn't have socket info (e.g. tests)
+    // getConnInfo throws outside a node-server environment.
   }
 
-  if (!isProxyAwareConfigured()) return socketIp;
+  if (!isProxyAwareConfigured()) return socketIp ?? 'direct';
 
-  // QA-021: Verify the immediate upstream proxy is trusted before honoring X-Forwarded-For
-  if (!TRUST_ANY && !TRUSTED_PROXY_IPS.includes(socketIp)) {
-    return socketIp; // Untrusted upstream, ignore headers
+  // QA-021: when we CAN see the immediate upstream, it must be an allowlisted
+  // proxy before its X-Forwarded-For is honoured. When we cannot see it, we MUST NOT
+  // fall back to trusting headers, because an attacker could bypass checks if the server
+  // adapter fails to provide the socket IP.
+  if (!TRUST_ANY && (socketIp === null || !TRUSTED_PROXY_IPS.includes(socketIp))) {
+    return socketIp ?? 'direct'; // Untrusted or unknown upstream, ignore headers
   }
 
   const xff = c.req.header('X-Forwarded-For');
@@ -101,5 +109,25 @@ export function getClientIp(c: Context): string {
   const xrealip = c.req.header('X-Real-IP');
   if (xrealip) return xrealip.trim();
 
-  return socketIp;
+  return socketIp ?? 'direct';
+}
+
+/**
+ * Check if the request comes from a trusted proxy peer.
+ * Used to conditionally trust X-Forwarded-Host and X-Forwarded-Proto.
+ */
+export function isRequestFromTrustedProxy(c: Context): boolean {
+  if (!isProxyAwareConfigured()) return false;
+  if (TRUST_ANY) return true;
+  
+  try {
+    const info = getConnInfo(c);
+    const socketIp = info?.remote?.address;
+    if (socketIp && TRUSTED_PROXY_IPS.includes(socketIp)) {
+      return true;
+    }
+  } catch {
+    // Ignore error
+  }
+  return false;
 }

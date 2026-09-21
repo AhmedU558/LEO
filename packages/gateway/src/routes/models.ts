@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Models Route
  *
@@ -5,7 +6,6 @@
  * All model data is loaded from JSON config files - no hardcoded data
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import { hasApiKey } from './settings.js';
 import {
@@ -117,7 +117,7 @@ function convertToModelInfo(providerId: string): ModelInfo[] {
  */
 app.get('/', async (c) => {
   const enabledOnly = c.req.query('enabledOnly') !== 'false';
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   const allModels: ModelInfo[] = [];
   const configuredProviders: string[] = [];

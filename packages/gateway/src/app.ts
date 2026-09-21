@@ -173,7 +173,7 @@ export function createApp(config: Partial<GatewayConfig> = {}): Hono {
   // (HTTPS_ONLY) controls both — they're always paired.
   if (process.env.HTTPS_ONLY === 'true') {
     app.use('*', async (c, next) => {
-      if (isSecureRequest(c.req)) return next();
+      if (isSecureRequest(c)) return next();
 
       const url = new URL(c.req.url);
       if (url.protocol === 'http:') {
@@ -284,10 +284,12 @@ export function createApp(config: Partial<GatewayConfig> = {}): Hono {
     bindHost === '::1' ||
     bindHost === '[::1]' ||
     /^127(?:\.\d{1,3}){3}$/.test(bindHost);
+  // QA-001: Disable implicit owner fallback in production unless explicitly requested.
+  // isLoopbackBind is unsafe for this, as production nodes often bind to 127.0.0.1 behind a proxy.
   app.use(
     '/api/*',
     createUiSessionMiddleware({
-      allowImplicitOwnerWithoutPassword: authType === 'none' || isLoopbackBind,
+      allowImplicitOwnerWithoutPassword: authType === 'none',
       apiAuthEnabled: authType !== 'none',
     })
   );

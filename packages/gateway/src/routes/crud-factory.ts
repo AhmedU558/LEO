@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * CRUD Route Factory
  *
@@ -12,7 +13,6 @@
  *     entity: 'widget', *     serviceToken: Services.Widget, *     schemas: { create: createWidgetSchema, update: updateWidgetSchema }, *   });
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ZodSchema } from 'zod';
@@ -204,7 +204,7 @@ export function createCrudRoutes<TService = unknown, TCreate = unknown, TUpdate 
   if (methods.includes('list')) {
     app.get('/', async (c) => {
       try {
-        const userId = LOCAL_OWNER_ID;
+        const userId = getUserId(c);
         const { limit, offset } = getPaginationParams(c, defaultLimit, maxLimit);
         const service = getService();
 
@@ -243,7 +243,7 @@ export function createCrudRoutes<TService = unknown, TCreate = unknown, TUpdate 
   if (methods.includes('get')) {
     app.get('/:id', async (c) => {
       try {
-        const userId = LOCAL_OWNER_ID;
+        const userId = getUserId(c);
         const id = c.req.param('id');
         const service = getService();
 
@@ -303,7 +303,7 @@ export function createCrudRoutes<TService = unknown, TCreate = unknown, TUpdate 
       }
 
       try {
-        const userId = LOCAL_OWNER_ID;
+        const userId = getUserId(c);
         const service = getService();
         const created = await callServiceMethod(service, createMethod, userId, validatedBody);
 
@@ -365,7 +365,7 @@ export function createCrudRoutes<TService = unknown, TCreate = unknown, TUpdate 
       }
 
       try {
-        const userId = LOCAL_OWNER_ID;
+        const userId = getUserId(c);
         const id = c.req.param('id');
         const service = getService();
         const updated = await callServiceMethod(service, updateMethod, userId, id, validatedBody);
@@ -401,7 +401,7 @@ export function createCrudRoutes<TService = unknown, TCreate = unknown, TUpdate 
   if (methods.includes('delete')) {
     app.delete('/:id', async (c) => {
       try {
-        const userId = LOCAL_OWNER_ID;
+        const userId = getUserId(c);
         const id = c.req.param('id');
         const service = getService();
         const deleted = await callServiceMethod(service, deleteMethod, userId, id);

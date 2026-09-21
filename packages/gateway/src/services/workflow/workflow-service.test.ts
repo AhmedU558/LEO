@@ -59,6 +59,11 @@ const mockExecuteWebhookResponseNode = vi.hoisted(() => vi.fn());
 
 const mockApprovalsRepo = vi.hoisted(() => ({
   create: vi.fn(),
+  // cancelExecution() invalidates the workflow's pending approvals through
+  // this repository. Omitting the method made every cancellation in this file
+  // throw inside a background promise chain, which vitest reported as an
+  // unhandled rejection rather than a test failure.
+  rejectByWorkflow: vi.fn(async () => {}),
 }));
 
 // Shared test locks map — used to seed active executions in tests that need to

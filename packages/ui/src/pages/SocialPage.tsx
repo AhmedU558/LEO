@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Share2, Plus, PenTool, Globe } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
-import type { SocialAccount, SocialContent } from '@ownpilot/core/social';
+import type { SocialAccount, SocialContent } from '../types/leo';
 
 export function SocialPage() {
   const [searchParams, setSearchParams] = useSearchParams();

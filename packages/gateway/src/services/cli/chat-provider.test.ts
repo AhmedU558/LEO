@@ -23,6 +23,38 @@ vi.mock('../log.js', () => ({
 
 // Mock child_process — must use importOriginal to avoid breaking keychain.ts
 const mockSpawn = vi.fn();
+// ToolBridge tool calls now go through executeTool(), which enforces tool
+// permissions, claims a durable operation identity and writes an audit record
+// before any effect. Pulling that module in here drags the whole gateway tool
+// graph (registry build, repositories, services) into a provider test and hangs
+// it. This stub keeps the contract the bridge depends on — execute against the
+// registry the caller supplied, in `execContext.registry` — so the subject of
+// this file stays the provider's streaming and round behaviour.
+// `services/tool/executor.test.ts` and `priority4.integration.test.ts` cover
+// the admission protocol itself.
+vi.mock('../tool/executor.js', () => ({
+  executeTool: vi.fn(
+    async (
+      name: string,
+      args: Record<string, unknown>,
+      userId: string,
+      _perms: unknown,
+      execContext?: {
+        registry?: { execute: (n: string, a: unknown, c: unknown) => Promise<unknown> };
+      }
+    ) => {
+      const result = (await execContext?.registry?.execute(name, args, {
+        conversationId: 'test',
+        userId,
+      })) as { ok?: boolean; value?: { content?: unknown; isError?: boolean } } | undefined;
+      if (result?.ok) {
+        return { success: !result.value?.isError, result: result.value?.content };
+      }
+      return { success: false, error: `Tool '${name}' not found` };
+    }
+  ),
+}));
+
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
   return {

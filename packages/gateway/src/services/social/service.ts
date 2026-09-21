@@ -43,6 +43,8 @@ export class SocialService {
       policyDecision: policyResult.decision,
       riskLevel: risk,
       executionEnvironment: 'production',
+      // Recorded up-front; ActionLedger.updateResult() fills the real duration.
+      durationMs: 0,
     });
 
     if (policyResult.decision === 'DENY') {
@@ -86,7 +88,7 @@ export class SocialService {
 
   private async simulateProviderPublish(
     _content: SocialContent,
-    _account: SocialAccount
+    account: SocialAccount
   ): Promise<SocialPublishResult> {
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500));

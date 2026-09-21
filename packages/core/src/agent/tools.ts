@@ -377,7 +377,7 @@ export class ToolRegistry {
     name = resolved;
 
     // Scoped config access for non-trusted tools
-    const allowedServices = tool.definition.configRequirements?.map((r) => r.name);
+    const allowedServices = tool.definition.configRequirements?.map((r) => r.name) ?? [];
     const isRestricted = tool.trustLevel !== 'trusted';
 
     const fullContext: ToolContext = {
@@ -394,7 +394,7 @@ export class ToolRegistry {
       // Config Center accessors - scoped for plugin/custom tools
       getApiKey: this._configCenter
         ? (serviceName: string) => {
-            if (isRestricted && allowedServices && !allowedServices.includes(serviceName)) {
+            if (isRestricted && !allowedServices.includes(serviceName)) {
               log.warn(`Tool '${name}' tried to access undeclared service '${serviceName}'`);
               return undefined;
             }
@@ -403,7 +403,7 @@ export class ToolRegistry {
         : undefined,
       getServiceConfig: this._configCenter
         ? (serviceName: string) => {
-            if (isRestricted && allowedServices && !allowedServices.includes(serviceName)) {
+            if (isRestricted && !allowedServices.includes(serviceName)) {
               return null;
             }
             return this._configCenter!.getServiceConfig(serviceName);
@@ -411,7 +411,7 @@ export class ToolRegistry {
         : undefined,
       getConfigEntry: this._configCenter
         ? (serviceName: string, entryLabel?: string) => {
-            if (isRestricted && allowedServices && !allowedServices.includes(serviceName)) {
+            if (isRestricted && !allowedServices.includes(serviceName)) {
               return null;
             }
             return this._configCenter!.getConfigEntry(serviceName, entryLabel);
@@ -419,7 +419,7 @@ export class ToolRegistry {
         : undefined,
       getConfigEntries: this._configCenter
         ? (serviceName: string) => {
-            if (isRestricted && allowedServices && !allowedServices.includes(serviceName)) {
+            if (isRestricted && !allowedServices.includes(serviceName)) {
               return [];
             }
             return this._configCenter!.getConfigEntries(serviceName);
@@ -427,7 +427,7 @@ export class ToolRegistry {
         : undefined,
       getFieldValue: this._configCenter
         ? (serviceName: string, fieldName: string, entryLabel?: string) => {
-            if (isRestricted && allowedServices && !allowedServices.includes(serviceName)) {
+            if (isRestricted && !allowedServices.includes(serviceName)) {
               return undefined;
             }
             return this._configCenter!.getFieldValue(serviceName, fieldName, entryLabel);

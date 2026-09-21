@@ -1,10 +1,10 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions Packaging Route
  *
  * GET /:id/package — Download extension as .skill ZIP file
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { Hono } from 'hono';
@@ -47,7 +47,7 @@ function resolveAdmZipConstructor(mod: AdmZipImport): AdmZipConstructor | null {
  * GET /:id/package — Download .skill ZIP
  */
 packagingRoutes.get('/:id/package', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();

@@ -1,8 +1,8 @@
+import { getUserId } from '../helpers.js';
 /**
  * Heartbeat Log Routes — audit trail API
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import { getHeartbeatLogRepository } from '../../db/repositories/heartbeats/log.js';
 import {
@@ -19,7 +19,7 @@ export const heartbeatLogRoutes = new Hono();
 
 heartbeatLogRoutes.get('/', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const { limit, offset } = getPaginationParams(c);
     const repo = getHeartbeatLogRepository();
     const [logs, total] = await Promise.all([
@@ -36,7 +36,7 @@ heartbeatLogRoutes.get('/', async (c) => {
 
 heartbeatLogRoutes.get('/agent/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const agentId = c.req.param('id');
     const repo = getHeartbeatLogRepository();
 
@@ -58,7 +58,7 @@ heartbeatLogRoutes.get('/agent/:id', async (c) => {
 
 heartbeatLogRoutes.get('/stats', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const agentId = c.req.query('agentId');
 
     // If agentId provided, verify ownership

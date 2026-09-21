@@ -577,6 +577,7 @@ export class ExtensionService implements IExtensionService {
               description: `Run ${scriptPath}`,
               parameters: { type: 'object', properties: { args: { type: 'string' } } },
               code,
+              permissions: ['filesystem'],
             },
           });
         }

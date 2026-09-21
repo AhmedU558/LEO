@@ -58,6 +58,12 @@ export { LogsRepository } from './logs.js';
 export { CustomDataRepository } from './custom/data.js';
 export { createCustomToolsRepo } from './custom/tools.js';
 
+// Action Ledger
+export { actionLedgerRepo, ActionLedgerRepository } from './action-ledger.js';
+import { ActionLedger } from '@ownpilot/core/security';
+import { actionLedgerRepo } from './action-ledger.js';
+ActionLedger.setProvider(actionLedgerRepo);
+
 // Workflows
 export { createWorkflowsRepository } from './workflows/index.js';
 

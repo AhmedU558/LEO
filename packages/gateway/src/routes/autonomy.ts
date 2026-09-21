@@ -1,8 +1,9 @@
-﻿import { Hono } from 'hono';
+import { getUserId, getWorkspaceId } from './helpers.js';
+import { Hono } from 'hono';
 import { apiResponse, apiError, ERROR_CODES, parseJsonBody } from './helpers.js';
 import { AutonomyService } from '../services/autonomy/service.js';
 import type { AutonomousTask } from '@ownpilot/core/autonomy';
-import { LOCAL_OWNER_ID, LOCAL_WORKSPACE_ID } from '../config/defaults.js';
+
 
 export const autonomyRoutes = new Hono();
 const autonomyService = new AutonomyService();
@@ -24,8 +25,8 @@ autonomyRoutes.post('/tasks', async (c) => {
     goal: body.goal,
     profileId: 'default',
     status: 'idle',
-    userId: LOCAL_OWNER_ID,
-    workspaceId: LOCAL_WORKSPACE_ID,
+    userId: getUserId(c),
+    workspaceId: getWorkspaceId(c),
     plan: [],
     currentStepIndex: 0,
     failures: 0,

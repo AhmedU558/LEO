@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions Install Routes
  *
@@ -6,7 +7,6 @@
  * Trust boundary: Extension manifests are read from disk and validated against a Zod schema before reaching this code; the casts here are the post-validation hand-off from unknown to the manifest's typed shape. Manifest input is the trust boundary (validated above); the cast documents that the schema run guarantees the field set.
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -198,7 +198,7 @@ function findManifestInDir(dir: string): string | null {
  * Trust boundary: Extension manifests are read from disk and validated against a Zod schema before reaching this code; the casts here are the post-validation hand-off from unknown to the manifest's typed shape. Manifest input is the trust boundary (validated above); the cast documents that the schema run guarantees the field set.
  */
 installRoutes.post('/install', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const throttled = checkInstallThrottle(c);
   if (throttled) return throttled;
   const body = await parseJsonBody(c);
@@ -267,7 +267,7 @@ installRoutes.post('/install', async (c) => {
  * Trust boundary: Extension manifests are read from disk and validated against a Zod schema before reaching this code; the casts here are the post-validation hand-off from unknown to the manifest's typed shape. Manifest input is the trust boundary (validated above); the cast documents that the schema run guarantees the field set.
  */
 installRoutes.post('/upload', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const throttled = checkInstallThrottle(c);
   if (throttled) return throttled;
 

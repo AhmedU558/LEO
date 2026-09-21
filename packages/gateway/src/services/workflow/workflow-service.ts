@@ -948,15 +948,21 @@ export class WorkflowService implements IWorkflowService {
   cancelExecution(workflowId: string): boolean {
     const cancelled = this.locks.cancel(workflowId);
     if (cancelled) {
-      // Invalidate pending approvals in background
-      import('../../db/repositories/workflows/approvals.js').then(
-        ({ createWorkflowApprovalsRepository }) => {
-          const repo = createWorkflowApprovalsRepository('system');
-          repo.rejectByWorkflow(workflowId).catch((err) => {
-            console.error('Failed to invalidate approvals for cancelled workflow', err);
-          });
-        }
-      );
+      // Invalidate pending approvals in background.
+      //
+      // The catch must sit on the END of the chain, not on the inner call: a
+      // synchronous throw inside the .then() callback (a missing export, a
+      // repository constructor that fails) rejects the import promise before
+      // the inner .catch() is ever attached, which surfaced as an unhandled
+      // rejection that can take the process down under
+      // --unhandled-rejections=strict.
+      void import('../../db/repositories/workflows/approvals.js')
+        .then(({ createWorkflowApprovalsRepository }) =>
+          createWorkflowApprovalsRepository('system').rejectByWorkflow(workflowId)
+        )
+        .catch((err: unknown) => {
+          console.error('Failed to invalidate approvals for cancelled workflow', err);
+        });
     }
     return cancelled;
   }

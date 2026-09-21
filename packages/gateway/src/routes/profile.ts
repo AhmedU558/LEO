@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * User Profile Routes
  *
@@ -5,7 +6,6 @@
  * Enables comprehensive personalization of AI interactions.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import {
   apiResponse,
@@ -66,7 +66,7 @@ const app = new Hono();
  */
 app.get('/', async (c) => {
   try {
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const profile = await store.getProfile();
 
     return apiResponse(c, profile);
@@ -87,7 +87,7 @@ app.get('/', async (c) => {
  */
 app.get('/summary', async (c) => {
   try {
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const summary = await store.getProfileSummary();
 
     return apiResponse(c, { summary });
@@ -117,7 +117,7 @@ app.get('/category/:category', async (c) => {
   }
 
   try {
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const entries = await store.getCategory(category as PersonalDataCategory);
 
     return apiResponse(c, {
@@ -152,7 +152,7 @@ app.post('/data', async (c) => {
 
     const { category, key, value, data, confidence, source, sensitive } = parsed.data;
 
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const entry = await store.set(category as PersonalDataCategory, key, value as string, {
       data,
       confidence,
@@ -161,7 +161,7 @@ app.post('/data', async (c) => {
     });
 
     // Invalidate prompt cache so next AI call sees updated profile
-    getMemoryInjector().invalidateCache(LOCAL_OWNER_ID);
+    getMemoryInjector().invalidateCache(getUserId(c));
 
     return apiResponse(c, entry, 201);
   } catch (error) {
@@ -198,10 +198,10 @@ app.delete('/data', async (c) => {
 
     const { category, key } = parsed.data;
 
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const deleted = await store.delete(category as PersonalDataCategory, key);
 
-    getMemoryInjector().invalidateCache(LOCAL_OWNER_ID);
+    getMemoryInjector().invalidateCache(getUserId(c));
 
     return apiResponse(c, { deleted });
   } catch (error) {
@@ -232,7 +232,7 @@ app.get('/search', async (c) => {
   }
 
   try {
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const categories = categoriesParam
       ? (categoriesParam.split(',') as PersonalDataCategory[])
       : undefined;
@@ -267,7 +267,7 @@ app.post('/import', async (c) => {
 
     const { entries } = parsed.data;
 
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const imported = await store.importData(
       entries as Array<{
         category: PersonalDataCategory;
@@ -277,7 +277,7 @@ app.post('/import', async (c) => {
       }>
     );
 
-    getMemoryInjector().invalidateCache(LOCAL_OWNER_ID);
+    getMemoryInjector().invalidateCache(getUserId(c));
 
     return apiResponse(
       c,
@@ -321,7 +321,7 @@ app.post('/inferred/confirm', async (c) => {
     if (!parsed.success) return zodValidationError(c, parsed.error.issues);
 
     const { category, key } = parsed.data;
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const existing = await store.get(category as PersonalDataCategory, key);
     if (!existing) {
       return apiError(c, { code: ERROR_CODES.NOT_FOUND, message: 'Entry not found' }, 404);
@@ -345,7 +345,7 @@ app.post('/inferred/confirm', async (c) => {
       sensitive: existing.sensitive,
     });
 
-    getMemoryInjector().invalidateCache(LOCAL_OWNER_ID);
+    getMemoryInjector().invalidateCache(getUserId(c));
     return apiResponse(c, updated);
   } catch (error) {
     return apiError(
@@ -367,7 +367,7 @@ app.post('/inferred/confirm', async (c) => {
  */
 app.get('/inferred', async (c) => {
   try {
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const all = await store.exportData();
     const entries = all
       .filter((e) => e.source === 'ai_inferred')
@@ -390,7 +390,7 @@ app.get('/inferred', async (c) => {
  */
 app.get('/export', async (c) => {
   try {
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     const data = await store.exportData();
 
     return apiResponse(c, {
@@ -431,7 +431,7 @@ app.post('/quick', async (c) => {
       autonomyLevel,
     } = parsed.data;
 
-    const store = await getPersonalMemoryStore(LOCAL_OWNER_ID);
+    const store = await getPersonalMemoryStore(getUserId(c));
     let count = 0;
 
     // Set provided values
@@ -468,7 +468,7 @@ app.post('/quick', async (c) => {
       count++;
     }
 
-    getMemoryInjector().invalidateCache(LOCAL_OWNER_ID);
+    getMemoryInjector().invalidateCache(getUserId(c));
 
     // Get updated profile
     const profile = await store.getProfile();

@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Workflow Routes
  *
@@ -19,7 +20,6 @@ import {
   parseJsonBody,
   getErrorMessage,
 } from '../helpers.js';
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { sanitizeId, safeKeyCompare } from '../../utils/common.js';
 import { createWorkflowsRepository } from '../../db/repositories/workflows/index.js';
 import { createWorkflowApprovalsRepository } from '../../db/repositories/workflows/approvals.js';
@@ -363,7 +363,7 @@ workflowRoutes.route('/copilot', workflowCopilotRoute);
 // ============================================================================
 
 workflowRoutes.get('/', pagination(), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const { limit, offset } = c.get('pagination')!;
 
   const repo = createWorkflowsRepository(userId);
@@ -383,7 +383,7 @@ workflowRoutes.get('/', pagination(), async (c) => {
 // ============================================================================
 
 workflowRoutes.post('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const rawBody = await parseJsonBody(c);
   if (!rawBody)
     return apiError(c, { code: ERROR_CODES.BAD_REQUEST, message: 'Invalid JSON body' }, 400);
@@ -449,7 +449,7 @@ workflowRoutes.post('/', async (c) => {
 // ============================================================================
 
 workflowRoutes.get('/logs/recent', pagination(), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const { limit, offset } = c.get('pagination')!;
 
   const repo = createWorkflowsRepository(userId);
@@ -469,7 +469,7 @@ workflowRoutes.get('/logs/recent', pagination(), async (c) => {
 // ============================================================================
 
 workflowRoutes.get('/logs/:logId', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const logId = sanitizeId(c.req.param('logId'));
 
   const repo = createWorkflowsRepository(userId);
@@ -484,7 +484,7 @@ workflowRoutes.get('/logs/:logId', async (c) => {
 // ============================================================================
 
 workflowRoutes.get('/active-tool-names', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const repo = createWorkflowsRepository(userId);
   const toolNamesArr = await repo.getActiveToolNames();
   const activeToolNames = new Set<string>(toolNamesArr);
@@ -497,7 +497,7 @@ workflowRoutes.get('/active-tool-names', async (c) => {
 // ============================================================================
 
 workflowRoutes.post('/:id/clone', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
 
   const repo = createWorkflowsRepository(userId);
@@ -559,7 +559,7 @@ workflowRoutes.post('/:id/clone', async (c) => {
 // ============================================================================
 
 workflowRoutes.get('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
 
   const repo = createWorkflowsRepository(userId);
@@ -574,7 +574,7 @@ workflowRoutes.get('/:id', async (c) => {
 // ============================================================================
 
 workflowRoutes.patch('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
   const rawBody = await parseJsonBody(c);
   if (!rawBody)
@@ -649,7 +649,7 @@ workflowRoutes.patch('/:id', async (c) => {
 // ============================================================================
 
 workflowRoutes.delete('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
 
   const repo = createWorkflowsRepository(userId);
@@ -665,7 +665,7 @@ workflowRoutes.delete('/:id', async (c) => {
 // ============================================================================
 
 workflowRoutes.post('/:id/execute', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
   const dryRun = c.req.query('dryRun') === 'true';
 
@@ -718,7 +718,7 @@ workflowRoutes.post('/:id/execute', async (c) => {
 // ============================================================================
 
 workflowRoutes.post('/:id/cancel', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
 
   // Verify workflow ownership before allowing cancel
@@ -745,7 +745,7 @@ workflowRoutes.post('/:id/cancel', async (c) => {
 // ============================================================================
 
 workflowRoutes.get('/:id/versions', pagination(), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
   const { limit, offset } = c.get('pagination')!;
 
@@ -768,7 +768,7 @@ workflowRoutes.get('/:id/versions', pagination(), async (c) => {
 });
 
 workflowRoutes.post('/:id/versions/:version/restore', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
   const version = parseInt(c.req.param('version'), 10);
   if (isNaN(version) || version < 1) {
@@ -794,7 +794,7 @@ workflowRoutes.post('/:id/versions/:version/restore', async (c) => {
 // ============================================================================
 
 workflowRoutes.get('/:id/logs', pagination(), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
   const { limit, offset } = c.get('pagination')!;
 
@@ -821,7 +821,7 @@ workflowRoutes.get('/:id/logs', pagination(), async (c) => {
 // ============================================================================
 
 workflowRoutes.get('/approvals/pending', pagination(), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const { limit, offset } = c.get('pagination')!;
 
   const repo = createWorkflowApprovalsRepository(userId);
@@ -840,7 +840,7 @@ workflowRoutes.get('/approvals/pending', pagination(), async (c) => {
 });
 
 workflowRoutes.get('/approvals/all', pagination(), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const { limit, offset } = c.get('pagination')!;
 
   const repo = createWorkflowApprovalsRepository(userId);
@@ -856,7 +856,7 @@ workflowRoutes.get('/approvals/all', pagination(), async (c) => {
 });
 
 workflowRoutes.post('/approvals/:id/approve', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
 
   const repo = createWorkflowApprovalsRepository(userId);
@@ -902,7 +902,7 @@ workflowRoutes.post('/approvals/:id/approve', async (c) => {
 });
 
 workflowRoutes.post('/approvals/:id/reject', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
 
   const repo = createWorkflowApprovalsRepository(userId);
@@ -956,7 +956,7 @@ workflowRoutes.post('/:id/run', async (c) => {
     );
   }
 
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = sanitizeId(c.req.param('id'));
 
   let inputs: Record<string, unknown> | undefined;
@@ -1076,7 +1076,7 @@ workflowRoutes.get('/:id/run/:logId', async (c) => {
     );
   }
 
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const logId = sanitizeId(c.req.param('logId'));
 
   const repo = createWorkflowsRepository(userId);
@@ -1091,7 +1091,7 @@ workflowRoutes.get('/:id/run/:logId', async (c) => {
 // ============================================================================
 
 workflowRoutes.post('/logs/:logId/replay', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const logId = sanitizeId(c.req.param('logId'));
 
   const repo = createWorkflowsRepository(userId);

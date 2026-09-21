@@ -410,11 +410,39 @@ async function executeToolCalls(
     config.onToolStart?.(toolCall, call.arguments);
 
     try {
-      const result = await config.tools.executeToolCall(
-        toolCall,
-        config.conversationId,
-        config.userId
+      // QA-016: a coding-agent tool call is an effect like any other. This
+      // called registry.executeToolCall() directly, which skipped the atomic
+      // idempotency claim, the tool-permission check and the audit record —
+      // so the one caller that runs unattended, in a loop, with model-authored
+      // arguments was the least protected. parentContext carries the workspace
+      // root through so scoped file/exec tools still resolve correctly.
+      const { executeTool } = await import('../tool/executor.js');
+      const execResult = await executeTool(
+        call.name,
+        call.arguments,
+        config.userId ?? 'default',
+        undefined,
+        {
+          source: 'coding-agent',
+          parentContext: {
+            conversationId: config.conversationId,
+            workspaceDir: config.workspaceDir,
+          },
+          // Execute against the agent's own registry — the shared one holds a
+          // different tool set, so defaulting to it here would change what the
+          // coding agent can call.
+          registry: config.tools,
+        }
       );
+      const result: ToolResult = {
+        toolCallId: callId,
+        content: !execResult.success
+          ? (execResult.error ?? 'Tool execution failed')
+          : typeof execResult.result === 'string'
+            ? execResult.result
+            : JSON.stringify(execResult.result ?? null),
+        isError: !execResult.success,
+      };
       results.push(result);
       config.onToolEnd?.(toolCall, result);
     } catch (error) {

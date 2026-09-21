@@ -240,11 +240,11 @@ export function executeSchemaValidatorNode(
 /**
  * Execute a Filter node: filter an array by a condition expression.
  */
-export function executeFilterNode(
+export async function executeFilterNode(
   node: WorkflowNode,
   nodeOutputs: Record<string, NodeResult>,
   variables: Record<string, unknown>
-): NodeResult {
+): Promise<NodeResult> {
   const startTime = Date.now();
   try {
     const data = node.data as FilterNodeData;
@@ -273,10 +273,13 @@ export function executeFilterNode(
         completedAt: new Date().toISOString(),
       };
     }
-    const filtered = arr.filter((item, index) => {
-      const ctx = { item, index, ...variables };
-      return safeVmEval(data.condition, ctx, vmTimeout);
-    });
+    const evaluations = await Promise.all(
+      arr.map(async (item, index) => {
+        const ctx = { item, index, ...variables };
+        return await safeVmEval(data.condition, ctx, vmTimeout);
+      })
+    );
+    const filtered = arr.filter((_, index) => evaluations[index]);
 
     log.info('Filter completed', {
       nodeId: node.id,
@@ -307,11 +310,11 @@ export function executeFilterNode(
 /**
  * Execute a Map node: transform each element of an array via an expression.
  */
-export function executeMapNode(
+export async function executeMapNode(
   node: WorkflowNode,
   nodeOutputs: Record<string, NodeResult>,
   variables: Record<string, unknown>
-): NodeResult {
+): Promise<NodeResult> {
   const startTime = Date.now();
   try {
     const data = node.data as MapNodeData;
@@ -340,10 +343,12 @@ export function executeMapNode(
         completedAt: new Date().toISOString(),
       };
     }
-    const mapped = arr.map((item, index) => {
-      const ctx = { item, index, ...variables };
-      return safeVmEval(data.expression, ctx, vmTimeout);
-    });
+    const mapped = await Promise.all(
+      arr.map(async (item, index) => {
+        const ctx = { item, index, ...variables };
+        return await safeVmEval(data.expression, ctx, vmTimeout);
+      })
+    );
 
     log.info('Map completed', { nodeId: node.id, count: arr.length });
     return {

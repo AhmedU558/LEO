@@ -40,7 +40,7 @@ import { calculateCost, type AIProvider } from '@ownpilot/core/costs';
 import { executeTool } from '../services/tool/executor.js';
 import { executionPermissionsRepo } from '../db/repositories/execution-permissions.js';
 import { downgradePromptToBlocked } from '../services/permission/utils.js';
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
+
 import { createPluginId } from '@ownpilot/core/types';
 import { getOrCreateChatAgent } from '../services/agent/service.js';
 
@@ -221,7 +221,7 @@ export class AgenticGatewayExecutor {
     if (clawId) {
       // Execute on an existing persistent claw
       const service = getClawService();
-      const userId = (params.userId as string) || LOCAL_OWNER_ID;
+      const userId = params.userId as string; if (!userId) throw new Error('userId is required');
       const result = await service.executeNow(clawId, userId);
       return {
         success: true,
@@ -406,7 +406,7 @@ export class AgenticGatewayExecutor {
 
     const service = getWorkflowService();
     const workflowId = params.workflowId as string;
-    const userId = (params.userId as string) || LOCAL_OWNER_ID;
+    const userId = params.userId as string; if (!userId) throw new Error('userId is required');
 
     if (!workflowId) {
       return {
@@ -440,7 +440,7 @@ export class AgenticGatewayExecutor {
 
     const triggerConfig = params.trigger as Record<string, unknown> | undefined;
     const action = params.action as Record<string, unknown> | undefined;
-    const userId = (params.userId as string) || LOCAL_OWNER_ID;
+    const userId = params.userId as string; if (!userId) throw new Error('userId is required');
     const taskName = (params.taskName as string) || 'agentic-trigger';
 
     if (!triggerConfig || !action) {
@@ -738,7 +738,7 @@ export class AgenticGatewayExecutor {
     // 'blocked'.
     const category =
       language === 'python' || language === 'py' ? 'execute_python' : 'execute_javascript';
-    const userId = (params.userId as string) || LOCAL_OWNER_ID;
+    const userId = params.userId as string; if (!userId) throw new Error('userId is required');
     const perms = downgradePromptToBlocked(await executionPermissionsRepo.get(userId));
     if (!perms.enabled || perms[category] === 'blocked') {
       return {
@@ -813,7 +813,7 @@ export class AgenticGatewayExecutor {
     // custom-tool approval). 'system' is non-interactive, so 'prompt' code-exec
     // permissions downgrade to 'blocked'. Without this the tool_catalog step
     // bypassed the gate entirely.
-    const userId = (params.userId as string) || LOCAL_OWNER_ID;
+    const userId = params.userId as string; if (!userId) throw new Error('userId is required');
     const userPerms = await executionPermissionsRepo.get(userId);
     const execPerms = downgradePromptToBlocked(userPerms);
     const toolResult = await executeTool(toolName, toolArgs, userId, execPerms, {

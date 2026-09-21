@@ -33,7 +33,8 @@ export async function executeNode(
   nodeOutputs: Record<string, NodeResult>,
   variables: Record<string, unknown>,
   userId: string,
-  toolService: IToolService
+  toolService: IToolService,
+  execContextJob?: { jobId: string; leaseToken: string; effectIndex: number }
 ): Promise<NodeResult> {
   const startTime = Date.now();
 
@@ -46,6 +47,7 @@ export async function executeNode(
     const toolResult = await toolService.execute(toolName, resolvedArgs, {
       userId,
       execSource: 'workflow',
+      job: execContextJob,
     });
     const result: ToolExecutionResult = toToolExecResult(toolResult);
 
@@ -254,7 +256,8 @@ export async function executeCodeNode(
   nodeOutputs: Record<string, NodeResult>,
   variables: Record<string, unknown>,
   userId: string,
-  toolService: IToolService
+  toolService: IToolService,
+  execContextJob?: { jobId: string; leaseToken: string; effectIndex: number }
 ): Promise<NodeResult> {
   const startTime = Date.now();
   try {
@@ -290,6 +293,7 @@ export async function executeCodeNode(
       {
         userId,
         execSource: 'workflow',
+        job: execContextJob,
       }
     );
     const result: ToolExecutionResult = toToolExecResult(toolResult);
@@ -319,11 +323,11 @@ export async function executeCodeNode(
 /**
  * Execute a transformer node: evaluate a JS expression to transform data.
  */
-export function executeTransformerNode(
+export async function executeTransformerNode(
   node: WorkflowNode,
   nodeOutputs: Record<string, NodeResult>,
   variables: Record<string, unknown>
-): NodeResult {
+): Promise<NodeResult> {
   const startTime = Date.now();
   try {
     const data = node.data as TransformerNodeData;
@@ -340,8 +344,8 @@ export function executeTransformerNode(
     }
     evalContext.data = lastOutput;
 
-    const vmTimeout = (node.data as TransformerNodeData).timeoutMs ?? 5000;
-    const result = safeVmEval(resolvedExpr, evalContext, vmTimeout);
+    const vmTimeout = data.timeoutMs ?? 5000;
+    const result = await safeVmEval(resolvedExpr, evalContext, vmTimeout);
     const durationMs = Date.now() - startTime;
 
     log.info('Transformer completed', { nodeId: node.id, durationMs });

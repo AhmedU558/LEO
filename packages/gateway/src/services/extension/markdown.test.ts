@@ -653,6 +653,7 @@ describe('serializeExtensionMarkdown', () => {
             required: ['input'],
           },
           code: 'return { content: { out: args.input } };',
+          permissions: ['network'],
           requires_approval: true,
         },
       ],
@@ -721,6 +722,7 @@ describe('serializeExtensionMarkdown', () => {
             required: ['text'],
           },
           code: 'return { content: { result: args.text.repeat(args.count || 1) } };',
+          permissions: ['network'],
         },
       ],
       required_services: [

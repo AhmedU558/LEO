@@ -350,14 +350,18 @@ describe('createApp', () => {
       createApp({ host: '0.0.0.0', auth: { type: 'api-key', apiKeys: ['secret'] } });
       expect(mockCreateUiSessionMiddleware).toHaveBeenCalledWith({
         allowImplicitOwnerWithoutPassword: false,
+        // The UI-session layer may only defer credential validation to the API
+        // auth middleware when that middleware is actually installed.
+        apiAuthEnabled: true,
       });
     });
 
-    it('preserves implicit passwordless owner access on loopback', () => {
+    it('no longer preserves implicit passwordless owner access on loopback', () => {
       vi.clearAllMocks();
       createApp({ host: '127.0.0.1', auth: { type: 'api-key', apiKeys: ['secret'] } });
       expect(mockCreateUiSessionMiddleware).toHaveBeenCalledWith({
-        allowImplicitOwnerWithoutPassword: true,
+        allowImplicitOwnerWithoutPassword: false,
+        apiAuthEnabled: true,
       });
     });
   });

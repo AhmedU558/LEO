@@ -30,6 +30,7 @@ interface EnqueueOptions {
   priority?: number;
   maxAttempts?: number;
   runAfter?: Date;
+  id?: string;
 }
 
 type JobHandler = (job: JobRecord, signal: AbortSignal) => Promise<Record<string, unknown>>;
@@ -98,8 +99,9 @@ export class JobQueueService {
     payload: Record<string, unknown> = {},
     options: EnqueueOptions = {}
   ): Promise<string> {
+    const jobId = options.id ?? randomUUID();
     const jobInput: CreateJobInput = {
-      id: randomUUID(),
+      id: jobId,
       name,
       queue: options.queue ?? DEFAULT_QUEUE,
       priority: options.priority ?? 0,
@@ -107,9 +109,18 @@ export class JobQueueService {
       maxAttempts: options.maxAttempts ?? 3,
       runAfter: options.runAfter ?? new Date(),
     };
-    const job = await this.repo.create(jobInput);
-    log.debug('Job enqueued', { jobId: job.id, name, queue: job.queue });
-    return job.id;
+    try {
+      const job = await this.repo.create(jobInput);
+      log.debug('Job enqueued', { jobId: job.id, name, queue: job.queue });
+      return job.id;
+    } catch (error: any) {
+      // Catch PostgreSQL UNIQUE constraint violation (23505) for idempotent enqueues
+      if (error.code === '23505' && options.id) {
+        log.debug('Job already enqueued, returning existing id', { jobId: options.id, name });
+        return options.id;
+      }
+      throw error;
+    }
   }
 
   /**

@@ -1,8 +1,8 @@
+import { getUserId, getWorkspaceId } from './helpers.js';
 ﻿import { Hono } from 'hono';
 import { apiResponse, apiError, ERROR_CODES, parseJsonBody } from './helpers.js';
 import { VoiceService } from '../services/voice/service.js';
 import type { VoiceSession } from '@ownpilot/core/voice';
-import { LOCAL_OWNER_ID, LOCAL_WORKSPACE_ID } from '../config/defaults.js';
 
 export const voiceRoutes = new Hono();
 const voiceService = new VoiceService();
@@ -16,8 +16,7 @@ voiceRoutes.get('/sessions', (c) => {
 
 voiceRoutes.post('/sessions', async (c) => {
   const newSession: VoiceSession = {
-    id: 'voice_' + Date.now(),
-    userId: LOCAL_OWNER_ID,
+    id: 'voice_' + Date.now(), userId: getUserId(c),
     status: 'connecting',
     messages: [],
     startedAt: new Date().toISOString(),
@@ -37,13 +36,7 @@ voiceRoutes.post('/sessions/:id/tool_call', async (c) => {
     return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Missing tool name' }, 400);
   }
 
-  const result = await voiceService.handleVoiceToolCall(
-    LOCAL_OWNER_ID,
-    LOCAL_WORKSPACE_ID,
-    session.id,
-    body.toolName,
-    body.toolArgs
-  );
+  const result = await voiceService.handleVoiceToolCall(getUserId(c), getWorkspaceId(c), session.id, body.toolName, body.toolArgs);
 
   return apiResponse(c, result);
 });

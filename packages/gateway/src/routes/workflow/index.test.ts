@@ -1,3 +1,4 @@
+import {  } from '../helpers.js';
 /**
  * Workflow Routes Tests
  *
@@ -90,7 +91,6 @@ vi.mock('../../middleware/validation.js', () => ({
 
 vi.mock('../../config/defaults.js', () => ({
   MAX_PAGINATION_OFFSET: 10000,
-  LOCAL_OWNER_ID: 'default',
 }));
 
 vi.mock('./copilot.js', () => ({
