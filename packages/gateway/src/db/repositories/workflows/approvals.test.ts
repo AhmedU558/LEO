@@ -113,11 +113,11 @@ describe('WorkflowApprovalsRepository', () => {
       expect(params[2]).toBe('wf-1'); // workflow_id
       expect(params[3]).toBe('node-gate'); // node_id
       expect(params[4]).toBe('default'); // user_id
-      expect(params[5]).toBe('pending'); // status default
-      expect(params[6]).toBe('{"key":"value"}'); // context JSON
-      expect(params[7]).toBe('Please approve'); // message
-      expect(params[8]).toBeNull(); // expires_at (not provided)
-      expect(typeof params[9]).toBe('string'); // created_at ISO
+      expect(params[8]).toBe('pending'); // status default
+      expect(params[9]).toBe('{"key":"value"}'); // context JSON
+      expect(params[10]).toBe('Please approve'); // message
+      expect(params[11]).toBeNull(); // expires_at (not provided)
+      expect(typeof params[12]).toBe('string'); // created_at ISO
 
       expect(result.id).toBe('wfappr-generated-id');
       expect(result.status).toBe('pending');
@@ -138,9 +138,9 @@ describe('WorkflowApprovalsRepository', () => {
       });
 
       const params = mockAdapter.execute.mock.calls[0]![1] as unknown[];
-      expect(params[6]).toBe('{}'); // context defaults to {}
-      expect(params[7]).toBeNull(); // message defaults to null
-      expect(params[8]).toBeNull(); // expires_at defaults to null
+      expect(params[9]).toBe('{}'); // context defaults to {}
+      expect(params[10]).toBeNull(); // message defaults to null
+      expect(params[11]).toBeNull(); // expires_at defaults to null
     });
 
     it('should pass expiresAt as ISO string when provided', async () => {
@@ -161,7 +161,7 @@ describe('WorkflowApprovalsRepository', () => {
       });
 
       const params = mockAdapter.execute.mock.calls[0]![1] as unknown[];
-      expect(params[8]).toBe(expiresAt.toISOString());
+      expect(params[11]).toBe(expiresAt.toISOString());
     });
 
     it('should throw when approval not found after insert', async () => {

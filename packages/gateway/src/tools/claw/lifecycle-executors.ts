@@ -184,10 +184,9 @@ export async function executeRunScript(
   // (auto | docker | local) flows in via the execution context. For Docker we
   // probe `docker version` once; if it isn't available we fall back to local
   // and surface the fallback in the result so the LLM knows what happened.
-  const sandboxPref = ctx.sandbox ?? 'auto';
+  const _sandboxPref = ctx.sandbox ?? 'auto';
   let useDocker = true; // QA-009: local fallback strictly forbidden
   const dockerFallbackReason = undefined;
-  }
 
   const dockerImages: Record<string, string> = {
     python: 'python:3.11-slim',
@@ -195,7 +194,7 @@ export async function executeRunScript(
     shell: 'alpine:3.19',
   };
 
-  const localInterpreters: Record<string, { cmd: string; args: string[] }> = {
+  const _localInterpreters: Record<string, { cmd: string; args: string[] }> = {
     python: { cmd: 'python3', args: [scriptFullPath] },
     javascript: { cmd: 'node', args: [scriptFullPath] },
     shell: { cmd: 'sh', args: [scriptFullPath] },
@@ -322,7 +321,7 @@ export async function executeCreateTool(args: Record<string, unknown>): Promise<
   const name = args.name as string;
   const description = args.description as string;
   const code = args.code as string;
-  const toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
+  const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
   const invokeArgs = (args.args as Record<string, unknown>) ?? {};
 
   if (!validateToolName(name)) {

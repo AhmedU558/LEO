@@ -360,7 +360,14 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
     const failed = new Set<number>();
     const signal = state.abortController?.signal;
 
+    let _orchestratorLoopCount = 0;
+    const MAX_ORCHESTRATOR_STEPS = 100;
     while (completed.size + failed.size < steps.length) {
+      if (++_orchestratorLoopCount > MAX_ORCHESTRATOR_STEPS) {
+        state.status = 'failed';
+        this.recordStepResult(state, steps[0]!, 'failed', null, { error: 'Maximum autonomous step limit exceeded' });
+        break;
+      }
       if (signal?.aborted) {
         state.status = 'cancelled';
         return;

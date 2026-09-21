@@ -18,11 +18,16 @@ export const jobExecutionContext = new AsyncLocalStorage<{
   leaseToken: string;
   signal: AbortSignal;
   effectIndex: number;
+  depth?: number;
 }>();
 
 const log = getLog('JobQueueService');
 
 const DEFAULT_QUEUE = 'default';
+const MAX_ATTEMPTS_LIMIT = 10;
+const MAX_CONCURRENCY_LIMIT = 50;
+const MAX_EXECUTION_TIME_MS = 60 * 60 * 1000; // 1 hour
+const MAX_JOB_DEPTH_LIMIT = 50;
 const SYSTEM_QUEUE = 'system';
 
 interface EnqueueOptions {
@@ -100,22 +105,28 @@ export class JobQueueService {
     options: EnqueueOptions = {}
   ): Promise<string> {
     const jobId = options.id ?? randomUUID();
+    const context = jobExecutionContext.getStore();
+    const currentDepth = context?.depth ?? 0;
+    if (currentDepth >= MAX_JOB_DEPTH_LIMIT) {
+      throw new Error(`Job execution blocked: MAX_JOB_DEPTH_LIMIT (${MAX_JOB_DEPTH_LIMIT}) exceeded (recursive autonomous loop)`);
+    }
+    const payloadWithDepth = { ...payload, _depth: currentDepth + 1 } as Record<string, unknown>;
     const jobInput: CreateJobInput = {
       id: jobId,
       name,
       queue: options.queue ?? DEFAULT_QUEUE,
       priority: options.priority ?? 0,
-      payload,
-      maxAttempts: options.maxAttempts ?? 3,
+      payload: payloadWithDepth,
+      maxAttempts: Math.min(options.maxAttempts ?? 3, MAX_ATTEMPTS_LIMIT),
       runAfter: options.runAfter ?? new Date(),
     };
     try {
       const job = await this.repo.create(jobInput);
       log.debug('Job enqueued', { jobId: job.id, name, queue: job.queue });
       return job.id;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Catch PostgreSQL UNIQUE constraint violation (23505) for idempotent enqueues
-      if (error.code === '23505' && options.id) {
+      if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === '23505' && options.id) {
         log.debug('Job already enqueued, returning existing id', { jobId: options.id, name });
         return options.id;
       }
@@ -135,7 +146,7 @@ export class JobQueueService {
    */
   startWorker(handler: JobHandler, options: WorkerOptions = {}): () => void {
     const queue = options.queue ?? DEFAULT_QUEUE;
-    const concurrency = options.concurrency ?? 4;
+    const concurrency = Math.min(Math.max(1, options.concurrency ?? 4), MAX_CONCURRENCY_LIMIT);
     const workerId = options.name ?? `worker_${randomUUID().slice(0, 8)}`;
 
     const worker: RunningWorker = {
@@ -258,10 +269,18 @@ export class JobQueueService {
       }
     }, 1000);
     heartbeat.unref?.();
+
+    const timeoutId = setTimeout(() => {
+      if (!controller.signal.aborted) {
+        log.warn('Job exceeded max execution time', logCtx);
+        controller.abort(new Error(`Job exceeded MAX_EXECUTION_TIME_MS (${MAX_EXECUTION_TIME_MS}ms)`));
+      }
+    }, MAX_EXECUTION_TIME_MS);
+    timeoutId.unref?.();
     try {
       controller.signal.throwIfAborted();
       const result = await jobExecutionContext.run(
-        { jobId: job.id, leaseToken: job.leaseToken!, signal: controller.signal, effectIndex: 0 },
+        { jobId: job.id, leaseToken: job.leaseToken!, signal: controller.signal, effectIndex: 0, depth: typeof job.payload === 'object' && job.payload !== null && '_depth' in job.payload ? (job.payload as { _depth: number })._depth : 0 },
         async () => {
           const operations = getIdempotencyKeysRepository();
           const operationId = `job:${job.id}`;

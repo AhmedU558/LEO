@@ -113,10 +113,12 @@ export class WorkflowService implements IWorkflowService {
   ): Promise<WorkflowLog> {
     const dryRun = options?.dryRun ?? false;
     const depth = options?.depth ?? 0;
+    if (depth >= 10) throw new Error('Maximum workflow recursion depth exceeded');
     const repo = createWorkflowsRepository(userId);
     const workflow = await repo.get(workflowId);
     if (!workflow) throw new Error('Workflow not found');
     if (workflow.nodes.length === 0) throw new Error('Workflow has no nodes');
+    if (workflow.nodes.length > 1000) throw new Error('Maximum workflow node limit exceeded');
 
     // Merge input parameters into variables under __inputs namespace
     if (options?.inputs) {
