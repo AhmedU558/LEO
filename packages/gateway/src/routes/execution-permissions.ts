@@ -1,3 +1,4 @@
+import { invalidateAgentCache } from '../agents/index.js';
 import { getUserId } from './helpers.js';
 /**
  * Execution Permissions Routes
@@ -66,6 +67,7 @@ app.put('/', async (c) => {
   }
 
   const updated = await executionPermissionsRepo.set(userId, cleaned);
+  invalidateAgentCache();
   return apiResponse(c, updated);
 });
 

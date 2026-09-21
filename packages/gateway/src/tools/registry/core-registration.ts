@@ -1,3 +1,4 @@
+import { checkToolPermission } from '../../services/tool/permission.js';
 /**
  * Core Tool Registration
  *
@@ -194,10 +195,18 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
       const qName = qualifyToolName(toolDef.name, 'core');
       tools.register({ ...toolDef, name: qName }, async (args, context): Promise<CoreToolResult> => {
         const startTime = trace
-          ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
-          : 0;
+            ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
+            : 0;
+            
+          const perm = await checkToolPermission(context.userId ?? userId, toolDef.name, {
+            source: 'chat',
+            executionPermissions: context.executionPermissions
+          });
+          if (!perm.allowed) {
+            return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });
+          }
 
-        const result = group.needsUserId
+          const result = group.needsUserId
           ? await group.executor(toolDef.name, args as Record<string, unknown>, userId, context)
           : await group.executor(toolDef.name, args as Record<string, unknown>, undefined, context);
 
@@ -215,10 +224,18 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
     const qName = qualifyToolName(toolDef.name, 'core');
     tools.register({ ...toolDef, name: qName }, async (args, context): Promise<CoreToolResult> => {
       const startTime = trace
-        ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
-        : 0;
+          ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
+          : 0;
+          
+        const perm = await checkToolPermission(context.userId ?? userId, toolDef.name, {
+          source: 'chat',
+          executionPermissions: context.executionPermissions
+        });
+        if (!perm.allowed) {
+          return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });
+        }
 
-      const result = await executeArtifactTool(
+        const result = await executeArtifactTool(
         toolDef.name,
         args as Record<string, unknown>,
         userId,
@@ -256,9 +273,18 @@ export async function registerDynamicTools(
     const qName = qualifyToolName(toolDef.name, 'core');
     tools.register({ ...toolDef, name: qName }, async (args, _context): Promise<CoreToolResult> => {
       const startTime = trace
-        ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
-        : 0;
-      const result = await executeCustomToolTool(
+          ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
+          : 0;
+          
+        const perm = await checkToolPermission(_context.userId ?? userId, toolDef.name, {
+          source: 'chat',
+          executionPermissions: _context.executionPermissions
+        });
+        if (!perm.allowed) {
+          return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });
+        }
+
+        const result = await executeCustomToolTool(
         toolDef.name,
         args as Record<string, unknown>,
         userId
@@ -320,10 +346,18 @@ export async function registerDynamicTools(
     const qName = qualifyToolName(toolDef.name, 'custom');
     tools.register({ ...toolDef, name: qName }, async (args, _context): Promise<CoreToolResult> => {
       const startTime = trace
-        ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
-        : 0;
+          ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
+          : 0;
+          
+        const perm = await checkToolPermission(_context.userId ?? userId, toolDef.name, {
+          source: 'chat',
+          executionPermissions: _context.executionPermissions
+        });
+        if (!perm.allowed) {
+          return toToolResult({ success: false, error: `Tool '${toolDef.name}' blocked: ${perm.reason}` });
+        }
 
-      const result = await executeActiveCustomTool(
+        const result = await executeActiveCustomTool(
         toolDef.name,
         args as Record<string, unknown>,
         userId,

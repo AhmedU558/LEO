@@ -1,3 +1,4 @@
+import { invalidateAgentCache } from '../agents/index.js';
 import { getUserId } from './helpers.js';
 /**
  * File Workspaces Routes
@@ -123,6 +124,7 @@ app.post('/', async (c) => {
       description: body.description,
       tags: body.tags,
     });
+    invalidateAgentCache();
 
     return apiResponse(c, workspace, 201);
   } catch (error) {
@@ -173,6 +175,7 @@ app.delete('/:id', async (c) => {
     if (result instanceof Response) return result;
 
     deleteSessionWorkspace(workspaceId);
+    invalidateAgentCache();
 
     return apiResponse(c, { deleted: true });
   } catch (error) {
@@ -522,6 +525,7 @@ app.post('/session/:sessionId', async (c) => {
       }>(c)) ?? {};
 
     const workspace = getOrCreateSessionWorkspace(sessionId, body.agentId, userId);
+    invalidateAgentCache();
 
     return apiResponse(c, workspace);
   } catch (error) {

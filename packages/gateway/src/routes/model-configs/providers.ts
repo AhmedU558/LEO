@@ -1,3 +1,4 @@
+import { invalidateAgentCache } from '../../agents/index.js';
 import { getUserId } from '../helpers.js';
 /**
  * Provider configuration endpoints
@@ -179,6 +180,7 @@ providerRoutes.post('/providers', async (c) => {
       ...body,
       userId,
     });
+    invalidateAgentCache();
 
     wsGateway.broadcast('data:changed', {
       entity: 'model_provider',
@@ -224,6 +226,7 @@ providerRoutes.put('/providers/:id', async (c) => {
           isEnabled: body.isEnabled ?? true,
           config: body.config,
         });
+    invalidateAgentCache();
 
         wsGateway.broadcast('data:changed', {
           entity: 'model_provider',
@@ -237,6 +240,8 @@ providerRoutes.put('/providers/:id', async (c) => {
     }
 
     const provider = await modelConfigsRepo.updateProvider(userId, providerId, body);
+    invalidateAgentCache();
+    invalidateAgentCache();
 
     wsGateway.broadcast('data:changed', {
       entity: 'model_provider',
@@ -272,6 +277,8 @@ providerRoutes.delete('/providers/:id', async (c) => {
   }
 
   const deleted = await modelConfigsRepo.deleteProvider(userId, providerId);
+    invalidateAgentCache();
+    invalidateAgentCache();
 
   if (!deleted) {
     return notFoundError(c, 'Provider', providerId);
@@ -320,6 +327,7 @@ providerRoutes.patch('/providers/:id/toggle', async (c) => {
         providerType: 'openai_compatible',
         isEnabled: body.enabled,
       });
+    invalidateAgentCache();
 
       wsGateway.broadcast('data:changed', {
         entity: 'model_provider',
@@ -343,8 +351,10 @@ providerRoutes.patch('/providers/:id/toggle', async (c) => {
         providerType: agg.type,
         isEnabled: body.enabled,
       });
+    invalidateAgentCache();
     } else {
       const toggled = await modelConfigsRepo.toggleProvider(userId, providerId, body.enabled);
+    invalidateAgentCache();
       if (!toggled) {
         return notFoundError(c, 'Provider', providerId);
       }
@@ -536,6 +546,7 @@ providerRoutes.post('/providers/:id/discover-models', async (c) => {
         isEnabled: true,
         isCustom: true,
       });
+    invalidateAgentCache();
 
       discovered.push({ modelId: model.id, displayName, isNew });
     }

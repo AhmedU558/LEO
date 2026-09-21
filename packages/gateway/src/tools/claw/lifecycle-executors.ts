@@ -80,17 +80,39 @@ export async function executeInstallPackage(
     pip: { cmd: 'pip', args: ['install', '--target', `${wsPath}/pip_packages`, packageName] },
   };
 
+  
   const entry = commands[manager];
   if (!entry) return { success: false, error: `Unsupported package manager: ${manager}` };
 
   try {
-    const { stdout, stderr } = await execFileAsync(entry.cmd, entry.args, {
-      timeout: 60_000,
-      cwd: wsPath,
+    const mountSource = process.platform === 'win32'
+      ? `/${wsPath.charAt(0).toLowerCase()}${wsPath.slice(2).replace(/\\/g, '/')}`
+      : wsPath;
+
+    const dockerImage = manager === 'pip' ? 'python:3.11-slim' : 'node:20-alpine';
+    
+    // Rewrite the command arguments to use the container's workspace mount path
+    let containerArgs = [...entry.args];
+    if (manager === 'npm') containerArgs = ['install', '--prefix', '/workspace', packageName];
+    if (manager === 'pnpm') containerArgs = ['add', '--dir', '/workspace', packageName];
+    if (manager === 'pip') containerArgs = ['install', '--target', '/workspace/pip_packages', packageName];
+
+    const cmdArgs = [
+      'run', '--rm', '--network', 'host',
+      '--memory', '512m', '--cpus', '1',
+      '--workdir', '/workspace',
+      '-v', `${mountSource}:/workspace`,
+      dockerImage,
+      entry.cmd,
+      ...containerArgs
+    ];
+
+    const { stdout, stderr } = await execFileAsync('docker', cmdArgs, {
+      timeout: 120_000,
       encoding: 'utf-8',
-      env: buildSandboxEnv({ HOME: wsPath }),
       maxBuffer: 4 * 1024 * 1024,
     });
+
 
     const output = (stdout || stderr || '').slice(0, 2000);
     return {
@@ -163,20 +185,8 @@ export async function executeRunScript(
   // probe `docker version` once; if it isn't available we fall back to local
   // and surface the fallback in the result so the LLM knows what happened.
   const sandboxPref = ctx.sandbox ?? 'auto';
-  let useDocker = false;
-  let dockerFallbackReason: string | undefined;
-  if (sandboxPref === 'docker' || sandboxPref === 'auto') {
-    try {
-      await execFileAsync('docker', ['version', '--format', '{{.Server.Version}}'], {
-        timeout: 3000,
-        encoding: 'utf-8',
-      });
-      useDocker = sandboxPref === 'docker' || (sandboxPref === 'auto' && language === 'python');
-    } catch {
-      if (sandboxPref === 'docker') {
-        dockerFallbackReason = 'docker daemon not reachable; falling back to local execution';
-      }
-    }
+  let useDocker = true; // QA-009: local fallback strictly forbidden
+  const dockerFallbackReason = undefined;
   }
 
   const dockerImages: Record<string, string> = {
@@ -236,10 +246,7 @@ export async function executeRunScript(
       ...inner,
     ];
   } else {
-    sandboxLabel = 'local';
-    const interp = localInterpreters[language] ?? localInterpreters.javascript!;
-    cmd = interp.cmd;
-    cmdArgs = interp.args;
+    throw new Error('QA-009 Violation: Local execution fallback is forbidden. Untrusted code must run in Docker.');
   }
 
   // Build env for local execution. Docker passes its own minimal env via -e
@@ -343,81 +350,23 @@ export async function executeCreateTool(args: Record<string, unknown>): Promise<
   // The code should define a function with the tool name (or assign to `exports.default`).
   // We inject 'args' into the sandbox context and call the function.
   try {
-    const vm = await import('node:vm');
-
-    const logs: string[] = [];
-
-    // SECURITY (TS-001 / RCE-001): never inject host-realm objects (console,
-    // args, module, ...) into the vm context. Any host function reachable from
-    // the sandbox exposes the HOST Function constructor via `.constructor`,
-    // which `codeGeneration.strings:false` does NOT disable — a full escape, and
-    // this code runs in the MAIN gateway thread. Instead we pass host fns under
-    // a single `__host` global, rebuild context-realm equivalents in a bootstrap,
-    // then sever `__host`. After that the only Function reachable is the
-    // context's own, which is blocked. See services/extension/sandbox.ts for the
-    // canonical (worker-isolated) version.
-    const hostBridge = {
-      log: (...a: unknown[]) => logs.push(a.map(String).join(' ')),
-      error: (...a: unknown[]) => logs.push('[err] ' + a.map(String).join(' ')),
-    };
-
-    const vmCtx = vm.createContext(
-      { __host: hostBridge, __argsJson: JSON.stringify(invokeArgs ?? {}) },
-      { codeGeneration: { strings: false, wasm: false } }
-    );
-
-    const BOOTSTRAP = `(() => {
-      const h = __host;
-      globalThis.console = Object.freeze({
-        log: (...a) => h.log(...a.map(String)),
-        error: (...a) => h.error(...a.map(String)),
-      });
-      globalThis.args = JSON.parse(__argsJson);
-      globalThis.module = { exports: {} };
-      globalThis.exports = globalThis.module.exports;
-      globalThis.__result = undefined;
-      delete globalThis.__host;
-      delete globalThis.__argsJson;
-    })();`;
-    vm.runInContext(BOOTSTRAP, vmCtx);
-
-    const wrappedCode = `
-${code}
-// Auto-detect callable: named function or module.exports
-const __fn = typeof ${name} === 'function'
-  ? ${name}
-  : (module.exports && typeof module.exports.default === 'function' ? module.exports.default
-  : (typeof module.exports === 'function' ? module.exports : null));
-__result = typeof __fn === 'function' ? __fn(args) : { error: "No function named '${name}' found. Define: function ${name}(args) { ... }" };
-`;
-
-    vm.runInContext(wrappedCode, vmCtx, { timeout: 10_000 });
-
-    // Resolve promises (sync vm can't await, but we can resolve simple thenables)
-    let output = vmCtx.__result;
-    if (
-      output &&
-      typeof output === 'object' &&
-      typeof (output as Promise<unknown>).then === 'function'
-    ) {
-      output = await (output as Promise<unknown>);
+    const { getExtensionSandbox } = await import('../../services/extension/sandbox.js');
+    const result = await getExtensionSandbox().execute({
+      extensionId: `claw:${ctx.clawId}`,
+      toolName: name,
+      code,
+      args: invokeArgs,
+      ownerUserId: 'claw', // Ephemeral
+      maxExecutionTime: CLAW_EXEC_TIMEOUT_MS,
+    });
+    
+    if (result.success) {
+      return { success: true, result: { tool: name, output: result.result } };
+    } else {
+      return { success: false, error: `Tool execution failed: ${result.error}` };
     }
-
-    return {
-      success: true,
-      result: {
-        executed: true,
-        name,
-        description,
-        schema: toolArgs,
-        output,
-        executedWith: invokeArgs,
-        logs: logs.length > 0 ? logs : undefined,
-        note: 'Code executed in an ephemeral vm sandbox. Nothing is persisted — call claw_create_tool again with the full code to re-run.',
-      },
-    };
   } catch (err) {
-    return { success: false, error: `Tool execution failed: ${getErrorMessage(err)}` };
+    return { success: false, error: `Tool wrapper error: ${getErrorMessage(err)}` };
   }
 }
 

@@ -67,15 +67,12 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
     entryData: Omit<ActionLedgerEntry, 'actionId' | 'timestamp' | 'previousHash' | 'hash'>
   ): Promise<ActionLedgerEntry> {
     const actionId = generateId('act');
-    const timestamp = new Date();
 
     // We use a transaction to lock the tail, generate the hash, and append the record
     return await this.transaction(async () => {
       // Lock the tail row for update to serialize writes
-      const tailRow = await this.queryOne<{ last_hash: string }>(
-        'SELECT last_hash FROM action_ledger_tail WHERE id = 1 FOR UPDATE'
-      );
-
+      const tailRow = await this.queryOne<{ last_hash: string }>('SELECT last_hash FROM action_ledger_tail WHERE id = 1 FOR UPDATE');
+      const timestamp = new Date();
       const previousHash = tailRow ? tailRow.last_hash : 'genesis';
       const hashData = `${actionId}:${timestamp.toISOString()}:${previousHash}:${entryData.userId}:${entryData.action}`;
       const hash = createHash('sha256').update(hashData).digest('hex');
@@ -148,29 +145,29 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
     return row ? rowToEntry(row) : undefined;
   }
 
-  async getEntries(userId?: string): Promise<ActionLedgerEntry[]> {
+  async getEntries(userId?: string, limit: number = 100, offset: number = 0): Promise<ActionLedgerEntry[]> {
     if (userId) {
       const rows = await this.query<LedgerRow>(
-        'SELECT * FROM action_ledger WHERE user_id = $1 ORDER BY timestamp ASC',
-        [userId]
+        'SELECT * FROM action_ledger WHERE user_id = $1 ORDER BY timestamp ASC LIMIT $2 OFFSET $3',
+        [userId, limit, offset]
       );
       return rows.map(rowToEntry);
     }
-    const rows = await this.query<LedgerRow>('SELECT * FROM action_ledger ORDER BY timestamp ASC');
+    const rows = await this.query<LedgerRow>('SELECT * FROM action_ledger ORDER BY timestamp ASC LIMIT $1 OFFSET $2', [limit, offset]);
     return rows.map(rowToEntry);
   }
 
-  async getByWorkspaceId(workspaceId: string, userId?: string): Promise<ActionLedgerEntry[]> {
+  async getByWorkspaceId(workspaceId: string, userId?: string, limit: number = 100, offset: number = 0): Promise<ActionLedgerEntry[]> {
     if (userId) {
       const rows = await this.query<LedgerRow>(
-        'SELECT * FROM action_ledger WHERE workspace_id = $1 AND user_id = $2 ORDER BY timestamp ASC',
-        [workspaceId, userId]
+        'SELECT * FROM action_ledger WHERE workspace_id = $1 AND user_id = $2 ORDER BY timestamp ASC LIMIT $3 OFFSET $4',
+        [workspaceId, userId, limit, offset]
       );
       return rows.map(rowToEntry);
     }
     const rows = await this.query<LedgerRow>(
-      'SELECT * FROM action_ledger WHERE workspace_id = $1 ORDER BY timestamp ASC',
-      [workspaceId]
+      'SELECT * FROM action_ledger WHERE workspace_id = $1 ORDER BY timestamp ASC LIMIT $2 OFFSET $3',
+      [workspaceId, limit, offset]
     );
     return rows.map(rowToEntry);
   }

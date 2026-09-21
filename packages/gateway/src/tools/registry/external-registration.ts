@@ -1,3 +1,5 @@
+import { toToolResult } from './utils.js';
+import { checkToolPermission } from '../../services/tool/permission.js';
 /**
  * External Tool Registration
  *
@@ -60,9 +62,18 @@ export function registerPluginTools(tools: ToolRegistry, trace: boolean): ToolDe
       context: ToolContext
     ): Promise<CoreToolResult> => {
       const startTime = trace
-        ? traceToolCallStart(definition.name, args as Record<string, unknown>)
-        : 0;
-      try {
+          ? traceToolCallStart(definition.name, args as Record<string, unknown>)
+          : 0;
+
+        const perm = await checkToolPermission(context.userId ?? 'default', definition.name, {
+          source: 'chat',
+          executionPermissions: context.executionPermissions
+        });
+        if (!perm.allowed) {
+          return toToolResult({ success: false, error: `Tool '${definition.name}' blocked: ${perm.reason}` });
+        }
+
+        try {
         const result = await executor(args as Record<string, unknown>, context);
         if (trace)
           traceToolCallEnd(
@@ -155,7 +166,16 @@ export function registerExtensionTools(
       { ...toolDef, name: qName },
       async (args, context): Promise<CoreToolResult> => {
         const startTime = trace ? traceToolCallStart(def.name, args as Record<string, unknown>) : 0;
-        try {
+          
+          const perm = await checkToolPermission(context.userId ?? userId, def.name, {
+            source: 'chat',
+            executionPermissions: context.executionPermissions
+          });
+          if (!perm.allowed) {
+            return toToolResult({ success: false, error: `Tool '${def.name}' blocked: ${perm.reason}` });
+          }
+
+          try {
           const execResult = await dynamicRegistry.execute(
             def.name,
             args as Record<string, unknown>,
@@ -219,9 +239,18 @@ export function registerMcpTools(tools: ToolRegistry, trace: boolean): ToolDefin
       context: ToolContext
     ): Promise<CoreToolResult> => {
       const startTime = trace
-        ? traceToolCallStart(getBaseName(definition.name), args as Record<string, unknown>)
-        : 0;
-      try {
+          ? traceToolCallStart(getBaseName(definition.name), args as Record<string, unknown>)
+          : 0;
+          
+        const perm = await checkToolPermission(context.userId ?? 'default', getBaseName(definition.name), {
+          source: 'chat',
+          executionPermissions: context.executionPermissions
+        });
+        if (!perm.allowed) {
+          return toToolResult({ success: false, error: `Tool '${getBaseName(definition.name)}' blocked: ${perm.reason}` });
+        }
+
+        try {
         const result = await executor(args as Record<string, unknown>, context);
         if (trace)
           traceToolCallEnd(

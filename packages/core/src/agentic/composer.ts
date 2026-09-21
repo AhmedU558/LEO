@@ -634,7 +634,7 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
       // Cost update isn't supported by updateResult yet, but keeping the format
       if (resultCost !== undefined) {
         // We'll just patch the entry manually for now since updateResult doesn't take costUsd
-        const entry = ActionLedger.getByActionId(ledgerEntry.actionId);
+        const entry = await ActionLedger.getByActionId(ledgerEntry.actionId);
         if (entry) entry.costUsd = resultCost;
       }
     }

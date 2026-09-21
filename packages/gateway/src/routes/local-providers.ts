@@ -1,3 +1,4 @@
+import { invalidateAgentCache } from '../agents/index.js';
 import { getUserId } from './helpers.js';
 /**
  * Local Providers Routes
@@ -169,6 +170,7 @@ localProvidersRoutes.post('/', async (c) => {
       apiKey,
       discoveryEndpoint,
     });
+    invalidateAgentCache();
 
     wsGateway.broadcast('data:changed', {
       entity: 'local_provider',
@@ -264,6 +266,7 @@ localProvidersRoutes.put('/:id', async (c) => {
       discoveryEndpoint,
       isEnabled,
     });
+    invalidateAgentCache();
 
     if (!updated) {
       return notFoundError(c, 'Local provider', id);
@@ -298,6 +301,7 @@ localProvidersRoutes.delete('/:id', async (c) => {
     }
 
     const deleted = await localProvidersRepo.deleteProvider(id);
+    invalidateAgentCache();
 
     if (!deleted) {
       return notFoundError(c, 'Local provider', id);
@@ -342,6 +346,7 @@ localProvidersRoutes.patch('/:id/toggle', async (c) => {
     }
 
     const updated = await localProvidersRepo.updateProvider(id, { isEnabled: enabled });
+    invalidateAgentCache();
 
     if (!updated) {
       return notFoundError(c, 'Local provider', id);
@@ -376,6 +381,7 @@ localProvidersRoutes.patch('/:id/set-default', async (c) => {
     }
 
     await localProvidersRepo.setDefault(userId, id);
+    invalidateAgentCache();
 
     wsGateway.broadcast('data:changed', { entity: 'local_provider', action: 'updated', id });
     return apiResponse(c, { message: 'Default local provider updated' });

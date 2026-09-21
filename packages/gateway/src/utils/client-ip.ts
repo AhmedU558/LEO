@@ -25,29 +25,32 @@
 import { getLog } from '../services/log.js';
 const log = getLog('ClientIP');
 
-const TRUST_PROXY = process.env.TRUSTED_PROXY === 'true';
-const RAW_TRUSTED_PROXY_IPS = process.env.TRUSTED_PROXY_IPS ?? '';
-const TRUSTED_PROXY_IPS = RAW_TRUSTED_PROXY_IPS.split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
-/** Special sentinel meaning "trust any proxy IP" (useful in tests) */
-const TRUST_ANY = TRUSTED_PROXY_IPS.length > 0 && TRUSTED_PROXY_IPS.includes('*');
+function getTrustConfig() {
+  const TRUST_PROXY = process.env.TRUSTED_PROXY === 'true';
+  const RAW_TRUSTED_PROXY_IPS = process.env.TRUSTED_PROXY_IPS ?? '';
+  const TRUSTED_PROXY_IPS = RAW_TRUSTED_PROXY_IPS.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const TRUST_ANY = TRUSTED_PROXY_IPS.length > 0 && TRUSTED_PROXY_IPS.includes('*');
+  return { TRUST_PROXY, TRUSTED_PROXY_IPS, TRUST_ANY };
+}
 
 /**
  * Whether proxy-aware IP extraction is configured safely.
  * `TRUSTED_PROXY=true` without `TRUSTED_PROXY_IPS` is unsafe — we ignore XFF.
  */
 export function isProxyAwareConfigured(): boolean {
+  const { TRUST_PROXY, TRUSTED_PROXY_IPS, TRUST_ANY } = getTrustConfig();
   return TRUST_PROXY && (TRUSTED_PROXY_IPS.length > 0 || TRUST_ANY);
 }
 
 let warnedMisconfig = false;
 function warnIfMisconfigured(): void {
+  const { TRUST_PROXY, TRUSTED_PROXY_IPS } = getTrustConfig();
   if (TRUST_PROXY && TRUSTED_PROXY_IPS.length === 0 && !warnedMisconfig) {
     warnedMisconfig = true;
-
     log.warn(
-      '[client-ip] TRUSTED_PROXY=true but TRUSTED_PROXY_IPS is empty — ' +
+      '[client-ip] TRUSTED_PROXY=true but TRUSTED_PROXY_IPS is empty ?" ' +
         'X-Forwarded-For will be IGNORED (fail-safe). Set TRUSTED_PROXY_IPS to ' +
         'a comma-separated list of your reverse-proxy IPs to enable per-IP ' +
         'rate limiting / login throttle.'
@@ -92,6 +95,7 @@ export function getClientIp(c: Context): string {
   // proxy before its X-Forwarded-For is honoured. When we cannot see it, we MUST NOT
   // fall back to trusting headers, because an attacker could bypass checks if the server
   // adapter fails to provide the socket IP.
+  const { TRUSTED_PROXY_IPS, TRUST_ANY } = getTrustConfig();
   if (!TRUST_ANY && (socketIp === null || !TRUSTED_PROXY_IPS.includes(socketIp))) {
     return socketIp ?? 'direct'; // Untrusted or unknown upstream, ignore headers
   }
@@ -118,6 +122,7 @@ export function getClientIp(c: Context): string {
  */
 export function isRequestFromTrustedProxy(c: Context): boolean {
   if (!isProxyAwareConfigured()) return false;
+  const { TRUSTED_PROXY_IPS, TRUST_ANY } = getTrustConfig();
   if (TRUST_ANY) return true;
 
   try {

@@ -421,7 +421,9 @@ export async function getOrCreateChatAgent(
   fallback?: { provider: string; model: string },
   pageContext?: { path?: string } | null,
   conversationId?: string,
-  gatewayUrl?: string
+  gatewayUrl?: string,
+  userId?: string,
+  workspaceId?: string
 ): Promise<Agent> {
   // CLI providers are NOT cached — each request may need fresh MCP session state
   // while still reusing the persistent ~/.ownpilot/workspace directory.
@@ -443,7 +445,9 @@ export async function getOrCreateChatAgent(
   const fbSuffix = fallback ? `|fb_${sanitize(fallback.provider)}_${sanitize(fallback.model)}` : '';
   const pathSuffix = pageContext?.path ? `|dir_${sanitize(pageContext.path)}` : '';
   const convSuffix = conversationId ? `|conv_${sanitize(conversationId)}` : '';
-  const cacheKey = `chat|${sanitize(provider)}|${sanitize(model)}${fbSuffix}${pathSuffix}${convSuffix}`;
+  const usrSuffix = userId ? `|usr_${userId}` : '';
+  const wsSuffix = workspaceId ? `|ws_${workspaceId}` : '';
+  const cacheKey = `chat|${sanitize(provider)}|${sanitize(model)}${fbSuffix}${pathSuffix}${convSuffix}${usrSuffix}${wsSuffix}`;
 
   const cached = lruGet(chatAgentCache, cacheKey);
   if (cached) return cached;
@@ -457,7 +461,9 @@ export async function getOrCreateChatAgent(
     cacheKey,
     fallback,
     pageContext,
-    gatewayUrl
+    gatewayUrl,
+    userId,
+    workspaceId
   ).finally(() => {
     pendingChatAgents.delete(cacheKey);
   });
@@ -477,7 +483,9 @@ async function createChatAgentInstance(
   cacheKey: string,
   fallback?: { provider: string; model: string },
   _pageContext?: { path?: string } | null,
-  gatewayUrl?: string
+  gatewayUrl?: string,
+  userId?: string,
+  workspaceId?: string
 ): Promise<Agent> {
   // ── CLI Chat Provider path ──
   // CLI providers (cli-claude, cli-codex, cli-gemini) use login-based auth
@@ -510,17 +518,17 @@ async function createChatAgentInstance(
   registerAllTools(tools);
   tools.setConfigCenter(getConfigCenter());
 
-  const userId = 'default';
-  registerGatewayTools(tools, userId, false);
+  const resolvedUserId = userId ?? 'default';
+  registerGatewayTools(tools, resolvedUserId, false);
 
   const activeCustomToolDefs = await registerDynamicTools(
     tools,
-    userId,
+    resolvedUserId,
     `chat_${provider}_${model}`,
     false
   );
   const pluginToolDefs = registerPluginTools(tools, false);
-  const extensionToolDefs = registerExtensionTools(tools, userId, false);
+  const extensionToolDefs = registerExtensionTools(tools, resolvedUserId, false);
   const mcpToolDefs = registerMcpTools(tools, false);
 
   const chatCoreToolDefs = getToolDefinitions().filter((t) => tools.has(t.name));

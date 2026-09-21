@@ -7,7 +7,7 @@ const url = process.env.LEO_QA_POSTGRES_URL;
 
 describe.skipIf(!url)('QA-010 & QA-011 Integration: Action Ledger Durability and Integrity', () => {
   beforeAll(async () => {
-    await initializeAdapter({ connectionString: url });
+    await initializeAdapter({ postgresUrl: url, type: 'postgres' });
   });
 
   afterAll(async () => {
