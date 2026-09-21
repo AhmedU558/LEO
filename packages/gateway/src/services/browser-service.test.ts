@@ -79,11 +79,15 @@ const {
 
   // Mock puppeteer Browser
   const mockBrowser = {
-    connected: true,
-    newPage: vi.fn().mockResolvedValue(mockPage),
-    close: vi.fn().mockResolvedValue(undefined),
-    on: vi.fn(),
-  };
+      connected: true,
+      newPage: vi.fn().mockResolvedValue(mockPage),
+      close: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn(),
+      createBrowserContext: vi.fn().mockResolvedValue({
+        newPage: vi.fn().mockResolvedValue(mockPage),
+        close: vi.fn().mockResolvedValue(undefined),
+      }),
+    };
 
   const mockPuppeteerLaunch = vi.fn().mockResolvedValue(mockBrowser);
 
@@ -163,7 +167,7 @@ async function createServiceWithSession(userId = 'user-1'): Promise<BrowserServi
 
   const service = new BrowserService();
   // Navigate first so a session is created
-  await service.navigate(userId, 'https://example.com');
+  await service.navigate(`${userId}:default:default`, userId, 'https://example.com');
   return service;
 }
 
@@ -212,6 +216,10 @@ describe('BrowserService', () => {
     mockBrowser.newPage.mockResolvedValue(mockPage);
     mockBrowser.close.mockResolvedValue(undefined);
     mockBrowser.on.mockReturnValue(undefined);
+    mockBrowser.createBrowserContext.mockResolvedValue({
+      newPage: vi.fn().mockResolvedValue(mockPage),
+      close: vi.fn().mockResolvedValue(undefined),
+    });
 
     mockPuppeteerLaunch.mockResolvedValue(mockBrowser);
 
@@ -324,7 +332,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValueOnce('body text');
 
-      const result = await service.navigate('user-1', 'https://example.com');
+      const result = await service.navigate('default:default:default', 'user-1', 'https://example.com');
 
       expect(result.url).toBe('https://example.com');
       expect(result.title).toBe('Test Page');
@@ -346,7 +354,7 @@ describe('BrowserService', () => {
         new Error('Timeout: waiting for network idle')
       );
 
-      const result = await service.navigate('user-1', 'https://example.com');
+      const result = await service.navigate('default:default:default', 'user-1', 'https://example.com');
 
       expect(result.title).toBe('Test Page');
       expect(result.text).toBe('body text');
@@ -356,7 +364,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.goto.mockRejectedValueOnce(new Error('net::ERR_NAME_NOT_RESOLVED'));
 
-      await expect(service.navigate('user-1', 'https://nope.invalid')).rejects.toThrow(
+      await expect(service.navigate('default:default:default', 'user-1', 'https://nope.invalid')).rejects.toThrow(
         'ERR_NAME_NOT_RESOLVED'
       );
     });
@@ -367,7 +375,7 @@ describe('BrowserService', () => {
       // First goto fails transiently; the default mock resolves on retry.
       mockPage.goto.mockRejectedValueOnce(new Error('net::ERR_CONNECTION_RESET'));
 
-      const result = await service.navigate('user-1', 'https://example.com');
+      const result = await service.navigate('default:default:default', 'user-1', 'https://example.com');
 
       expect(result.title).toBe('Test Page');
       expect(mockPage.goto).toHaveBeenCalledTimes(2);
@@ -377,7 +385,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.goto.mockRejectedValue(new Error('net::ERR_NAME_NOT_RESOLVED'));
 
-      await expect(service.navigate('user-1', 'https://nope.invalid')).rejects.toThrow();
+      await expect(service.navigate('default:default:default', 'user-1', 'https://nope.invalid')).rejects.toThrow();
       expect(mockPage.goto).toHaveBeenCalledTimes(1);
     });
 
@@ -385,7 +393,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.goto.mockRejectedValue(new Error('net::ERR_TIMED_OUT'));
 
-      await expect(service.navigate('user-1', 'https://example.com')).rejects.toThrow(
+      await expect(service.navigate('default:default:default', 'user-1', 'https://example.com')).rejects.toThrow(
         'ERR_TIMED_OUT'
       );
       expect(mockPage.goto).toHaveBeenCalledTimes(2);
@@ -395,7 +403,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.waitForNetworkIdle.mockRejectedValueOnce(new Error('Target closed'));
 
-      await expect(service.navigate('user-1', 'https://example.com')).rejects.toThrow(
+      await expect(service.navigate('default:default:default', 'user-1', 'https://example.com')).rejects.toThrow(
         'Target closed'
       );
     });
@@ -404,7 +412,7 @@ describe('BrowserService', () => {
       mockIsBlockedUrl.mockReturnValue(true);
       const service = new BrowserService();
 
-      await expect(service.navigate('user-1', 'https://192.168.1.1')).rejects.toThrow(
+      await expect(service.navigate('default:default:default', 'user-1', 'https://192.168.1.1')).rejects.toThrow(
         'URL targets a blocked or private network address.'
       );
     });
@@ -413,7 +421,7 @@ describe('BrowserService', () => {
       mockIsPrivateUrlAsync.mockResolvedValue(true);
       const service = new BrowserService();
 
-      await expect(service.navigate('user-1', 'https://example.com')).rejects.toThrow(
+      await expect(service.navigate('default:default:default', 'user-1', 'https://example.com')).rejects.toThrow(
         'URL resolves to a private or blocked network address.'
       );
     });
@@ -427,7 +435,7 @@ describe('BrowserService', () => {
     it('throws for non-HTTP(S) URL', async () => {
       const service = new BrowserService();
 
-      await expect(service.navigate('user-1', 'ftp://example.com/file')).rejects.toThrow(
+      await expect(service.navigate('default:default:default', 'user-1', 'ftp://example.com/file')).rejects.toThrow(
         'Only HTTP/HTTPS URLs are allowed'
       );
     });
@@ -436,7 +444,7 @@ describe('BrowserService', () => {
       mockConfigServicesRepoGetFieldValue.mockReturnValue('allowed.com');
       const service = new BrowserService();
 
-      await expect(service.navigate('user-1', 'https://blocked.com')).rejects.toThrow(
+      await expect(service.navigate('default:default:default', 'user-1', 'https://blocked.com')).rejects.toThrow(
         'not in the allowed domains list'
       );
     });
@@ -446,7 +454,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValueOnce('');
 
-      await expect(service.navigate('user-1', 'https://example.com')).resolves.toBeDefined();
+      await expect(service.navigate('default:default:default', 'user-1', 'https://example.com')).resolves.toBeDefined();
     });
 
     it('allows subdomain of an allowed domain', async () => {
@@ -454,18 +462,18 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValueOnce('');
 
-      await expect(service.navigate('user-1', 'https://sub.example.com')).resolves.toBeDefined();
+      await expect(service.navigate('default:default:default', 'user-1', 'https://sub.example.com')).resolves.toBeDefined();
     });
 
     it('reuses existing page session for same user', async () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValue('');
 
-      await service.navigate('user-1', 'https://example.com');
-      await service.navigate('user-1', 'https://example.com/page2');
+      await service.navigate('default:default:default', 'user-1', 'https://example.com');
+      await service.navigate('default:default:default', 'user-1', 'https://example.com/page2');
 
       // newPage should be called only once
-      expect(mockBrowser.newPage).toHaveBeenCalledTimes(1);
+      expect(mockBrowser.createBrowserContext).toHaveBeenCalledTimes(1);
     });
 
     it('throws when browser not available (no executablePath)', async () => {
@@ -479,7 +487,7 @@ describe('BrowserService', () => {
       try {
         const service = new BrowserService();
 
-        await expect(service.navigate('user-1', 'https://example.com')).rejects.toThrow(
+        await expect(service.navigate('default:default:default', 'user-1', 'https://example.com')).rejects.toThrow(
           'Browser not available'
         );
       } finally {
@@ -493,7 +501,7 @@ describe('BrowserService', () => {
       const longText = 'a'.repeat(60000);
       mockPage.$eval.mockResolvedValueOnce(longText);
 
-      const result = await service.navigate('user-1', 'https://example.com');
+      const result = await service.navigate('default:default:default', 'user-1', 'https://example.com');
       expect(result.text.length).toBe(50000);
     });
 
@@ -501,7 +509,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValueOnce('');
 
-      await service.navigate('user-1', 'https://example.com');
+      await service.navigate('default:default:default', 'user-1', 'https://example.com');
 
       expect(mockPage.setRequestInterception).toHaveBeenCalledWith(true);
       expect(mockPage.on).toHaveBeenCalledWith('request', expect.any(Function));
@@ -516,7 +524,7 @@ describe('BrowserService', () => {
     it('clicks an element on the current page', async () => {
       const service = await createServiceWithSession('user-click');
 
-      const result = await service.click('user-click', '#submit-btn');
+      const result = await service.click('user-click:default:default', '#submit-btn');
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('#submit-btn', { timeout: 10000 });
       expect(mockPage.click).toHaveBeenCalledWith('#submit-btn');
@@ -527,7 +535,7 @@ describe('BrowserService', () => {
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.click('no-session-user', '#btn')).rejects.toThrow(
+      await expect(service.click('no-session-user:default:default', '#btn')).rejects.toThrow(
         'No active browser session'
       );
     });
@@ -542,7 +550,7 @@ describe('BrowserService', () => {
       const service = await createServiceWithSession('user-back');
       mockPage.goBack.mockResolvedValueOnce({ ok: true }); // non-null response
 
-      const result = await service.goBack('user-back');
+      const result = await service.goBack('user-back:default:default');
 
       expect(mockPage.goBack).toHaveBeenCalledWith(
         expect.objectContaining({ waitUntil: 'domcontentloaded' })
@@ -555,13 +563,13 @@ describe('BrowserService', () => {
       const service = await createServiceWithSession('user-back2');
       mockPage.goBack.mockResolvedValueOnce(null);
 
-      const result = await service.goBack('user-back2');
+      const result = await service.goBack('user-back2:default:default');
       expect(result.navigated).toBe(false);
     });
 
     it('throws when no active session exists', async () => {
       const service = new BrowserService();
-      await expect(service.goBack('no-session')).rejects.toThrow('No active browser session');
+      await expect(service.goBack('no-session:default:default')).rejects.toThrow('No active browser session');
     });
   });
 
@@ -573,7 +581,7 @@ describe('BrowserService', () => {
     it('waits for the selector then hovers it', async () => {
       const service = await createServiceWithSession('user-hover');
 
-      const result = await service.hover('user-hover', 'nav .menu');
+      const result = await service.hover('user-hover:default:default', 'nav .menu');
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('nav .menu', { timeout: 10000 });
       expect(mockPage.hover).toHaveBeenCalledWith('nav .menu');
@@ -582,7 +590,7 @@ describe('BrowserService', () => {
 
     it('throws when no active session exists', async () => {
       const service = new BrowserService();
-      await expect(service.hover('no-session', '.x')).rejects.toThrow('No active browser session');
+      await expect(service.hover('no-session:default:default', '.x')).rejects.toThrow('No active browser session');
     });
   });
 
@@ -594,7 +602,7 @@ describe('BrowserService', () => {
     it('types text into a selector', async () => {
       const service = await createServiceWithSession('user-type');
 
-      const result = await service.type('user-type', '#input', 'hello world');
+      const result = await service.type('user-type:default:default', '#input', 'hello world');
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('#input', { timeout: 10000 });
       // click with count:3 to select all first
@@ -607,7 +615,7 @@ describe('BrowserService', () => {
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.type('no-session', '#input', 'text')).rejects.toThrow(
+      await expect(service.type('no-session:default:default', '#input', 'text')).rejects.toThrow(
         'No active browser session'
       );
     });
@@ -621,7 +629,7 @@ describe('BrowserService', () => {
     it('takes a full-page screenshot when fullPage=true', async () => {
       const service = await createServiceWithSession('user-ss');
 
-      const result = await service.screenshot('user-ss', { fullPage: true });
+      const result = await service.screenshot('user-ss:default:default', { fullPage: true });
 
       expect(mockPage.screenshot).toHaveBeenCalledWith({ type: 'png', fullPage: true });
       expect(result.screenshot).toBe(Buffer.from('page-screenshot').toString('base64'));
@@ -632,7 +640,7 @@ describe('BrowserService', () => {
     it('takes a viewport screenshot when fullPage=false (default)', async () => {
       const service = await createServiceWithSession('user-ss2');
 
-      const result = await service.screenshot('user-ss2');
+      const result = await service.screenshot('user-ss2:default:default');
 
       expect(mockPage.screenshot).toHaveBeenCalledWith({ type: 'png', fullPage: false });
       expect(result.screenshot).toBeDefined();
@@ -641,7 +649,7 @@ describe('BrowserService', () => {
     it('takes element screenshot when selector is provided', async () => {
       const service = await createServiceWithSession('user-ss3');
 
-      const result = await service.screenshot('user-ss3', { selector: '.hero-image' });
+      const result = await service.screenshot('user-ss3:default:default', { selector: '.hero-image' });
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('.hero-image', { timeout: 10000 });
       expect(mockElement.screenshot).toHaveBeenCalledWith({ type: 'png' });
@@ -652,7 +660,7 @@ describe('BrowserService', () => {
       const service = await createServiceWithSession('user-ss4');
       mockPage.waitForSelector.mockResolvedValueOnce(null);
 
-      await expect(service.screenshot('user-ss4', { selector: '#missing' })).rejects.toThrow(
+      await expect(service.screenshot('user-ss4:default:default', { selector: '#missing' })).rejects.toThrow(
         'Element not found: #missing'
       );
     });
@@ -660,7 +668,7 @@ describe('BrowserService', () => {
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.screenshot('no-session')).rejects.toThrow('No active browser session');
+      await expect(service.screenshot('no-session:default:default')).rejects.toThrow('No active browser session');
     });
   });
 
@@ -673,7 +681,7 @@ describe('BrowserService', () => {
       const service = await createServiceWithSession('user-et');
       mockPage.$eval.mockResolvedValueOnce('full page body text');
 
-      const result = await service.extractText('user-et');
+      const result = await service.extractText('user-et:default:default');
 
       expect(mockPage.$eval).toHaveBeenCalledWith('body', expect.any(Function));
       expect(result.text).toBe('full page body text');
@@ -685,7 +693,7 @@ describe('BrowserService', () => {
       const service = await createServiceWithSession('user-et2');
       mockPage.$eval.mockResolvedValueOnce('article text');
 
-      const result = await service.extractText('user-et2', 'article');
+      const result = await service.extractText('user-et2:default:default', 'article');
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('article', { timeout: 10000 });
       expect(mockPage.$eval).toHaveBeenCalledWith('article', expect.any(Function));
@@ -697,14 +705,14 @@ describe('BrowserService', () => {
       const longText = 'x'.repeat(60000);
       mockPage.$eval.mockResolvedValueOnce(longText);
 
-      const result = await service.extractText('user-et3');
+      const result = await service.extractText('user-et3:default:default');
       expect(result.text.length).toBe(50000);
     });
 
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.extractText('no-session', '.text')).rejects.toThrow(
+      await expect(service.extractText('no-session:default:default', '.text')).rejects.toThrow(
         'No active browser session'
       );
     });
@@ -722,7 +730,7 @@ describe('BrowserService', () => {
         .mockResolvedValueOnce('John Doe') // name
         .mockResolvedValueOnce('john@example.com'); // email
 
-      const result = await service.extractData('user-ed', {
+      const result = await service.extractData('user-ed:default:default', {
         name: '.user-name',
         email: '.user-email',
       });
@@ -739,7 +747,7 @@ describe('BrowserService', () => {
       // second selector succeeds
       mockPage.$eval.mockResolvedValueOnce('found');
 
-      const result = await service.extractData('user-ed2', {
+      const result = await service.extractData('user-ed2:default:default', {
         missing: '.missing',
         found: '.found',
       });
@@ -751,14 +759,14 @@ describe('BrowserService', () => {
     it('returns empty data object when selectors map is empty', async () => {
       const service = await createServiceWithSession('user-ed3');
 
-      const result = await service.extractData('user-ed3', {});
+      const result = await service.extractData('user-ed3:default:default', {});
       expect(result.data).toEqual({});
     });
 
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.extractData('no-session', { key: '.sel' })).rejects.toThrow(
+      await expect(service.extractData('no-session:default:default', { key: '.sel' })).rejects.toThrow(
         'No active browser session'
       );
     });
@@ -772,7 +780,7 @@ describe('BrowserService', () => {
     it('fills form fields without PII warnings', async () => {
       const service = await createServiceWithSession('user-ff');
 
-      const result = await service.fillForm('user-ff', [
+      const result = await service.fillForm('user-ff:default:default', [
         { selector: '#name', value: 'Alice' },
         { selector: '#city', value: 'Paris' },
       ]);
@@ -791,7 +799,7 @@ describe('BrowserService', () => {
         matches: [{ category: 'email' }, { category: 'phone' }],
       });
 
-      const result = await service.fillForm('user-ff2', [
+      const result = await service.fillForm('user-ff2:default:default', [
         { selector: '#contact', value: 'john@example.com 555-1234' },
       ]);
 
@@ -810,7 +818,7 @@ describe('BrowserService', () => {
       mockHasPII.mockReturnValueOnce(true).mockReturnValueOnce(false);
       mockDetectPII.mockReturnValueOnce({ matches: [{ category: 'ssn' }] });
 
-      const result = await service.fillForm('user-ff3', [
+      const result = await service.fillForm('user-ff3:default:default', [
         { selector: '#ssn', value: '123-45-6789' },
         { selector: '#username', value: 'alice' },
       ]);
@@ -823,7 +831,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
 
       await expect(
-        service.fillForm('no-session', [{ selector: '#f', value: 'v' }])
+        service.fillForm('no-session:default:default', [{ selector: '#f', value: 'v' }])
       ).rejects.toThrow('No active browser session');
     });
   });
@@ -836,7 +844,7 @@ describe('BrowserService', () => {
     it('waits for a selector when selector is provided', async () => {
       const service = await createServiceWithSession('user-wait');
 
-      const result = await service.wait('user-wait', '.loader', 5000);
+      const result = await service.wait('user-wait:default:default', '.loader', 5000);
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('.loader', { timeout: 5000 });
       expect(result.url).toBe('https://example.com');
@@ -846,7 +854,7 @@ describe('BrowserService', () => {
     it('uses default timeout when none provided', async () => {
       const service = await createServiceWithSession('user-wait2');
 
-      await service.wait('user-wait2', '.spinner');
+      await service.wait('user-wait2:default:default', '.spinner');
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('.spinner', { timeout: 10000 });
     });
@@ -854,7 +862,7 @@ describe('BrowserService', () => {
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.wait('no-session', '.sel')).rejects.toThrow('No active browser session');
+      await expect(service.wait('no-session:default:default', '.sel')).rejects.toThrow('No active browser session');
     });
   });
 
@@ -866,7 +874,7 @@ describe('BrowserService', () => {
     it('scrolls down by default 500px', async () => {
       const service = await createServiceWithSession('user-scroll');
 
-      const result = await service.scroll('user-scroll', 'down');
+      const result = await service.scroll('user-scroll:default:default', 'down');
 
       expect(mockPage.mouse.wheel).toHaveBeenCalledWith({ deltaY: 500 });
       expect(result.url).toBe('https://example.com');
@@ -875,7 +883,7 @@ describe('BrowserService', () => {
     it('scrolls up by negative pixels', async () => {
       const service = await createServiceWithSession('user-scroll2');
 
-      await service.scroll('user-scroll2', 'up', 300);
+      await service.scroll('user-scroll2:default:default', 'up', 300);
 
       expect(mockPage.mouse.wheel).toHaveBeenCalledWith({ deltaY: -300 });
     });
@@ -883,7 +891,7 @@ describe('BrowserService', () => {
     it('scrolls down by specified pixels', async () => {
       const service = await createServiceWithSession('user-scroll3');
 
-      await service.scroll('user-scroll3', 'down', 1200);
+      await service.scroll('user-scroll3:default:default', 'down', 1200);
 
       expect(mockPage.mouse.wheel).toHaveBeenCalledWith({ deltaY: 1200 });
     });
@@ -891,7 +899,7 @@ describe('BrowserService', () => {
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.scroll('no-session', 'down')).rejects.toThrow(
+      await expect(service.scroll('no-session:default:default', 'down')).rejects.toThrow(
         'No active browser session'
       );
     });
@@ -905,7 +913,7 @@ describe('BrowserService', () => {
     it('selects an option in a dropdown', async () => {
       const service = await createServiceWithSession('user-select');
 
-      const result = await service.select('user-select', '#country', 'US');
+      const result = await service.select('user-select:default:default', '#country', 'US');
 
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('#country', { timeout: 10000 });
       expect(mockPage.select).toHaveBeenCalledWith('#country', 'US');
@@ -916,7 +924,7 @@ describe('BrowserService', () => {
     it('throws when no active session exists for user', async () => {
       const service = new BrowserService();
 
-      await expect(service.select('no-session', '#sel', 'val')).rejects.toThrow(
+      await expect(service.select('no-session:default:default', '#sel', 'val')).rejects.toThrow(
         'No active browser session'
       );
     });
@@ -929,7 +937,7 @@ describe('BrowserService', () => {
   describe('pressKey()', () => {
     it('presses a key without focusing when no selector is given', async () => {
       const service = await createServiceWithSession('user-press');
-      const result = await service.pressKey('user-press', 'Enter');
+      const result = await service.pressKey('user-press:default:default', 'Enter');
       expect(mockPage.keyboard.press).toHaveBeenCalledWith('Enter');
       expect(mockPage.focus).not.toHaveBeenCalled();
       expect(result.url).toBe('https://example.com');
@@ -937,7 +945,7 @@ describe('BrowserService', () => {
 
     it('focuses the selector first, then presses the key', async () => {
       const service = await createServiceWithSession('user-press2');
-      await service.pressKey('user-press2', 'Enter', 'input.search');
+      await service.pressKey('user-press2:default:default', 'Enter', 'input.search');
       expect(mockPage.waitForSelector).toHaveBeenCalledWith('input.search', { timeout: 10000 });
       expect(mockPage.focus).toHaveBeenCalledWith('input.search');
       expect(mockPage.keyboard.press).toHaveBeenCalledWith('Enter');
@@ -945,7 +953,7 @@ describe('BrowserService', () => {
 
     it('throws when no active session exists', async () => {
       const service = new BrowserService();
-      await expect(service.pressKey('no-session', 'Enter')).rejects.toThrow(
+      await expect(service.pressKey('no-session:default:default', 'Enter')).rejects.toThrow(
         'No active browser session'
       );
     });
@@ -958,13 +966,13 @@ describe('BrowserService', () => {
   describe('getState()', () => {
     it('returns url + title for an active session', async () => {
       const service = await createServiceWithSession('user-state');
-      const state = await service.getState('user-state');
+      const state = await service.getState('user-state:default:default');
       expect(state).toEqual({ url: 'https://example.com', title: 'Test Page' });
     });
 
     it('returns null (does NOT throw) when no session exists', async () => {
       const service = new BrowserService();
-      const state = await service.getState('no-session');
+      const state = await service.getState('no-session:default:default');
       expect(state).toBeNull();
     });
   });
@@ -977,18 +985,18 @@ describe('BrowserService', () => {
     it('closes a session that exists and returns true', async () => {
       const service = await createServiceWithSession('user-close');
 
-      const closed = await service.closePage('user-close');
+      const closed = await service.closePage('user-close:default:default');
 
       expect(closed).toBe(true);
       expect(mockPage.close).toHaveBeenCalled();
       // Session should be gone now
-      expect(service.getPageInfo('user-close')).toBeNull();
+      expect(service.getPageInfo('user-close:default:default')).toBeNull();
     });
 
     it('returns false when no session exists for the user', async () => {
       const service = new BrowserService();
 
-      const closed = await service.closePage('nonexistent-user');
+      const closed = await service.closePage('nonexistent-user:default:default');
 
       expect(closed).toBe(false);
     });
@@ -998,7 +1006,7 @@ describe('BrowserService', () => {
       mockPage.close.mockRejectedValueOnce(new Error('Target closed'));
 
       // Should not throw
-      const closed = await service.closePage('user-close2');
+      const closed = await service.closePage('user-close2:default:default');
       expect(closed).toBe(true);
     });
   });
@@ -1011,7 +1019,7 @@ describe('BrowserService', () => {
     it('returns page info when a session exists', async () => {
       const service = await createServiceWithSession('user-pi');
 
-      const info = service.getPageInfo('user-pi');
+      const info = service.getPageInfo('user-pi:default:default');
 
       expect(info).not.toBeNull();
       expect(info?.url).toBe('https://example.com');
@@ -1021,7 +1029,7 @@ describe('BrowserService', () => {
     it('returns null when no session exists for user', () => {
       const service = new BrowserService();
 
-      expect(service.getPageInfo('nobody')).toBeNull();
+      expect(service.getPageInfo('nobody:default:default')).toBeNull();
     });
   });
 
@@ -1038,7 +1046,7 @@ describe('BrowserService', () => {
       expect(mockPage.close).toHaveBeenCalled();
       expect(mockBrowser.close).toHaveBeenCalled();
       // Sessions should be cleared
-      expect(service.getPageInfo('user-sd')).toBeNull();
+      expect(service.getPageInfo('user-sd:default:default')).toBeNull();
     });
 
     it('handles page.close() and browser.close() throwing during shutdown', async () => {
@@ -1069,14 +1077,14 @@ describe('BrowserService', () => {
 
       // Create a session
       mockPage.$eval.mockResolvedValue('');
-      await service.navigate('user-stale', 'https://example.com');
+      await service.navigate('user-stale:default:default', 'user-stale', 'https://example.com');
 
-      expect(service.getPageInfo('user-stale')).not.toBeNull();
+      expect(service.getPageInfo('user-stale:default:default')).not.toBeNull();
 
       // Advance time beyond SESSION_TIMEOUT_MS (10 min) + CLEANUP_INTERVAL_MS (5 min)
       await vi.advanceTimersByTimeAsync(16 * 60 * 1000);
 
-      expect(service.getPageInfo('user-stale')).toBeNull();
+      expect(service.getPageInfo('user-stale:default:default')).toBeNull();
 
       vi.useRealTimers();
     });
@@ -1086,7 +1094,7 @@ describe('BrowserService', () => {
 
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValue('');
-      await service.navigate('user-stale2', 'https://example.com');
+      await service.navigate('default:default:default', 'user-stale2', 'https://example.com');
 
       await vi.advanceTimersByTimeAsync(16 * 60 * 1000);
 
@@ -1100,12 +1108,12 @@ describe('BrowserService', () => {
 
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValue('');
-      await service.navigate('user-active', 'https://example.com');
+      await service.navigate('user-active:default:default', 'user-active', 'https://example.com');
 
       // Advance less than SESSION_TIMEOUT_MS
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
-      expect(service.getPageInfo('user-active')).not.toBeNull();
+      expect(service.getPageInfo('user-active:default:default')).not.toBeNull();
 
       vi.useRealTimers();
     });
@@ -1121,7 +1129,7 @@ describe('BrowserService', () => {
       mockPage.$eval.mockResolvedValue('');
 
       // First navigate creates the session
-      await service.navigate('user-max', 'https://example.com');
+      await service.navigate('default:default:default', 'user-max', 'https://example.com');
 
       // The sessions map already has user-max, so re-navigation reuses it
       // To test the limit we need to fill sessions with DIFFERENT user keys
@@ -1165,7 +1173,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValueOnce('');
 
-      await service.navigate('user-intercept', 'https://example.com');
+      await service.navigate('default:default:default', 'user-intercept', 'https://example.com');
 
       // Retrieve the request handler registered via page.on('request', ...)
       const onCalls = (mockPage.on as ReturnType<typeof vi.fn>).mock.calls;
@@ -1217,7 +1225,7 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValueOnce('');
 
-      await service.navigate('user-dc', 'https://example.com');
+      await service.navigate('default:default:default', 'user-dc', 'https://example.com');
 
       // Find and invoke the 'disconnected' handler registered on browser
       const onCalls = (mockBrowser.on as ReturnType<typeof vi.fn>).mock.calls;
@@ -1228,7 +1236,7 @@ describe('BrowserService', () => {
       handler(); // simulate disconnect
 
       // Sessions should be cleared
-      expect(service.getPageInfo('user-dc')).toBeNull();
+      expect(service.getPageInfo('user-dc:default:default')).toBeNull();
     });
   });
 
@@ -1241,8 +1249,8 @@ describe('BrowserService', () => {
       const service = new BrowserService();
       mockPage.$eval.mockResolvedValue('');
 
-      await service.navigate('user-a', 'https://example.com');
-      await service.navigate('user-b', 'https://example.org');
+      await service.navigate('default:default:default', 'user-a', 'https://example.com');
+      await service.navigate('default:default:default', 'user-b', 'https://example.org');
 
       // puppeteer.launch should be called only once
       expect(mockPuppeteerLaunch).toHaveBeenCalledTimes(1);
@@ -1253,7 +1261,7 @@ describe('BrowserService', () => {
       mockPage.$eval.mockResolvedValue('');
 
       // First navigate — launches browser
-      await service.navigate('user-relaunch', 'https://example.com');
+      await service.navigate('default:default:default', 'user-relaunch', 'https://example.com');
       expect(mockPuppeteerLaunch).toHaveBeenCalledTimes(1);
 
       // Simulate browser 'disconnected' event, which sets this.browser = null
@@ -1265,7 +1273,7 @@ describe('BrowserService', () => {
       disconnectHandler(); // fires → this.browser = null, sessions cleared
 
       // Now navigate again — should relaunch since browser is null
-      await service.navigate('user-relaunch', 'https://example.com');
+      await service.navigate('default:default:default', 'user-relaunch', 'https://example.com');
       expect(mockPuppeteerLaunch).toHaveBeenCalledTimes(2);
     });
   });
@@ -1533,6 +1541,10 @@ describe('BrowserService concurrent cold-start (round 71)', () => {
           browser.connected = false;
         }),
         on: vi.fn(),
+        createBrowserContext: vi.fn().mockResolvedValue({
+          newPage: vi.fn().mockResolvedValue(mockPage),
+          close: vi.fn().mockResolvedValue(undefined),
+        }),
       };
       launched.push(browser);
       return browser;
@@ -1543,7 +1555,7 @@ describe('BrowserService concurrent cold-start (round 71)', () => {
     const service = new BrowserService();
 
     // user-a navigates: parks inside launch #1.
-    const navA = service.navigate('user-a', 'https://example.com');
+    const navA = service.navigate('default:default:default', 'user-a', 'https://example.com');
     for (let i = 0; i < 200 && !firstEntered; i++) await tick();
     expect(firstEntered).toBe(true);
 
@@ -1551,7 +1563,7 @@ describe('BrowserService concurrent cold-start (round 71)', () => {
     // past the `this.browser?.connected` check while this.browser is still
     // null — pre-fix this triggers a SECOND launch; post-fix user-b joins
     // the in-flight launch promise.
-    const navB = service.navigate('user-b', 'https://example.com');
+    const navB = service.navigate('default:default:default', 'user-b', 'https://example.com');
     for (let i = 0; i < 20; i++) await tick();
 
     releaseFirst();

@@ -11,35 +11,7 @@ export class AnalyticsService implements AnalyticsEngine {
   private recommendations: LearningRecommendation[] = [];
 
   constructor() {
-    // Generate some mock historical data for the MVP
-    this.metrics.push(
-      {
-        timestamp: new Date(Date.now() - 86400000).toISOString(),
-        category: 'task',
-        metric: 'tasks_completed',
-        value: 12,
-        metadata: {},
-      },
-      {
-        timestamp: new Date(Date.now() - 86400000).toISOString(),
-        category: 'cost',
-        metric: 'daily_spend_usd',
-        value: 1.45,
-        metadata: {},
-      }
-    );
-
-    this.recommendations.push({
-      id: 'rec_1',
-      title: 'Optimize Browser Polling',
-      description:
-        'Tasks using the BrowserProvider are polling too frequently, causing unnecessary token usage. Propose increasing wait intervals.',
-      sourceType: 'cost_optimization',
-      targetComponent: 'BrowserProvider',
-      proposedChange: { defaultWaitMs: 2000 },
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    });
+    // No mock data in production
   }
 
   async recordMetric(metric: MetricData): Promise<void> {
@@ -70,11 +42,11 @@ export class AnalyticsService implements AnalyticsEngine {
       .reduce((sum, m) => sum + m.value, 0);
 
     return {
-      totalTasks: tasks + 5, // add mock baseline
-      successRate: 94.5,
-      totalCostUsd: costs + 2.1,
-      totalTokens: costs * 100000 + 150000,
-      activeAgents: 3,
+      totalTasks: tasks,
+      successRate: tasks > 0 ? 100 : 0,
+      totalCostUsd: costs,
+      totalTokens: costs * 100000,
+      activeAgents: 0,
     };
   }
 

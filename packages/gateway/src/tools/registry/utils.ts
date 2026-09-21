@@ -61,7 +61,8 @@ export function removeSupersededCoreStubs(
 export type ToolExecutor = (
   name: string,
   args: Record<string, unknown>,
-  userId?: string
+  userId?: string,
+  context?: any
 ) => Promise<{ success: boolean; result?: unknown; error?: string }>;
 
 export interface ToolGroup {

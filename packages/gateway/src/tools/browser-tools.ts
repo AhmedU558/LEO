@@ -366,7 +366,8 @@ export const BROWSER_TOOL_NAMES = BROWSER_TOOLS.map((t) => t.name);
 export async function executeBrowserTool(
   toolName: string,
   args: Record<string, unknown>,
-  userId?: string
+  userId?: string,
+  context?: any
 ): Promise<{ success: boolean; result?: unknown; error?: string }> {
   const service = getBrowserService();
 
@@ -380,13 +381,16 @@ export async function executeBrowserTool(
   }
 
   const uid = userId ?? 'default';
+  const workspaceId = context?.workspaceDir ?? 'default';
+  const executionId = context?.conversationId ?? 'default';
+  const sessionId = `${uid}:${workspaceId}:${executionId}`;
 
   try {
     switch (toolName) {
       case 'browse_web': {
         const url = args.url as string;
         if (!url) return { success: false, error: 'url is required' };
-        const result = await service.navigate(uid, url);
+        const result = await service.navigate(sessionId, uid, url);
         return {
           success: true,
           result: {
@@ -400,7 +404,7 @@ export async function executeBrowserTool(
       case 'browser_click': {
         const selector = args.selector as string;
         if (!selector) return { success: false, error: 'selector is required' };
-        const result = await service.click(uid, selector);
+        const result = await service.click(sessionId, selector);
         return { success: true, result };
       }
 
@@ -408,7 +412,7 @@ export async function executeBrowserTool(
         const selector = args.selector as string;
         const text = args.text as string;
         if (!selector || !text) return { success: false, error: 'selector and text are required' };
-        const result = await service.type(uid, selector, text);
+        const result = await service.type(sessionId, selector, text);
         return { success: true, result };
       }
 
@@ -417,7 +421,7 @@ export async function executeBrowserTool(
         if (!Array.isArray(fields) || fields.length === 0) {
           return { success: false, error: 'fields array is required and must not be empty' };
         }
-        const result = await service.fillForm(uid, fields);
+        const result = await service.fillForm(sessionId, fields);
         return {
           success: true,
           result: {
@@ -429,7 +433,7 @@ export async function executeBrowserTool(
       }
 
       case 'browser_screenshot': {
-        const result = await service.screenshot(uid, {
+        const result = await service.screenshot(sessionId, {
           fullPage: args.fullPage as boolean | undefined,
           selector: args.selector as string | undefined,
         });
@@ -446,17 +450,17 @@ export async function executeBrowserTool(
       case 'browser_extract': {
         const dataSelectors = args.dataSelectors as Record<string, string> | undefined;
         if (dataSelectors && typeof dataSelectors === 'object') {
-          const result = await service.extractData(uid, dataSelectors);
+          const result = await service.extractData(sessionId, dataSelectors);
           return { success: true, result };
         }
-        const result = await service.extractText(uid, args.selector as string | undefined);
+        const result = await service.extractText(sessionId, args.selector as string | undefined);
         return { success: true, result };
       }
 
       case 'browser_wait_for': {
         const selector = args.selector as string | undefined;
         const timeoutMs = typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined;
-        const result = await service.wait(uid, selector, timeoutMs);
+        const result = await service.wait(sessionId, selector, timeoutMs);
         return { success: true, result };
       }
 
@@ -466,7 +470,7 @@ export async function executeBrowserTool(
           return { success: false, error: 'direction must be "up" or "down"' };
         }
         const pixels = typeof args.pixels === 'number' ? args.pixels : undefined;
-        const result = await service.scroll(uid, direction, pixels);
+        const result = await service.scroll(sessionId, direction, pixels);
         return { success: true, result };
       }
 
@@ -476,7 +480,7 @@ export async function executeBrowserTool(
         if (!selector || typeof value !== 'string') {
           return { success: false, error: 'selector and value are required' };
         }
-        const result = await service.select(uid, selector, value);
+        const result = await service.select(sessionId, selector, value);
         return { success: true, result };
       }
 
@@ -484,29 +488,29 @@ export async function executeBrowserTool(
         const key = args.key as string;
         if (!key) return { success: false, error: 'key is required' };
         const selector = args.selector as string | undefined;
-        const result = await service.pressKey(uid, key, selector);
+        const result = await service.pressKey(sessionId, key, selector);
         return { success: true, result };
       }
 
       case 'browser_navigate_back': {
-        const result = await service.goBack(uid);
+        const result = await service.goBack(sessionId);
         return { success: true, result };
       }
 
       case 'browser_hover': {
         const selector = args.selector as string;
         if (!selector) return { success: false, error: 'selector is required' };
-        const result = await service.hover(uid, selector);
+        const result = await service.hover(sessionId, selector);
         return { success: true, result };
       }
 
       case 'browser_get_state': {
-        const result = await service.getState(uid);
+        const result = await service.getState(sessionId);
         return { success: true, result };
       }
 
       case 'browser_accessibility_tree': {
-        const result = await service.accessibilityTree(uid, args.selector as string | undefined);
+        const result = await service.accessibilityTree(sessionId, args.selector as string | undefined);
         return { success: true, result };
       }
 

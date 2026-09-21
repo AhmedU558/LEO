@@ -101,13 +101,13 @@ describe('executeBrowserTool', () => {
         title: 'Example',
         text: 'Hello world',
       });
-      expect(mockService.navigate).toHaveBeenCalledWith('default', 'https://example.com');
+      expect(mockService.navigate).toHaveBeenCalledWith('default:default:default', 'default', 'https://example.com');
     });
 
     it('uses userId when provided', async () => {
       mockService.navigate.mockResolvedValueOnce({ url: 'x', title: 'x', text: '' });
       await executeBrowserTool('browse_web', { url: 'https://x.com' }, 'user-42');
-      expect(mockService.navigate).toHaveBeenCalledWith('user-42', 'https://x.com');
+      expect(mockService.navigate).toHaveBeenCalledWith('user-42:default:default', 'user-42', 'https://x.com');
     });
 
     it('returns error when url is missing', async () => {
@@ -126,7 +126,7 @@ describe('executeBrowserTool', () => {
       mockService.click.mockResolvedValueOnce({ url: 'https://example.com', title: 'Clicked' });
       const result = await executeBrowserTool('browser_click', { selector: '#submit' });
       expect(result.success).toBe(true);
-      expect(mockService.click).toHaveBeenCalledWith('default', '#submit');
+      expect(mockService.click).toHaveBeenCalledWith('default:default:default', '#submit');
     });
 
     it('returns error when selector is missing', async () => {
@@ -148,7 +148,7 @@ describe('executeBrowserTool', () => {
         text: 'Alice',
       });
       expect(result.success).toBe(true);
-      expect(mockService.type).toHaveBeenCalledWith('default', 'input#name', 'Alice');
+      expect(mockService.type).toHaveBeenCalledWith('default:default:default', 'input#name', 'Alice');
     });
 
     it('returns error when selector or text is missing', async () => {
@@ -173,7 +173,7 @@ describe('executeBrowserTool', () => {
       const fields = [{ selector: '#email', value: 'a@b.com' }];
       const result = await executeBrowserTool('browser_fill_form', { fields });
       expect(result.success).toBe(true);
-      expect(mockService.fillForm).toHaveBeenCalledWith('default', fields);
+      expect(mockService.fillForm).toHaveBeenCalledWith('default:default:default', fields);
     });
 
     it('omits piiWarnings from result when empty', async () => {
@@ -233,7 +233,7 @@ describe('executeBrowserTool', () => {
     it('passes fullPage and selector options to service', async () => {
       mockService.screenshot.mockResolvedValueOnce({ url: '', title: '', screenshot: '' });
       await executeBrowserTool('browser_screenshot', { fullPage: true, selector: '.content' });
-      expect(mockService.screenshot).toHaveBeenCalledWith('default', {
+      expect(mockService.screenshot).toHaveBeenCalledWith('default:default:default', {
         fullPage: true,
         selector: '.content',
       });
@@ -251,7 +251,7 @@ describe('executeBrowserTool', () => {
         dataSelectors: { title: 'h1', price: '.price' },
       });
       expect(result.success).toBe(true);
-      expect(mockService.extractData).toHaveBeenCalledWith('default', {
+      expect(mockService.extractData).toHaveBeenCalledWith('default:default:default', {
         title: 'h1',
         price: '.price',
       });
@@ -261,13 +261,13 @@ describe('executeBrowserTool', () => {
       mockService.extractText.mockResolvedValueOnce('page text');
       const result = await executeBrowserTool('browser_extract', {});
       expect(result.success).toBe(true);
-      expect(mockService.extractText).toHaveBeenCalledWith('default', undefined);
+      expect(mockService.extractText).toHaveBeenCalledWith('default:default:default', undefined);
     });
 
     it('passes selector to extractText', async () => {
       mockService.extractText.mockResolvedValueOnce('section text');
       await executeBrowserTool('browser_extract', { selector: '.article' });
-      expect(mockService.extractText).toHaveBeenCalledWith('default', '.article');
+      expect(mockService.extractText).toHaveBeenCalledWith('default:default:default', '.article');
     });
   });
 
@@ -287,13 +287,13 @@ describe('executeBrowserTool', () => {
         timeoutMs: 3000,
       });
       expect(result.success).toBe(true);
-      expect(mockService.wait).toHaveBeenCalledWith('default', '.ready', 3000);
+      expect(mockService.wait).toHaveBeenCalledWith('default:default:default', '.ready', 3000);
     });
 
     it('passes undefined selector + undefined timeout when args are empty', async () => {
       mockService.wait.mockResolvedValueOnce({ url: 'https://a', title: 'A' });
       await executeBrowserTool('browser_wait_for', {});
-      expect(mockService.wait).toHaveBeenCalledWith('default', undefined, undefined);
+      expect(mockService.wait).toHaveBeenCalledWith('default:default:default', undefined, undefined);
     });
   });
 
@@ -320,7 +320,7 @@ describe('executeBrowserTool', () => {
         pixels: 800,
       });
       expect(result.success).toBe(true);
-      expect(mockService.scroll).toHaveBeenCalledWith('default', 'down', 800);
+      expect(mockService.scroll).toHaveBeenCalledWith('default:default:default', 'down', 800);
     });
   });
 
@@ -349,13 +349,13 @@ describe('executeBrowserTool', () => {
         value: '',
       });
       expect(result.success).toBe(true);
-      expect(mockService.select).toHaveBeenCalledWith('default', 'select#country', '');
+      expect(mockService.select).toHaveBeenCalledWith('default:default:default', 'select#country', '');
     });
 
     it('forwards selector + value to service.select', async () => {
       mockService.select.mockResolvedValueOnce({ url: 'https://a', title: 'A' });
       await executeBrowserTool('browser_select', { selector: 'select#country', value: 'us' });
-      expect(mockService.select).toHaveBeenCalledWith('default', 'select#country', 'us');
+      expect(mockService.select).toHaveBeenCalledWith('default:default:default', 'select#country', 'us');
     });
   });
 
@@ -374,13 +374,13 @@ describe('executeBrowserTool', () => {
       mockService.pressKey.mockResolvedValueOnce({ url: 'https://a', title: 'A' });
       const result = await executeBrowserTool('browser_press_key', { key: 'Enter' });
       expect(result.success).toBe(true);
-      expect(mockService.pressKey).toHaveBeenCalledWith('default', 'Enter', undefined);
+      expect(mockService.pressKey).toHaveBeenCalledWith('default:default:default', 'Enter', undefined);
     });
 
     it('forwards key + selector when selector is supplied', async () => {
       mockService.pressKey.mockResolvedValueOnce({ url: 'https://a', title: 'A' });
       await executeBrowserTool('browser_press_key', { key: 'Enter', selector: 'input.search' });
-      expect(mockService.pressKey).toHaveBeenCalledWith('default', 'Enter', 'input.search');
+      expect(mockService.pressKey).toHaveBeenCalledWith('default:default:default', 'Enter', 'input.search');
     });
   });
 
@@ -397,7 +397,7 @@ describe('executeBrowserTool', () => {
       });
       const result = await executeBrowserTool('browser_navigate_back', {});
       expect(result.success).toBe(true);
-      expect(mockService.goBack).toHaveBeenCalledWith('default');
+      expect(mockService.goBack).toHaveBeenCalledWith('default:default:default');
       expect((result.result as { navigated: boolean }).navigated).toBe(true);
     });
 
@@ -427,7 +427,7 @@ describe('executeBrowserTool', () => {
       mockService.hover.mockResolvedValueOnce({ url: 'https://a', title: 'A' });
       const result = await executeBrowserTool('browser_hover', { selector: 'nav .menu' });
       expect(result.success).toBe(true);
-      expect(mockService.hover).toHaveBeenCalledWith('default', 'nav .menu');
+      expect(mockService.hover).toHaveBeenCalledWith('default:default:default', 'nav .menu');
     });
   });
 
@@ -460,7 +460,7 @@ describe('executeBrowserTool', () => {
       });
       const result = await executeBrowserTool('browser_accessibility_tree', { selector: 'main' });
       expect(result.success).toBe(true);
-      expect(mockService.accessibilityTree).toHaveBeenCalledWith('default', 'main');
+      expect(mockService.accessibilityTree).toHaveBeenCalledWith('default:default:default', 'main');
       expect((result.result as { tree: string }).tree).toContain('button "Submit"');
     });
 
@@ -472,7 +472,7 @@ describe('executeBrowserTool', () => {
       });
       const result = await executeBrowserTool('browser_accessibility_tree', {});
       expect(result.success).toBe(true);
-      expect(mockService.accessibilityTree).toHaveBeenCalledWith('default', undefined);
+      expect(mockService.accessibilityTree).toHaveBeenCalledWith('default:default:default', undefined);
     });
   });
 

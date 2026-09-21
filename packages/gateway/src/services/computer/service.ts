@@ -95,11 +95,16 @@ export class ComputerService {
       return { success: false, error: errorMsg };
     }
 
-    // 3. Execution logic routing (simulated MVP)
+    // 3. Execution logic routing
     const startTime = Date.now();
     try {
-      // Stub: in reality we would route to Playwright/CDP or Qwen Open Computer Use
-      const providerResult = await this.simulateProviderExecution(action);
+      // Production paths must never fabricate success.
+      // Explicitly fail if no real provider is injected/available.
+      const providerResult: ComputerActionResult = {
+        success: false,
+        error: 'No production computer execution provider configured.',
+        data: { simulated: true, status: 'not_implemented' }
+      };
 
       const duration = Date.now() - startTime;
       if (providerResult.success) {
@@ -119,15 +124,5 @@ export class ComputerService {
       ActionLedger.updateResult(ledgerEntry.actionId, { error: errorMessage }, duration);
       return { success: false, error: errorMessage };
     }
-  }
-
-  private async simulateProviderExecution(action: ComputerAction): Promise<ComputerActionResult> {
-    // Simulate execution delay (e.g., Playwright or Qwen backend)
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return {
-      success: true,
-      data: { status: 'mock_success', executed: action.type },
-      screenshotBase64: 'mock_base64_screenshot_data',
-    };
   }
 }

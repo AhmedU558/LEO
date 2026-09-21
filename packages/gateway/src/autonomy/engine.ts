@@ -261,7 +261,9 @@ export class AutonomyEngine implements IPulseService {
       // 4. Map agent's tool calls to PulseActionResult[] for logging
       const actionResults: PulseActionResult[] = agentResult.toolCalls.map((tc) => ({
         type: tc.name ?? 'agent_action',
-        success: true,
+        // QA-022: Do not fabricate success for tool outcomes we didn't track
+        success: false,
+        error: 'Outcome unknown from final result',
         output: { arguments: tc.arguments },
       }));
 

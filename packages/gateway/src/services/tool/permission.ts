@@ -28,7 +28,22 @@ function determineCapabilityForTool(toolName: string): Capability {
     case 'write_file': return 'filesystem.write';
     case 'send_email': return 'email.send';
     case 'read_email': return 'email.read';
-    default: return 'agent.execute';
+      case 'browse_web':
+      case 'browser_navigate': return 'browser.navigate';
+      case 'browser_click':
+      case 'browser_type':
+      case 'browser_scroll':
+      case 'browser_wait_for':
+      case 'browser_select':
+      case 'browser_press_key':
+      case 'browser_hover':
+      case 'browser_fill_form':
+      case 'browser_extract':
+      case 'browser_extract_data':
+      case 'browser_screenshot':
+      case 'browser_accessibility_tree':
+      case 'browser_get_state': return 'browser.read';
+      default: return 'agent.execute';
   }
 }
 

@@ -119,7 +119,7 @@ export function getClientIp(c: Context): string {
 export function isRequestFromTrustedProxy(c: Context): boolean {
   if (!isProxyAwareConfigured()) return false;
   if (TRUST_ANY) return true;
-  
+
   try {
     const info = getConnInfo(c);
     const socketIp = info?.remote?.address;

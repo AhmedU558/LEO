@@ -192,14 +192,14 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
   for (const group of groups) {
     for (const toolDef of group.definitions) {
       const qName = qualifyToolName(toolDef.name, 'core');
-      tools.register({ ...toolDef, name: qName }, async (args): Promise<CoreToolResult> => {
+      tools.register({ ...toolDef, name: qName }, async (args, context): Promise<CoreToolResult> => {
         const startTime = trace
           ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
           : 0;
 
         const result = group.needsUserId
-          ? await group.executor(toolDef.name, args as Record<string, unknown>, userId)
-          : await group.executor(toolDef.name, args as Record<string, unknown>);
+          ? await group.executor(toolDef.name, args as Record<string, unknown>, userId, context)
+          : await group.executor(toolDef.name, args as Record<string, unknown>, undefined, context);
 
         if (trace) {
           traceToolCallEnd(toolDef.name, startTime, result.success, result.result, result.error);

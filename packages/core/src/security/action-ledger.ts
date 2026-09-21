@@ -47,13 +47,13 @@ export interface ActionLedgerProvider {
 
 export class ActionLedger {
   private static provider: ActionLedgerProvider | null = null;
-  
+
   // In-memory fallback for tests or edge execution
   private static lastHash: string = 'genesis';
   private static entries: ActionLedgerEntry[] = [];
   private static indexByWorkspace: Map<string, ActionLedgerEntry[]> = new Map();
   private static indexByActionId: Map<string, ActionLedgerEntry> = new Map();
-  
+
   // Queue to serialize local in-memory writes
   private static writeQueue: Promise<void> = Promise.resolve();
 
@@ -67,14 +67,14 @@ export class ActionLedger {
     if (this.provider) {
       return this.provider.record(entryData);
     }
-    
+
     return new Promise((resolve, reject) => {
       this.writeQueue = this.writeQueue.then(async () => {
         try {
           const actionId = generateId('act');
           const timestamp = new Date();
           const previousHash = this.lastHash;
-          
+
           const hashData = `${actionId}:${timestamp.toISOString()}:${previousHash}:${entryData.userId}:${entryData.action}`;
           const hash = createHash('sha256').update(hashData).digest('hex');
 
@@ -115,20 +115,20 @@ export class ActionLedger {
 
     const entry = this.indexByActionId.get(actionId);
     if (!entry) return undefined;
-    
+
     // Create new object to prevent mutating frozen stored objects
     const updated = Object.freeze({ ...entry, ...resultData, durationMs });
-    
+
     // Update indexes
     this.indexByActionId.set(actionId, updated);
-    
+
     const wsArray = this.indexByWorkspace.get(updated.workspaceId);
     if (wsArray) {
-      const idx = wsArray.findIndex(e => e.actionId === actionId);
+      const idx = wsArray.findIndex((e) => e.actionId === actionId);
       if (idx !== -1) wsArray[idx] = updated;
     }
-    
-    const entriesIdx = this.entries.findIndex(e => e.actionId === actionId);
+
+    const entriesIdx = this.entries.findIndex((e) => e.actionId === actionId);
     if (entriesIdx !== -1) this.entries[entriesIdx] = updated;
 
     return updated;
@@ -136,19 +136,25 @@ export class ActionLedger {
 
   public static async getEntries(userId?: string): Promise<ActionLedgerEntry[]> {
     if (this.provider) return this.provider.getEntries(userId);
-    const filtered = userId ? this.entries.filter(e => e.userId === userId) : this.entries;
+    const filtered = userId ? this.entries.filter((e) => e.userId === userId) : this.entries;
     // Return deep copies so callers cannot mutate the ledger
-    return filtered.map(e => ({ ...e }));
+    return filtered.map((e) => ({ ...e }));
   }
 
-  public static async getByWorkspaceId(workspaceId: string, userId?: string): Promise<ActionLedgerEntry[]> {
+  public static async getByWorkspaceId(
+    workspaceId: string,
+    userId?: string
+  ): Promise<ActionLedgerEntry[]> {
     if (this.provider) return this.provider.getByWorkspaceId(workspaceId, userId);
     let arr = this.indexByWorkspace.get(workspaceId) || [];
-    if (userId) arr = arr.filter(e => e.userId === userId);
-    return arr.map(e => ({ ...e }));
+    if (userId) arr = arr.filter((e) => e.userId === userId);
+    return arr.map((e) => ({ ...e }));
   }
 
-  public static async getByActionId(actionId: string, userId?: string): Promise<ActionLedgerEntry | undefined> {
+  public static async getByActionId(
+    actionId: string,
+    userId?: string
+  ): Promise<ActionLedgerEntry | undefined> {
     if (this.provider) return this.provider.getByActionId(actionId, userId);
     const entry = this.indexByActionId.get(actionId);
     if (entry && (!userId || entry.userId === userId)) {

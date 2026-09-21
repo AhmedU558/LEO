@@ -4,7 +4,6 @@
  * API for managing autonomy levels, risk assessment, and approvals.
  */
 
-import { getWorkspaceId } from './helpers.js';
 import { Hono, type Context } from 'hono';
 import type { AutonomyLevel } from '../autonomy/index.js';
 import {

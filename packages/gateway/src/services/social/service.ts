@@ -59,12 +59,16 @@ export class SocialService {
       return { success: false, error: errorMsg, retryable: false };
     }
 
-    // 3. Publish to provider logic (simulated for MVP)
+    // 3. Publish to provider logic
     const startTime = Date.now();
     try {
-      // Find provider based on platform and execute publish
-      // This is a stub for the actual provider logic (e.g. Instagram, TikTok, YouTube)
-      const providerResult = await this.simulateProviderPublish(content, account);
+      // Production paths must never fabricate success.
+      // Fail since real provider is not configured.
+      const providerResult: SocialPublishResult = {
+        success: false,
+        error: 'No production social publish provider configured.',
+        retryable: false,
+      };
 
       const duration = Date.now() - startTime;
       if (providerResult.success) {
@@ -84,18 +88,5 @@ export class SocialService {
       ActionLedger.updateResult(ledgerEntry.actionId, { error: errorMessage }, duration);
       return { success: false, error: errorMessage, retryable: true };
     }
-  }
-
-  private async simulateProviderPublish(
-    _content: SocialContent,
-    account: SocialAccount
-  ): Promise<SocialPublishResult> {
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return {
-      success: true,
-      providerPostId: 'sim_' + Date.now(),
-      publishedUrl: 'https://' + account.platform + '.com/post/sim_' + Date.now(),
-    };
   }
 }

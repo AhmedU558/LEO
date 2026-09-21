@@ -7,10 +7,11 @@
  */
 
 import { existsSync } from 'node:fs';
-import type { Browser, Page, SerializedAXNode } from 'puppeteer-core';
+import type { Browser, Page, SerializedAXNode, BrowserContext } from 'puppeteer-core';
 import { hasPII, detectPII } from '@ownpilot/core/privacy';
 import { getLog, getConfigCenter } from '@ownpilot/core/services';
 import { isBlockedUrl, isPrivateUrlAsync } from '../utils/ssrf.js';
+import { PolicyEngine } from '@ownpilot/core/security';
 
 const log = getLog('BrowserService');
 
@@ -195,6 +196,7 @@ interface BrowserConfigInfo {
 
 interface PageSession {
   page: Page;
+  context: BrowserContext;
   userId: string;
   createdAt: number;
   lastActivity: number;
@@ -239,11 +241,12 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async navigate(
+    sessionId: string,
     userId: string,
     url: string
   ): Promise<{ url: string; title: string; text: string }> {
-    await this.validateUrl(url);
-    const page = await this.getOrCreatePage(userId);
+    await this.validateUrl(url, sessionId);
+    const page = await this.getOrCreatePage(sessionId, userId);
 
     // Two-phase load. Pages with long-lived connections (analytics beacons,
     // websockets, SSE, ad trackers) never reach network-idle, so waiting on
@@ -294,8 +297,8 @@ export class BrowserService {
   // Click
   // --------------------------------------------------------------------------
 
-  async click(userId: string, selector: string): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+  async click(sessionId: string, selector: string): Promise<{ url: string; title: string }> {
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     await page.click(selector);
     // Wait briefly for any navigation or DOM changes
@@ -313,8 +316,8 @@ export class BrowserService {
    * `navigated: false` when there is no history to go back to (the agent then
    * knows to navigate by URL instead of assuming it moved).
    */
-  async goBack(userId: string): Promise<{ url: string; title: string; navigated: boolean }> {
-    const page = await this.getExistingPage(userId);
+  async goBack(sessionId: string): Promise<{ url: string; title: string; navigated: boolean }> {
+    const page = await this.getExistingPage(sessionId);
     const response = await page.goBack({
       waitUntil: 'domcontentloaded',
       timeout: DEFAULT_NAVIGATION_TIMEOUT,
@@ -330,8 +333,8 @@ export class BrowserService {
    * Hover the pointer over an element — reveals dropdown menus, tooltips, and
    * hover-gated controls that must be visible before they can be clicked.
    */
-  async hover(userId: string, selector: string): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+  async hover(sessionId: string, selector: string): Promise<{ url: string; title: string }> {
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     await page.hover(selector);
     // Brief settle so any hover-triggered menu/animation can render.
@@ -344,11 +347,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async type(
-    userId: string,
+    sessionId: string,
     selector: string,
     text: string
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     // Clear existing value first
     await page.click(selector, { count: 3 });
@@ -361,10 +364,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async fillForm(
-    userId: string,
+    sessionId: string,
     fields: FormField[]
   ): Promise<{ url: string; title: string; piiWarnings: string[] }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const piiWarnings: string[] = [];
 
     for (const field of fields) {
@@ -394,10 +397,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async screenshot(
-    userId: string,
+    sessionId: string,
     opts?: ScreenshotOptions
   ): Promise<{ screenshot: string; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     let buffer: Uint8Array;
 
     if (opts?.selector) {
@@ -425,10 +428,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async extractText(
-    userId: string,
+    sessionId: string,
     selector?: string
   ): Promise<{ text: string; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
 
     let text: string;
     if (selector) {
@@ -450,10 +453,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async extractData(
-    userId: string,
+    sessionId: string,
     selectors: Record<string, string>
   ): Promise<{ data: Record<string, string>; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const data: Record<string, string> = {};
 
     for (const [key, selector] of Object.entries(selectors)) {
@@ -478,10 +481,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async accessibilityTree(
-    userId: string,
+    sessionId: string,
     selector?: string
   ): Promise<{ tree: string; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
 
     // Type inferred from page.$ — avoids naming DOM lib types (Element/Node),
     // which aren't in the gateway tsconfig's lib set.
@@ -507,11 +510,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async wait(
-    userId: string,
+    sessionId: string,
     selector?: string,
     timeout?: number
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const ms = timeout ?? DEFAULT_ACTION_TIMEOUT;
 
     if (selector) {
@@ -528,11 +531,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async scroll(
-    userId: string,
+    sessionId: string,
     direction: 'up' | 'down',
     pixels?: number
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const amount = pixels ?? 500;
     const y = direction === 'down' ? amount : -amount;
     await page.mouse.wheel({ deltaY: y });
@@ -544,11 +547,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async select(
-    userId: string,
+    sessionId: string,
     selector: string,
     value: string
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     await page.select(selector, value);
     return { url: page.url(), title: await page.title() };
@@ -573,11 +576,11 @@ export class BrowserService {
    * whatever currently has focus (useful for global shortcuts).
    */
   async pressKey(
-    userId: string,
+    sessionId: string,
     key: string,
     selector?: string
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     if (selector) {
       await page.waitForSelector(selector, { timeout: DEFAULT_ACTION_TIMEOUT });
       await page.focus(selector);
@@ -597,8 +600,8 @@ export class BrowserService {
    * user has no open page (instead of throwing — letting agents probe
    * cheaply without exception handling).
    */
-  async getState(userId: string): Promise<{ url: string; title: string } | null> {
-    const session = this.sessions.get(userId);
+  async getState(sessionId: string): Promise<{ url: string; title: string } | null> {
+    const session = this.sessions.get(sessionId);
     if (!session) return null;
     try {
       return { url: session.page.url(), title: await session.page.title() };
@@ -607,21 +610,22 @@ export class BrowserService {
     }
   }
 
-  async closePage(userId: string): Promise<boolean> {
-    const session = this.sessions.get(userId);
+  async closePage(sessionId: string): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
     if (!session) return false;
 
     try {
       await session.page.close();
+        await session.context.close();
     } catch {
       // Page may already be closed
     }
-    this.sessions.delete(userId);
+    this.sessions.delete(sessionId);
     return true;
   }
 
-  getPageInfo(userId: string): { url: string; active: boolean } | null {
-    const session = this.sessions.get(userId);
+  getPageInfo(sessionId: string): { url: string; active: boolean } | null {
+    const session = this.sessions.get(sessionId);
     if (!session) return null;
     return { url: session.page.url(), active: true };
   }
@@ -635,6 +639,7 @@ export class BrowserService {
     for (const [_userId, session] of this.sessions) {
       try {
         await session.page.close();
+        await session.context.close();
       } catch {
         // Ignore
       }
@@ -655,8 +660,8 @@ export class BrowserService {
   // Internal: Page Management
   // --------------------------------------------------------------------------
 
-  private async getOrCreatePage(userId: string): Promise<Page> {
-    const existing = this.sessions.get(userId);
+  private async getOrCreatePage(sessionId: string, userId: string): Promise<Page> {
+    const existing = this.sessions.get(sessionId);
     if (existing) {
       existing.lastActivity = Date.now();
       return existing.page;
@@ -669,7 +674,8 @@ export class BrowserService {
     }
 
     const browser = await this.ensureBrowser();
-    const page = await browser.newPage();
+    const context = await browser.createBrowserContext();
+    const page = await context.newPage();
 
     // Set reasonable viewport
     await page.setViewport({ width: 1280, height: 800 });
@@ -683,29 +689,35 @@ export class BrowserService {
         return;
       }
 
-      // SSRF protection: abort redirects to private/internal addresses
-      const url = req.url();
-      if (isBlockedUrl(url) || (await isPrivateUrlAsync(url))) {
-        req.abort();
-        return;
-      }
-
-      req.continue();
+      // SSRF protection and domain allowlist for all subresources and redirects
+        const url = req.url();
+        if (url.startsWith('data:') || url.startsWith('blob:')) {
+          req.continue();
+          return;
+        }
+        try {
+          await this.validateUrl(url, sessionId);
+          req.continue();
+        } catch (e: any) {
+          log.warn('Aborting browser request due to policy/SSRF', { url, error: e.message });
+          req.abort();
+        }
     });
 
     const session: PageSession = {
       page,
+      context,
       userId,
       createdAt: Date.now(),
       lastActivity: Date.now(),
     };
-    this.sessions.set(userId, session);
+    this.sessions.set(sessionId, session);
 
     return page;
   }
 
-  private async getExistingPage(userId: string): Promise<Page> {
-    const session = this.sessions.get(userId);
+  private async getExistingPage(sessionId: string): Promise<Page> {
+    const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('No active browser session. Use browse_web to navigate to a page first.');
     }
@@ -784,7 +796,7 @@ export class BrowserService {
   // Internal: URL Validation
   // --------------------------------------------------------------------------
 
-  private async validateUrl(url: string): Promise<void> {
+  private async validateUrl(url: string, sessionId: string): Promise<void> {
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -805,6 +817,22 @@ export class BrowserService {
       throw new Error('URL resolves to a private or blocked network address.');
     }
 
+    const parsedSession = this.parseSessionId(sessionId);
+    const policyEngine = new PolicyEngine();
+    const policyResult = policyEngine.evaluate({
+      identity: { userId: parsedSession.userId, workspaceId: parsedSession.workspaceId, roles: [] },
+      action: 'browse_web',
+      resource: url,
+      capability: 'browser.navigate',
+      risk: 'LOW',
+      environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      autonomous: false,
+      requestedParameters: { url },
+    });
+    if (policyResult.decision === 'DENY') {
+      throw new Error(`Domain policy denied navigation to ${url}: ${policyResult.reason}`);
+    }
+
     const allowedDomains = this.getAllowedDomains();
     if (allowedDomains.length > 0) {
       const hostname = parsed.hostname.toLowerCase();
@@ -818,6 +846,14 @@ export class BrowserService {
         );
       }
     }
+  }
+
+  private parseSessionId(sessionId: string) {
+    const parts = sessionId.split(':');
+    if (parts.length >= 3) {
+      return { userId: parts[0], workspaceId: parts[1], executionId: parts[2] };
+    }
+    return { userId: sessionId, workspaceId: 'default', executionId: 'default' };
   }
 
   private getAllowedDomains(): string[] {
@@ -882,15 +918,16 @@ export class BrowserService {
 
   private async cleanupStaleSessions(): Promise<void> {
     const now = Date.now();
-    for (const [userId, session] of this.sessions) {
+    for (const [sessionId, session] of this.sessions) {
       if (now - session.lastActivity > SESSION_TIMEOUT_MS) {
-        log.debug('Closing stale browser session', { userId });
+        log.debug('Closing stale browser session', { sessionId });
         try {
           await session.page.close();
+        await session.context.close();
         } catch {
           // Ignore
         }
-        this.sessions.delete(userId);
+        this.sessions.delete(sessionId);
       }
     }
 
