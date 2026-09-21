@@ -67,7 +67,6 @@ describe('QA-026: MCP Provider Status and Integration', () => {
     const toolsMap = registryMock.mock.calls[0][1];
     const executor = toolsMap.get('test-tool').executor;
     
-    // Simulate MCP internal failure
     mockClientInstance.callTool.mockRejectedValueOnce(new Error('Internal MCP crash'));
     
     const res = await executor({ arg: '1' }, { userId: 'user-3', callId: '1', conversationId: '1' });
@@ -94,13 +93,55 @@ describe('QA-026: MCP Provider Status and Integration', () => {
     const toolsMap = registryMock.mock.calls[0][1];
     const executor = toolsMap.get('test-tool').executor;
     
-    // Simulate disconnection
     mcpClient.disconnect('disc-mcp');
     
-    // Attempt to execute after disconnect
     const res = await executor({ arg: '1' }, { userId: 'user-4', callId: '1', conversationId: '1' });
     
     expect(res.isError).toBe(true);
     expect(res.content).toMatch(/MCP server "disc-mcp" is not connected/);
+  });
+  
+  it('handles connection failure during connect() cleanly', async () => {
+    const server: McpServerRecord = {
+      id: 'test-5', user_id: 'user-5', name: 'conn-fail-mcp', display_name: 'ConnFail',
+      transport: 'stdio', command: 'node', args: [], env: {}, url: null, headers: null,
+      enabled: true, auto_connect: true, status: 'disconnected',
+    };
+    
+    const repoMock = {
+      updateStatus: vi.fn(),
+      getByName: vi.fn().mockResolvedValue(server)
+    };
+    vi.mocked(getMcpServersRepo).mockReturnValue(repoMock as any);
+    
+    // Simulate connection failure (e.g., spawn ENOENT)
+    mockClientInstance.connect.mockRejectedValueOnce(new Error('spawn node ENOENT'));
+    
+    await expect(mcpClient.connect(server)).rejects.toThrow('spawn node ENOENT');
+    expect(repoMock.updateStatus).toHaveBeenCalledWith(server.id, 'error');
+  });
+
+  it('successful authorized execution', async () => {
+    const server: McpServerRecord = {
+      id: 'test-6', user_id: 'user-6', name: 'success-mcp', display_name: 'Success',
+      transport: 'stdio', command: 'node', args: [], env: {}, url: null, headers: null,
+      enabled: true, auto_connect: true, status: 'disconnected',
+    };
+    
+    vi.mocked(getMcpServersRepo).mockReturnValue({
+      updateStatus: vi.fn(),
+      getByName: vi.fn().mockResolvedValue(server)
+    } as any);
+    
+    await mcpClient.connect(server);
+    
+    const registryMock = vi.mocked(getSharedToolRegistry)().registerMcpTools as any;
+    const toolsMap = registryMock.mock.calls[0][1];
+    const executor = toolsMap.get('test-tool').executor;
+    
+    const res = await executor({ arg: '1' }, { userId: 'user-6', callId: '1', conversationId: '1' });
+    
+    expect(res.isError).toBeUndefined();
+    expect(res.content).toContain('success');
   });
 });

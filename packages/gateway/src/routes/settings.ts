@@ -1,4 +1,4 @@
-import { invalidateAgentCache } from '../agents/index.js';
+import { invalidateAgentCache } from '../services/agent/cache.js';
 /**
  * Settings routes — HTTP handlers only.
  *
