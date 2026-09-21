@@ -65,37 +65,17 @@ export class AutonomyService implements AutonomyEngine {
     this.tasks.set(task.id, task);
     ActionLedger.updateResult(ledgerEntry.actionId, { result: 'Autonomy started' }, 10);
 
-    // Simulate background agent loop
+    // QA-004: Do not simulate agent loops in production
     setTimeout(() => this.runLoop(task.id), 100);
   }
 
   private async runLoop(taskId: string) {
     const task = this.tasks.get(taskId);
-    if (!task || task.status === 'stopped' || task.status === 'failed' || task.status === 'paused')
-      return;
-
-    if (task.status === 'planning') {
-      task.plan = ['Analyze', 'Execute steps', 'Verify'];
-      task.status = 'executing';
-      this.tasks.set(taskId, task);
-      setTimeout(() => this.runLoop(taskId), 1000);
-      return;
-    }
-
-    if (task.status === 'executing') {
-      task.currentStepIndex++;
-      if (task.currentStepIndex >= task.plan.length) {
-        task.status = 'verifying';
-      }
-      this.tasks.set(taskId, task);
-      setTimeout(() => this.runLoop(taskId), 1000);
-      return;
-    }
-
-    if (task.status === 'verifying') {
-      task.status = 'completed';
-      this.tasks.set(taskId, task);
-    }
+    if (!task) return;
+    
+    // Fail immediately because we don't have a real autonomy provider
+    task.status = 'failed';
+    this.tasks.set(taskId, task);
   }
 
   async pauseTask(taskId: string): Promise<void> {

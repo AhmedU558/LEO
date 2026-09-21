@@ -59,17 +59,12 @@ export class VoiceService {
       return { allowed: false, error: errorMsg };
     }
 
-    // 3. Execute Tool (stubbed for MVP)
+    // 3. Execute Tool
     const startTime = Date.now();
     try {
-      const mockResult = { status: 'success', data: `Executed ${toolName}` };
-      const duration = Date.now() - startTime;
-      ActionLedger.updateResult(
-        ledgerEntry.actionId,
-        { result: JSON.stringify(mockResult) },
-        duration
-      );
-      return { allowed: true, result: mockResult };
+      // Production paths must never fabricate success.
+      // QA-022 / QA-004 fix
+      throw new Error('Voice tool execution provider is not configured.');
     } catch (err: unknown) {
       const duration = Date.now() - startTime;
       const errorMsg = err instanceof Error ? err.message : 'Unknown tool error';

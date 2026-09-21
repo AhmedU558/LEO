@@ -11,7 +11,6 @@
 import type { Hono } from 'hono';
 import {
   // Platform
-  healthRoutes,
   uiAuthRoutes,
   settingsRoutes,
   profileRoutes,
@@ -76,13 +75,11 @@ import {
   bridgeRoutes,
   extensionsRoutes,
   skillsRoutes,
-  webhookRoutes,
   notificationRoutes,
 } from '../index.js';
 
 export function registerV2Routes(app: Hono): void {
   // Health (no version prefix — shared with v1)
-  app.route('/health', healthRoutes);
 
   // ── Platform Domain ──────────────────────────────────────────────────────────
 
@@ -203,7 +200,6 @@ export function registerV2Routes(app: Hono): void {
   // ── Integration Domain ──────────────────────────────────────────────────────
 
   // Webhooks stay at /webhooks (same as v1 — external callers use secret path)
-  app.route('/webhooks', webhookRoutes);
 
   // Channels
   app.route('/api/v2/channels', channelRoutes);

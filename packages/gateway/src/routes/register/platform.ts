@@ -26,8 +26,6 @@ import {
   ledgerRoutes,
   socialRoutes,
   computerRoutes,
-  voiceRoutes,
-  autonomyRoutes,
   analyticsRoutes,
   pluginsRoutes,
   workspaceRoutes,
@@ -80,10 +78,8 @@ export function registerPlatformRoutes(app: Hono): void {
   app.route('/api/v1/computer', computerRoutes);
 
   // Voice Foundation
-  app.route('/api/v1/voice', voiceRoutes);
 
   // Advanced Autonomy
-  app.route('/api/v1/autonomy', autonomyRoutes);
 
   // Analytics & Learning
   app.route('/api/v1/analytics', analyticsRoutes);
