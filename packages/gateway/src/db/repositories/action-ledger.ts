@@ -68,19 +68,19 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
   ): Promise<ActionLedgerEntry> {
     const actionId = generateId('act');
     const timestamp = new Date();
-    
+
     // We use a transaction to lock the tail, generate the hash, and append the record
-    return await this.transaction(async (tx) => {
+    return await this.transaction(async () => {
       // Lock the tail row for update to serialize writes
-      const tailRow = await tx.queryOne<{ last_hash: string }>(
+      const tailRow = await this.queryOne<{ last_hash: string }>(
         'SELECT last_hash FROM action_ledger_tail WHERE id = 1 FOR UPDATE'
       );
-      
+
       const previousHash = tailRow ? tailRow.last_hash : 'genesis';
       const hashData = `${actionId}:${timestamp.toISOString()}:${previousHash}:${entryData.userId}:${entryData.action}`;
       const hash = createHash('sha256').update(hashData).digest('hex');
 
-      await tx.execute(
+      await this.execute(
         `INSERT INTO action_ledger (
           action_id, timestamp, user_id, workspace_id, agent_id, task_id, run_id,
           tool, action, resource, resource_type, credential_id, capability,
@@ -113,22 +113,19 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
           entryData.durationMs,
           entryData.costUsd ?? null,
           previousHash,
-          hash
+          hash,
         ]
       );
 
       // Advance the tail
-      await tx.execute(
-        'UPDATE action_ledger_tail SET last_hash = $1 WHERE id = 1',
-        [hash]
-      );
+      await this.execute('UPDATE action_ledger_tail SET last_hash = $1 WHERE id = 1', [hash]);
 
       return {
         ...entryData,
         actionId,
         timestamp,
         previousHash,
-        hash
+        hash,
       };
     });
   }
@@ -145,10 +142,9 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
       [resultData.result ?? null, resultData.error ?? null, durationMs, actionId]
     );
 
-    const row = await this.queryOne<LedgerRow>(
-      'SELECT * FROM action_ledger WHERE action_id = $1',
-      [actionId]
-    );
+    const row = await this.queryOne<LedgerRow>('SELECT * FROM action_ledger WHERE action_id = $1', [
+      actionId,
+    ]);
     return row ? rowToEntry(row) : undefined;
   }
 
@@ -160,9 +156,7 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
       );
       return rows.map(rowToEntry);
     }
-    const rows = await this.query<LedgerRow>(
-      'SELECT * FROM action_ledger ORDER BY timestamp ASC'
-    );
+    const rows = await this.query<LedgerRow>('SELECT * FROM action_ledger ORDER BY timestamp ASC');
     return rows.map(rowToEntry);
   }
 
@@ -189,10 +183,9 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
       );
       return row ? rowToEntry(row) : undefined;
     }
-    const row = await this.queryOne<LedgerRow>(
-      'SELECT * FROM action_ledger WHERE action_id = $1',
-      [actionId]
-    );
+    const row = await this.queryOne<LedgerRow>('SELECT * FROM action_ledger WHERE action_id = $1', [
+      actionId,
+    ]);
     return row ? rowToEntry(row) : undefined;
   }
 

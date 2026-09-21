@@ -218,25 +218,32 @@ export async function dispatchNode(
   }
 
   if (policyResult.decision === 'REQUIRE_APPROVAL' && !dryRun) {
-    // QA-013: persist a real approval row rather than pausing on a synthetic
-    // `policy-req-<uuid>` id. The synthetic id matched no record, so the
-    // execution paused on an approval that could never be listed, approved or
-    // rejected — and cancelling the workflow could not invalidate it either.
-    // This mirrors what the approvalNode path already does.
-    const approval = await createWorkflowApprovalsRepository(userId).create({
-      workflowLogId: ctx.logId,
-      workflowId,
-      nodeId: node.id,
-      context: {
-        reason: policyResult.reason,
-        capability,
-        riskLevel: risk,
-        nodeType: node.type,
+    const approvalRepo = createWorkflowApprovalsRepository(userId);
+    // Check if this execution was already approved (e.g. we are resuming)
+    const existingApprovals = await approvalRepo.getAll(100, 0, identity.workspaceId);
+    const alreadyApproved = existingApprovals.find(
+      (a) => a.workflowLogId === ctx.logId && a.nodeId === node.id && a.status === 'approved'
+    );
+
+    if (!alreadyApproved) {
+      const approval = await approvalRepo.create({
+        workflowLogId: ctx.logId,
+        workflowId,
+        nodeId: node.id,
+        workspaceId: identity.workspaceId,
         action: actionName,
-      },
-      message: policyResult.reason ?? `Approval required for ${actionName}`,
-    });
-    throw new ApprovalPauseError(approval.id);
+        capability: capability,
+        context: {
+          reason: policyResult.reason,
+          capability,
+          riskLevel: risk,
+          nodeType: node.type,
+          action: actionName,
+        },
+        message: policyResult.reason ?? `Approval required for ${actionName}`,
+      });
+      throw new ApprovalPauseError(approval.id);
+    }
   }
 
   let ledgerEntryId: string | undefined;
@@ -265,7 +272,11 @@ export async function dispatchNode(
     result = await _dispatchNodeImpl(ctx, cb);
   } catch (err) {
     if (ledgerEntryId) {
-      await ActionLedger.updateResult(ledgerEntryId, { error: err instanceof Error ? err.message : String(err) }, Date.now() - startTime);
+      await ActionLedger.updateResult(
+        ledgerEntryId,
+        { error: err instanceof Error ? err.message : String(err) },
+        Date.now() - startTime
+      );
     }
     throw err;
   }
@@ -621,6 +632,9 @@ async function _dispatchNodeImpl(
       workflowLogId: logId,
       workflowId,
       nodeId,
+      workspaceId: 'default',
+      action: 'workflow.approve',
+      capability: 'workflow.execute',
       context: {
         approvalMessage: apData.approvalMessage,
         nodeLabel: apData.label,

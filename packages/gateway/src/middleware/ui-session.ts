@@ -40,9 +40,7 @@ function configuredOrigins(): Set<string> {
   );
 }
 
-function isTrustedBrowserOrigin(c: {
-  req: { url: string; header: (name: string) => string | undefined };
-}): boolean {
+function isTrustedBrowserOrigin(c: Context): boolean {
   const origin = c.req.header('Origin');
   const referer = c.req.header('Referer');
   let candidate = origin;

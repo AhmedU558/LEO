@@ -14,6 +14,7 @@ import {
   type WorkflowLog,
   type WorkflowLogStatus,
 } from '../../db/repositories/workflows/index.js';
+import { createWorkflowApprovalsRepository } from '../../db/repositories/workflows/approvals.js';
 import {
   getToolService as getCoreToolService,
   type IWorkflowService,
@@ -550,13 +551,22 @@ export class WorkflowService implements IWorkflowService {
    * from where it left off (skipping already-completed nodes).
    */
   async resumeFromApproval(
-    workflowId: string,
+    approvalId: string,
     userId: string,
-    approvalNodeId: string,
-    approvalResult: 'approved' | 'rejected',
-    logId: string,
     onProgress?: (event: WorkflowProgressEvent) => void
   ): Promise<WorkflowLog> {
+    const approvalRepo = createWorkflowApprovalsRepository(userId);
+    const approval = await approvalRepo.get(approvalId);
+
+    if (!approval) throw new Error('Approval not found');
+    if (approval.status === 'rejected') throw new Error('Approval was rejected');
+    if (approval.status === 'pending') throw new Error('Approval is still pending');
+    if (approval.expiresAt && approval.expiresAt.getTime() < Date.now()) {
+      throw new Error('Approval has expired');
+    }
+
+    const { workflowId, workflowLogId: logId, nodeId: approvalNodeId } = approval;
+
     const repo = createWorkflowsRepository(userId);
     const workflow = await repo.get(workflowId);
     if (!workflow) throw new Error('Workflow not found');
@@ -570,25 +580,17 @@ export class WorkflowService implements IWorkflowService {
     // Restore node outputs from the paused log
     const savedNodeOutputs = pausedLog.nodeResults ?? {};
 
-    // Mark the approval node as completed with the decision
-    savedNodeOutputs[approvalNodeId] = {
-      nodeId: approvalNodeId,
-      status: 'success',
-      output: { approved: approvalResult === 'approved', decision: approvalResult },
-      startedAt: savedNodeOutputs[approvalNodeId]?.startedAt ?? new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    };
-
-    // If rejected, mark the workflow as failed
-    if (approvalResult === 'rejected') {
-      await repo.updateLog(logId, {
-        status: 'failed',
-        error: 'Approval rejected',
-        nodeResults: savedNodeOutputs,
+    // If this was an explicit approval node, mark it completed so we don't pause again.
+    // Otherwise (e.g. policy pause on a codeNode), leave it uncompleted so it re-executes
+    // and the dispatch layer sees the 'approved' record and allows it to proceed.
+    if (approval.action === 'workflow.approve') {
+      savedNodeOutputs[approvalNodeId] = {
+        nodeId: approvalNodeId,
+        status: 'success',
+        output: { approved: true, decision: 'approved' },
+        startedAt: savedNodeOutputs[approvalNodeId]?.startedAt ?? new Date().toISOString(),
         completedAt: new Date().toISOString(),
-      });
-      const finalLog = await repo.getLog(logId);
-      return finalLog ?? pausedLog;
+      };
     }
 
     // Atomically acquire execution lock to prevent race conditions

@@ -19,6 +19,7 @@ import {
   notFoundError,
   parseJsonBody,
   getErrorMessage,
+  getWorkspaceId,
 } from '../helpers.js';
 import { sanitizeId, safeKeyCompare } from '../../utils/common.js';
 import { createWorkflowsRepository } from '../../db/repositories/workflows/index.js';
@@ -822,29 +823,33 @@ workflowRoutes.get('/:id/logs', pagination(), async (c) => {
 
 workflowRoutes.get('/approvals/pending', pagination(), async (c) => {
   const userId = getUserId(c);
+  const workspaceId = getWorkspaceId(c);
   const { limit, offset } = c.get('pagination')!;
 
   const repo = createWorkflowApprovalsRepository(userId);
   const [total, approvals] = await Promise.all([
-    repo.countPending(),
-    repo.getPending(limit, offset),
+    repo.countPending(workspaceId),
+    repo.getPending(limit, offset, workspaceId),
   ]);
 
   return apiResponse(c, {
-    approvals,
+    items: approvals,
     total,
+    page: Math.floor(offset / limit) + 1,
     limit,
-    offset,
-    hasMore: offset + limit < total,
   });
 });
 
-workflowRoutes.get('/approvals/all', pagination(), async (c) => {
+workflowRoutes.get('/approvals', pagination(), async (c) => {
   const userId = getUserId(c);
+  const workspaceId = getWorkspaceId(c);
   const { limit, offset } = c.get('pagination')!;
 
   const repo = createWorkflowApprovalsRepository(userId);
-  const [total, approvals] = await Promise.all([repo.countAll(), repo.getAll(limit, offset)]);
+  const [total, approvals] = await Promise.all([
+    repo.countAll(workspaceId),
+    repo.getAll(limit, offset, workspaceId),
+  ]);
 
   return apiResponse(c, {
     approvals,
@@ -857,10 +862,11 @@ workflowRoutes.get('/approvals/all', pagination(), async (c) => {
 
 workflowRoutes.post('/approvals/:id/approve', async (c) => {
   const userId = getUserId(c);
+  const workspaceId = getWorkspaceId(c);
   const id = sanitizeId(c.req.param('id'));
 
   const repo = createWorkflowApprovalsRepository(userId);
-  const approval = await repo.decide(id, 'approved');
+  const approval = await repo.decide(id, 'approved', workspaceId);
   if (!approval || approval.status !== 'approved') {
     return apiError(
       c,
@@ -874,28 +880,20 @@ workflowRoutes.post('/approvals/:id/approve', async (c) => {
   // Resume the workflow execution from the approval point
   if (approval.workflowId && approval.workflowLogId) {
     const service = getWorkflowService();
-    service
-      .resumeFromApproval(
-        approval.workflowId,
-        userId,
-        approval.nodeId,
-        'approved',
-        approval.workflowLogId
-      )
-      .catch((err: unknown) => {
-        // Log but don't fail the approval response — workflow resume is best-effort
-        const wfRepo = createWorkflowsRepository(userId);
-        // The original error (`err`) was already captured in the parent
-        // .catch; if updateLog itself fails, we can't do anything useful
-        // because the approval response has already been computed.
-        wfRepo
-          .updateLog(approval.workflowLogId, {
-            status: 'failed',
-            error: `Resume after approval failed: ${getErrorMessage(err)}`,
-            completedAt: new Date().toISOString(),
-          })
-          .catch(silentCatch('workflow.approval.updateLog'));
-      });
+    service.resumeFromApproval(approval.id, userId).catch((err: unknown) => {
+      // Log but don't fail the approval response — workflow resume is best-effort
+      const wfRepo = createWorkflowsRepository(userId);
+      // The original error (`err`) was already captured in the parent
+      // .catch; if updateLog itself fails, we can't do anything useful
+      // because the approval response has already been computed.
+      wfRepo
+        .updateLog(approval.workflowLogId, {
+          status: 'failed',
+          error: `Resume after approval failed: ${getErrorMessage(err)}`,
+          completedAt: new Date().toISOString(),
+        })
+        .catch(silentCatch('workflow.approval.updateLog'));
+    });
   }
 
   return apiResponse(c, approval);
@@ -903,10 +901,11 @@ workflowRoutes.post('/approvals/:id/approve', async (c) => {
 
 workflowRoutes.post('/approvals/:id/reject', async (c) => {
   const userId = getUserId(c);
+  const workspaceId = getWorkspaceId(c);
   const id = sanitizeId(c.req.param('id'));
 
   const repo = createWorkflowApprovalsRepository(userId);
-  const approval = await repo.decide(id, 'rejected');
+  const approval = await repo.decide(id, 'rejected', workspaceId);
   if (!approval || approval.status !== 'rejected') {
     return apiError(
       c,
