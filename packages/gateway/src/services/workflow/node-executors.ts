@@ -47,3 +47,4 @@ export {
 } from './executors/data.js';
 export { executeSocialPublishNode } from './executors/social.js';
 export { executeClawNode } from './executors/claw.js';
+export { executeBrowserNode } from './executors/browser.js';

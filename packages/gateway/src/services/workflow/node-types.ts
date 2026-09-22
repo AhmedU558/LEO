@@ -36,6 +36,7 @@ export const WORKFLOW_NODE_TYPES: ReadonlySet<string> = new Set([
   'aggregateNode',
   'webhookResponseNode',
   'clawNode',
+  'browserNode',
   'socialPublishNode',
 ]);
 

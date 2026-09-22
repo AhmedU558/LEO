@@ -331,6 +331,15 @@ export async function executeNodeInline(
         workflowSnapshot.variables
       );
 
+    case 'browserNode':
+      return nodeExecutors.executeBrowserNode(
+        node,
+        nodeOutputs,
+        workflowSnapshot.variables,
+        userId,
+        execContextJob
+      );
+
     // errorHandlerNode / stickyNoteNode / approvalNode / parallelNode /
     // subWorkflowNode / forEachNode / triggerNode deliberately have no case.
     //

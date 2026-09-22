@@ -34,6 +34,7 @@ import { nodeDataField, nodeDataRecord } from './node-data.js';
 import { executionTaskContext, assertExecutionTaskActive } from '../execution-task-context.js';
 import {
   executeNode,
+  executeBrowserNode,
   executeLlmNode,
   executeConditionNode,
   executeCodeNode,
@@ -824,6 +825,33 @@ async function _dispatchNodeImpl(
           durationMs: Date.now() - startTime,
         };
       },
+      abortSignal,
+      onProgress
+    );
+  }
+
+  // ── browserNode ──
+  if (node.type === 'browserNode') {
+    onProgress?.({
+      type: 'node_start',
+      nodeId,
+      toolName: `browser:${nodeDataField(node, 'action')}`,
+    });
+    if (dryRun) {
+      const args = resolveTemplates(
+        {
+          action: nodeDataField(node, 'action'),
+          url: nodeDataField(node, 'url'),
+          selector: nodeDataField(node, 'selector'),
+        },
+        nodeOutputs,
+        workflow.variables
+      );
+      return dryRunResult(node, args);
+    }
+    return await cb.retryFn(
+      node,
+      () => executeBrowserNode(node, nodeOutputs, workflow.variables, userId),
       abortSignal,
       onProgress
     );

@@ -33,7 +33,46 @@ export async function createAdapter(config?: DatabaseConfig): Promise<DatabaseAd
     if (!schemaInitialized) {
       await pgAdapter.transaction(async () => {
         await pgAdapter.exec('SELECT pg_advisory_xact_lock(1492)');
-        await initializeSchema(async (sql) => pgAdapter.exec(sql));
+
+        let skip = false;
+        const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
+
+        if (isTest) {
+          try {
+            const res = await pgAdapter.query<{ value: string }>(
+              'SELECT value FROM system_settings WHERE key = $1',
+              ['schema_init_time']
+            );
+            const lastInitStr = res[0]?.value;
+            if (lastInitStr) {
+              const lastInit = parseInt(lastInitStr, 10);
+              // If schema was initialized in the last 60 seconds, assume another parallel worker just did it
+              if (Date.now() - lastInit < 60000) {
+                skip = true;
+                log.info(
+                  '[Schema] Skipped initializeSchema (recently initialized by another test worker)'
+                );
+              }
+            }
+          } catch {
+            // Table doesn't exist, ignore
+          }
+        }
+
+        if (!skip) {
+          await initializeSchema(async (sql) => pgAdapter.exec(sql));
+
+          if (isTest) {
+            try {
+              await pgAdapter.execute(
+                "INSERT INTO system_settings (key, value) VALUES ('schema_init_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+                [Date.now().toString()]
+              );
+            } catch {
+              // Ignore
+            }
+          }
+        }
       });
       schemaInitialized = true;
     }
