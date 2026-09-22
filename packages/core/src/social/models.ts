@@ -1,3 +1,4 @@
+﻿import type { MediaAsset } from '../media/models.js';
 export type SocialPlatform = 'instagram' | 'tiktok' | 'youtube' | 'facebook' | 'linkedin' | 'x';
 
 export interface SocialAccount {
@@ -13,14 +14,6 @@ export interface SocialAccount {
   updatedAt: string;
 }
 
-export interface MediaAsset {
-  id: string;
-  url: string;
-  type: 'image' | 'video';
-  mimeType: string;
-  sizeBytes: number;
-}
-
 export interface SocialPost {
   id: string;
   userId: string;
@@ -31,7 +24,7 @@ export interface SocialPost {
   text: string;
   hashtags: string[];
   media: MediaAsset[];
-  metadata: Record<string, unknown>; // Provider/Platform strategy data (SEO format etc.)
+  metadata: Record<string, unknown>;
   scheduledFor?: string;
   createdAt: string;
   updatedAt: string;

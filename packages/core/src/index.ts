@@ -1,3 +1,6 @@
+export * from './media/index.js';
+export * from './content/index.js';
+export * from './storage/index.js';
 /**
  * @ownpilot/core
  *

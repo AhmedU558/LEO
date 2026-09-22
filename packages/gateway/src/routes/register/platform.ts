@@ -25,6 +25,8 @@ import {
   securityRoutes,
   ledgerRoutes,
   socialRoutes,
+  mediaRoutes,
+  contentRoutes,
   computerRoutes,
   analyticsRoutes,
   pluginsRoutes,
@@ -73,6 +75,8 @@ export function registerPlatformRoutes(app: Hono): void {
 
   // Social Automation
   app.route('/api/v1/social', socialRoutes);
+  app.route('/api/v1/media', mediaRoutes);
+  app.route('/api/v1/content', contentRoutes);
 
   // Computer Use
   app.route('/api/v1/computer', computerRoutes);

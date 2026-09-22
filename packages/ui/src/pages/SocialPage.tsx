@@ -1,20 +1,24 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { Share2, Plus, PenTool, Globe } from 'lucide-react';
-import { useToast } from '../components/ToastProvider';
-import type { SocialAccount, SocialContent } from '../types/leo';
+﻿import React, { useEffect, useState } from 'react';
+import { PageContainer } from '../components/PageContainer';
+import { Card } from '../components/Card';
+import { toast } from 'react-hot-toast';
+import type { SocialAccount, PublishRequest } from '../types/leo';
 
-export function SocialPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get('tab') || 'accounts';
-  const toast = useToast();
-
+export const SocialPage: React.FC = () => {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
-  const [drafts, setDrafts] = useState<SocialContent[]>([]);
-  const [_isLoading, setIsLoading] = useState(true);
+  const [drafts, setDrafts] = useState<PublishRequest[]>([]);
   const [draftText, setDraftText] = useState('');
-  const [selectedPlatform, setSelectedPlatform] = useState('instagram');
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftTags, setDraftTags] = useState('');
+  const [draftPrivacy, setDraftPrivacy] = useState('private');
   const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadedMediaId, setUploadedMediaId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAccounts();
+    fetchDrafts();
+  }, []);
 
   const fetchAccounts = async () => {
     try {
@@ -24,7 +28,7 @@ export function SocialPage() {
         setAccounts(data.accounts || []);
       }
     } catch {
-      toast.error('Failed to load accounts');
+      toast.error('Failed to fetch accounts');
     }
   };
 
@@ -33,36 +37,42 @@ export function SocialPage() {
       const res = await fetch('/api/v1/social/publish');
       if (res.ok) {
         const data = await res.json();
-        setDrafts(data.content || []);
+        setDrafts(data.requests || []);
       }
     } catch {
-      toast.error('Failed to load drafts');
+      toast.error('Failed to fetch drafts');
     }
   };
 
-  useEffect(() => {
-    Promise.all([fetchAccounts(), fetchDrafts()]).finally(() => setIsLoading(false));
-  }, []);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const handleAddAccount = async () => {
-    const name = prompt('Enter account name for testing:');
-    if (!name) return;
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploading(true);
     try {
-      const res = await fetch('/api/v1/social/accounts', {
+      const res = await fetch('/api/v1/media/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: selectedPlatform, accountName: name }),
+        body: formData,
       });
       if (res.ok) {
-        toast.success('Account added');
-        fetchAccounts();
+        const data = await res.json();
+        setUploadedMediaId(data.id);
+        toast.success('Media uploaded successfully');
+      } else {
+        const err = await res.json();
+        toast.error(err.error?.message || 'Upload failed');
       }
     } catch {
-      toast.error('Failed to add account');
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
     }
   };
 
-  const _handleCreateDraft = async () => {
+  const handleCreateContent = async () => {
     if (!draftText || !selectedAccountId) {
       toast.error('Please enter text and select an account');
       return;
@@ -70,19 +80,84 @@ export function SocialPage() {
     const acc = accounts.find((a) => a.id === selectedAccountId);
     if (!acc) return;
 
+    if (acc.platform === 'youtube' && !draftTitle) {
+      toast.error('YouTube requires a title');
+      return;
+    }
+
+    if (acc.platform === 'youtube' && !uploadedMediaId) {
+      toast.error('YouTube requires uploaded media');
+      return;
+    }
+
     try {
+      // 1. Create content item
+      const contentRes = await fetch('/api/v1/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: draftTitle,
+          description: draftText,
+          hashtags: draftTags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          mediaAssetIds: uploadedMediaId ? [uploadedMediaId] : [],
+        }),
+      });
+
+      if (!contentRes.ok) throw new Error('Failed to create content');
+      const content = await contentRes.json();
+
+      // 2. Create platform variant
+      const variantRes = await fetch(`/api/v1/content/${content.id}/variants/${acc.platform}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: draftTitle,
+          description: draftText,
+          hashtags: draftTags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          privacyStatus: draftPrivacy,
+        }),
+      });
+
+      if (!variantRes.ok) throw new Error('Failed to create variant');
+
+      // 3. To maintain backward compatibility with SocialPage's publish loop,
+      // create a publish request mapped to this content.
+      // Wait, let's just use the legacy /social/publish endpoint for now, but pass media Asset
       const res = await fetch('/api/v1/social/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: acc.platform, accountId: acc.id, text: draftText }),
+        body: JSON.stringify({
+          platform: acc.platform,
+          accountId: acc.id,
+          title: draftTitle,
+          text: draftText,
+          hashtags: draftTags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          mediaAssetIds: uploadedMediaId ? [uploadedMediaId] : [], // Use the ID!
+          metadata: { privacyStatus: draftPrivacy, contentId: content.id },
+        }),
       });
+
       if (res.ok) {
         toast.success('Draft created');
         setDraftText('');
+        setDraftTitle('');
+        setDraftTags('');
+        setUploadedMediaId(null);
         fetchDrafts();
+      } else {
+        throw new Error('Failed to create publish request');
       }
-    } catch {
-      toast.error('Failed to create draft');
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to create content');
     }
   };
 
@@ -92,137 +167,135 @@ export function SocialPage() {
         method: 'POST',
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          toast.success('Published successfully');
-        } else {
-          toast.error('Publish failed: ' + data.result.error);
-        }
+        toast.success('Publishing initiated');
         fetchDrafts();
       }
     } catch {
-      toast.error('Publish request failed');
+      toast.error('Failed to initiate publish');
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary dark:bg-dark-bg-primary text-text-primary dark:text-dark-text-primary">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border dark:border-dark-border bg-bg-secondary dark:bg-dark-bg-secondary">
-        <div className="flex items-center gap-3">
-          <Share2 className="w-5 h-5 text-accent" />
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary dark:text-dark-text-primary">
-              Social Automation
-            </h2>
-            <p className="text-sm text-text-muted dark:text-dark-text-muted">
-              Manage multi-platform social accounts, drafts, and scheduling.
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex border-b border-border dark:border-dark-border px-6 mt-2">
-        {['accounts', 'drafts', 'published'].map((t) => (
-          <button
-            key={t}
-            onClick={() => setSearchParams({ tab: t })}
-            className={
-              'px-4 py-2 font-medium text-sm border-b-2 ' +
-              (tab === t
-                ? 'border-accent text-accent'
-                : 'border-transparent text-text-secondary hover:text-text-primary')
-            }
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-auto p-6">
-        {tab === 'accounts' && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium">Connected Accounts</h3>
-              <div className="flex gap-2">
-                <select
-                  className="bg-bg-tertiary border border-border rounded px-2 py-1"
-                  value={selectedPlatform}
-                  onChange={(e) => setSelectedPlatform(e.target.value)}
+    <PageContainer title="Social & Mission Control">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 space-y-6">
+          <Card title="Connected Accounts">
+            <div className="space-y-4">
+              {accounts.map((acc) => (
+                <div
+                  key={acc.id}
+                  className="p-4 rounded-lg border border-border bg-bg-secondary flex items-center justify-between"
                 >
-                  <option value="instagram">Instagram</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="youtube">YouTube</option>
-                </select>
-                <button
-                  onClick={handleAddAccount}
-                  className="flex items-center gap-1 bg-accent text-white px-3 py-1 rounded hover:opacity-90"
+                  <div>
+                    <p className="font-medium text-text-primary">{acc.accountName}</p>
+                    <p className="text-xs text-text-tertiary capitalize">{acc.platform}</p>
+                  </div>
+                  <span
+                    className={`px-2 py-1 text-xs rounded-full ${
+                      acc.status === 'active'
+                        ? 'bg-success/10 text-success'
+                        : 'bg-error/10 text-error'
+                    }`}
+                  >
+                    {acc.status}
+                  </span>
+                </div>
+              ))}
+              {accounts.length === 0 && (
+                <p className="text-sm text-text-tertiary">No accounts connected yet.</p>
+              )}
+
+              <div className="pt-4 border-t border-border">
+                <a
+                  href="/api/v1/social/youtube/connect"
+                  className="w-full inline-block text-center py-2 bg-red-600/10 text-red-500 rounded-lg hover:bg-red-600/20 transition-colors text-sm font-medium"
                 >
-                  <Plus className="w-4 h-4" /> Add Account
-                </button>
+                  Connect YouTube
+                </a>
               </div>
             </div>
-            {accounts.length === 0 ? (
-              <div className="p-8 text-center text-text-muted border border-dashed rounded-lg border-border">
-                No accounts connected.
+          </Card>
+
+          <Card title="Compose">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Account
+                </label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
+                >
+                  <option value="">Select an account...</option>
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.accountName} ({acc.platform})
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {accounts.map((a) => (
-                  <div
-                    key={a.id}
-                    className="p-4 rounded-lg border border-border bg-bg-secondary flex justify-between items-center"
-                  >
-                    <div>
-                      <div className="font-medium">{a.accountName}</div>
-                      <div className="text-xs text-text-muted capitalize">
-                        {a.platform} &middot; {a.status}
-                      </div>
-                    </div>
-                    <Globe className="w-5 h-5 text-accent opacity-50" />
-                  </div>
-                ))}
+
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Media Upload
+                </label>
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                  accept="video/*,image/*"
+                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3 text-sm text-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent/10 file:text-accent hover:file:bg-accent/20 cursor-pointer disabled:opacity-50"
+                />
+                {uploadedMediaId && (
+                  <p className="text-xs text-success mt-2">Media ready: {uploadedMediaId}</p>
+                )}
               </div>
-            )}
-          </div>
-        )}
 
-        {tab === 'drafts' && (
-          <div className="flex flex-col gap-6">
-            <div className="bg-bg-secondary border border-border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-3">Create Draft / Publish</h3>
-
-              <input
-                type="text"
-                className="w-full bg-bg-tertiary border border-border rounded-lg p-3 mb-3"
-                placeholder="Title (required for YouTube)"
-                id="draft-title"
-              />
-
-              <textarea
-                className="w-full bg-bg-tertiary border border-border rounded-lg p-3 min-h-[100px] mb-3"
-                placeholder="What do you want to share? (Description for YouTube)"
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
-              />
-
-              <input
-                type="text"
-                className="w-full bg-bg-tertiary border border-border rounded-lg p-3 mb-3"
-                placeholder="Video URL (required for YouTube, e.g. https://example.com/video.mp4)"
-                id="draft-media-url"
-              />
-
-              <div className="flex gap-3 mb-3">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">Title</label>
                 <input
                   type="text"
-                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3 w-full"
-                  placeholder="Tags (comma separated)"
-                  id="draft-tags"
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
+                  placeholder="Required for YouTube"
                 />
+              </div>
 
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Content / Description
+                </label>
+                <textarea
+                  value={draftText}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3 min-h-[100px]"
+                  placeholder="What do you want to share?"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Tags (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={draftTags}
+                  onChange={(e) => setDraftTags(e.target.value)}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
+                  placeholder="e.g. vlog, gaming, tech"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Privacy Status
+                </label>
                 <select
-                  id="draft-privacy"
-                  className="bg-bg-tertiary border border-border rounded-lg px-3"
+                  value={draftPrivacy}
+                  onChange={(e) => setDraftPrivacy(e.target.value)}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
                 >
                   <option value="private">Private</option>
                   <option value="unlisted">Unlisted</option>
@@ -230,166 +303,87 @@ export function SocialPage() {
                 </select>
               </div>
 
-              <div className="flex gap-3 items-center">
-                <select
-                  className="bg-bg-tertiary border border-border rounded px-2 py-1"
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                >
-                  <option value="">Select Account...</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.accountName} ({a.platform})
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={async () => {
-                    const title = (document.getElementById('draft-title') as HTMLInputElement)
-                      ?.value;
-                    const mediaUrl = (
-                      document.getElementById('draft-media-url') as HTMLInputElement
-                    )?.value;
-                    const tagsStr = (document.getElementById('draft-tags') as HTMLInputElement)
-                      ?.value;
-                    const privacy = (document.getElementById('draft-privacy') as HTMLSelectElement)
-                      ?.value;
-
-                    const media = mediaUrl
-                      ? [
-                          {
-                            id: 'm1',
-                            url: mediaUrl,
-                            type: 'video',
-                            mimeType: 'video/mp4',
-                            sizeBytes: 0,
-                          },
-                        ]
-                      : [];
-
-                    const tags = tagsStr ? tagsStr.split(',').map((t) => t.trim()) : [];
-
-                    if (!selectedAccountId || !draftText) return;
-                    const account = accounts.find((a) => a.id === selectedAccountId);
-                    if (!account) return;
-
-                    try {
-                      await fetch('/api/v1/social/publish', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          platform: account.platform,
-                          accountId: account.id,
-                          title,
-                          text: draftText,
-                          hashtags: tags,
-                          media,
-                          metadata: { privacyStatus: privacy },
-                        }),
-                      });
-                      setDraftText('');
-                      fetchDrafts();
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  }}
-                  className="flex items-center gap-1 bg-accent text-white px-4 py-1.5 rounded hover:opacity-90"
-                >
-                  <PenTool className="w-4 h-4" /> Publish Now
-                </button>
-              </div>
+              <button
+                onClick={handleCreateContent}
+                className="w-full py-3 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium"
+              >
+                Save as Draft
+              </button>
             </div>
+          </Card>
+        </div>
 
-            <div>
-              <h3 className="text-lg font-medium mb-3">Your Drafts & Pending</h3>
-              <div className="flex flex-col gap-3">
-                {drafts
-                  .filter(
-                    (d) =>
-                      d.status === 'draft' ||
-                      d.status === 'failed' ||
-                      d.status === 'publishing' ||
-                      d.status === 'unknown'
-                  )
-                  .map((d) => (
-                    <div key={d.id} className="p-4 rounded-lg border border-border bg-bg-secondary">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="font-medium text-sm">{d.platform}</div>
-                        <div className="text-xs px-2 py-0.5 rounded bg-bg-tertiary text-text-secondary">
-                          {d.status}
-                        </div>
-                      </div>
-                      <p className="text-sm mb-3">{d.text}</p>
-                      {d.errorMessage && (
-                        <p className="text-xs text-error mb-3">Error: {d.errorMessage}</p>
-                      )}
-                      <div className="flex gap-2">
-                        {d.status === 'unknown' && (
-                          <button
-                            onClick={async () => {
-                              await fetch(`/api/v1/social/publish/${d.id}/reconcile`, {
-                                method: 'POST',
-                              });
-                              fetchDrafts();
-                            }}
-                            className="text-xs px-3 py-1 bg-yellow-500/10 text-yellow-500 rounded hover:bg-yellow-500/20"
-                          >
-                            Reconcile
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handlePublish(d.id)}
-                          className="text-xs px-3 py-1 bg-accent/10 text-accent rounded hover:bg-accent/20"
-                        >
-                          Publish Now
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {tab === 'published' && (
-          <div>
-            <h3 className="text-lg font-medium mb-4">Published & Scheduled Content</h3>
-            <div className="flex flex-col gap-3">
+        <div className="lg:col-span-2 space-y-6">
+          <Card title="Drafts & Pending">
+            <div className="space-y-4">
               {drafts
-                .filter((d) => d.status === 'published' || d.status === 'scheduled')
+                .filter(
+                  (d) =>
+                    d.status === 'pending' ||
+                    d.status === 'failed' ||
+                    d.status === 'publishing' ||
+                    d.status === 'unknown'
+                )
                 .map((d) => (
-                  <div
-                    key={d.id}
-                    className="p-4 rounded-lg border border-border bg-bg-secondary flex justify-between items-center"
-                  >
-                    <div>
-                      <div className="font-medium text-sm mb-1">
-                        {d.platform} &middot; {d.status}
+                  <div key={d.id} className="p-4 rounded-lg border border-border bg-bg-secondary">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="font-medium text-text-primary capitalize">{d.platform}</p>
+                        <p className="text-xs text-text-tertiary">
+                          Created: {new Date(d.createdAt).toLocaleString()}
+                        </p>
                       </div>
-                      <p className="text-sm text-text-muted line-clamp-1">{d.text}</p>
-                    </div>
-                    {d.publishedUrl && (
-                      <a
-                        href={d.publishedUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-accent text-sm hover:underline"
+                      <span
+                        className={`px-2 py-1 text-xs rounded-full ${
+                          d.status === 'publishing'
+                            ? 'bg-warning/10 text-warning'
+                            : d.status === 'failed'
+                              ? 'bg-error/10 text-error'
+                              : 'bg-bg-tertiary text-text-secondary'
+                        }`}
                       >
-                        View Post
-                      </a>
-                    )}
+                        {d.status}
+                      </span>
+                    </div>
+                    {/* Access postId to fetch SocialPost details, though legacy UI didn't do this easily. We can just display minimal details */}
+                    <div className="flex gap-2 mt-4">
+                      {d.status === 'unknown' && (
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/v1/social/publish/${d.id}/reconcile`, {
+                              method: 'POST',
+                            });
+                            fetchDrafts();
+                          }}
+                          className="text-xs px-3 py-1 bg-yellow-500/10 text-yellow-500 rounded hover:bg-yellow-500/20"
+                        >
+                          Reconcile
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handlePublish(d.id)}
+                        className="text-xs px-3 py-1 bg-accent/10 text-accent rounded hover:bg-accent/20"
+                      >
+                        Publish Now
+                      </button>
+                    </div>
                   </div>
                 ))}
-              {drafts.filter((d) => d.status === 'published' || d.status === 'scheduled').length ===
-                0 && (
-                <div className="p-8 text-center text-text-muted border border-dashed rounded-lg border-border">
-                  No published content yet.
-                </div>
+              {drafts.filter(
+                (d) =>
+                  d.status === 'pending' ||
+                  d.status === 'failed' ||
+                  d.status === 'publishing' ||
+                  d.status === 'unknown'
+              ).length === 0 && (
+                <p className="text-sm text-text-tertiary text-center py-8">
+                  No drafts available. Create one to get started.
+                </p>
               )}
             </div>
-          </div>
-        )}
+          </Card>
+        </div>
       </div>
-    </div>
+    </PageContainer>
   );
-}
+};

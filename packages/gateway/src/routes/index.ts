@@ -1,3 +1,5 @@
+export { mediaRoutes } from './media.js';
+export { contentRoutes } from './content.js';
 /**
  * Route exports
  */

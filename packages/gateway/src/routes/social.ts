@@ -1,8 +1,8 @@
-import { getUserId, getWorkspaceId } from './helpers.js';
+﻿import { getUserId, getWorkspaceId } from './helpers.js';
 import { Hono } from 'hono';
 import { apiResponse, apiError, ERROR_CODES, parseJsonBody } from './helpers.js';
 import { SocialService } from '../services/social/service.js';
-import type { SocialPost } from '@ownpilot/core/social';
+
 import { SocialRepository } from '../db/repositories/social.js';
 import { socialProviderRegistry } from '../services/social/provider-registry.js';
 import { randomUUID } from 'node:crypto';
@@ -28,13 +28,21 @@ socialRoutes.get('/publish', async (c) => {
 });
 
 socialRoutes.post('/publish', async (c) => {
-  const body = (await parseJsonBody(c)) as Omit<
-    SocialPost,
-    'id' | 'userId' | 'workspaceId' | 'createdAt' | 'updatedAt'
-  > | null;
+  const body = (await parseJsonBody(c)) as Record<string, unknown>;
   if (!body || !body.text || !body.platform || !body.accountId) {
     return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Missing fields' }, 400);
   }
+
+  const { MediaService } = await import('../services/media/service.js');
+  const mediaService = new MediaService(getUserId(c), getWorkspaceId(c));
+  const resolvedMedia = [];
+  if (body.mediaAssetIds && Array.isArray(body.mediaAssetIds)) {
+    for (const id of body.mediaAssetIds) {
+      const asset = await mediaService.getMedia(id);
+      if (asset) resolvedMedia.push(asset);
+    }
+  }
+  body.media = resolvedMedia;
 
   const service = new SocialService(getUserId(c), getWorkspaceId(c));
   try {

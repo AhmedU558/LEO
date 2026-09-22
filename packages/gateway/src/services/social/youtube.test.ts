@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { YouTubeProvider } from './providers/youtube.js';
-import type { SocialPost, MediaAsset } from '@ownpilot/core/social';
+import type { SocialPost } from '@ownpilot/core/social';
+import type { MediaAsset } from '@ownpilot/core/media';
 
 describe('YouTubeProvider', () => {
   let provider: YouTubeProvider;
@@ -43,8 +44,34 @@ describe('YouTubeProvider', () => {
 
   it('validateMedia: rejects multiple videos', async () => {
     const media: MediaAsset[] = [
-      { id: '1', url: 'x', type: 'video', mimeType: 'video/mp4', sizeBytes: 1 },
-      { id: '2', url: 'y', type: 'video', mimeType: 'video/mp4', sizeBytes: 1 },
+      {
+        id: '1',
+        userId: 'user',
+        workspaceId: 'ws',
+        storageKey: 'key',
+        checksum: 'chk',
+        mediaType: 'video',
+        status: 'READY',
+        filename: 'file.mp4',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        mimeType: 'video/mp4',
+        sizeBytes: 1,
+      },
+      {
+        id: '2',
+        userId: 'user',
+        workspaceId: 'ws',
+        storageKey: 'key',
+        checksum: 'chk',
+        mediaType: 'video',
+        status: 'READY',
+        filename: 'file.mp4',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        mimeType: 'video/mp4',
+        sizeBytes: 1,
+      },
     ];
     const res = await provider.validateMedia(media);
     expect(res.valid).toBe(false);
@@ -52,7 +79,20 @@ describe('YouTubeProvider', () => {
 
   it('validateMedia: accepts one video', async () => {
     const media: MediaAsset[] = [
-      { id: '1', url: 'x', type: 'video', mimeType: 'video/mp4', sizeBytes: 1 },
+      {
+        id: '1',
+        userId: 'user',
+        workspaceId: 'ws',
+        storageKey: 'key',
+        checksum: 'chk',
+        mediaType: 'video',
+        status: 'READY',
+        filename: 'file.mp4',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        mimeType: 'video/mp4',
+        sizeBytes: 1,
+      },
     ];
     const res = await provider.validateMedia(media);
     expect(res.valid).toBe(true);
@@ -93,7 +133,20 @@ describe('YouTubeProvider', () => {
       createdAt: '',
       updatedAt: '',
       media: [
-        { id: '1', url: 'https://video.url', type: 'video', mimeType: 'video/mp4', sizeBytes: 100 },
+        {
+          id: '1',
+          userId: 'user',
+          workspaceId: 'ws',
+          storageKey: 'key',
+          checksum: 'chk',
+          mediaType: 'video',
+          status: 'READY',
+          filename: 'file.mp4',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          mimeType: 'video/mp4',
+          sizeBytes: 100,
+        },
       ],
     };
 
@@ -142,7 +195,20 @@ describe('YouTubeProvider', () => {
       createdAt: '',
       updatedAt: '',
       media: [
-        { id: '1', url: 'https://video.url', type: 'video', mimeType: 'video/mp4', sizeBytes: 100 },
+        {
+          id: '1',
+          userId: 'user',
+          workspaceId: 'ws',
+          storageKey: 'key',
+          checksum: 'chk',
+          mediaType: 'video',
+          status: 'READY',
+          filename: 'file.mp4',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          mimeType: 'video/mp4',
+          sizeBytes: 100,
+        },
       ],
     };
 

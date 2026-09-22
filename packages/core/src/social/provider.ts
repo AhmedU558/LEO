@@ -1,11 +1,11 @@
-﻿import type {
+import type {
   SocialPlatform,
   SocialAccount,
   SocialPost,
-  MediaAsset,
   PublishResult,
   PlatformError,
 } from './models.js';
+import type { MediaAsset } from '../media/models.js';
 
 export interface ProviderCapability {
   supportsScheduling: boolean;

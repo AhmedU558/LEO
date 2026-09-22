@@ -5,6 +5,24 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./media": {
+      "import": {
+        "types": "./dist/media/index.d.ts",
+        "default": "./dist/media/index.js"
+      }
+    },
+    "./content": {
+      "import": {
+        "types": "./dist/content/index.d.ts",
+        "default": "./dist/content/index.js"
+      }
+    },
+    "./storage": {
+      "import": {
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.js"
+      }
+    },
     ".": {
       "import": {
         "types": "./dist/index.d.ts",

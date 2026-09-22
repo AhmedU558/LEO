@@ -3,10 +3,10 @@ import type {
   ProviderCapability,
   SocialAccount,
   SocialPost,
-  MediaAsset,
   PublishResult,
   PlatformError,
 } from '@ownpilot/core/social';
+import type { MediaAsset } from '@ownpilot/core/media';
 
 interface YouTubeConfig {
   clientId: string;
@@ -126,11 +126,8 @@ export class YouTubeProvider implements SocialProvider {
       const metadata = post.metadata || {};
       const privacyStatus = (metadata.privacyStatus as string) || 'private';
 
-      // 1. Fetch video content (could be URL from LEO storage or internet)
-      const mediaRes = await fetch(videoAsset.url);
-      if (!mediaRes.ok) {
-        throw new Error(`Failed to download media for upload: ${mediaRes.statusText}`);
-      }
+      const { storageProvider } = await import('../../storage/index.js');
+      const mediaStream = await storageProvider.download(videoAsset.storageKey);
 
       // 2. Start resumable upload session
       const snippet = {
@@ -181,7 +178,7 @@ export class YouTubeProvider implements SocialProvider {
       const uploadRes = await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': videoAsset.mimeType || 'video/mp4' },
-        body: mediaRes.body,
+        body: mediaStream,
         duplex: 'half',
       } as RequestInit & { duplex?: string });
 

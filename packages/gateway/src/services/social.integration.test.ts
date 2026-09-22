@@ -1,11 +1,12 @@
-import { randomUUID } from 'node:crypto';
+﻿import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostgresAdapter } from '../db/adapters/postgres-adapter.js';
 import { initializeSchema } from '../db/schema/index.js';
 import { SocialRepository } from '../db/repositories/social.js';
 import { SocialService } from './social/service.js';
 import { socialProviderRegistry } from './social/provider-registry.js';
-import type { MediaAsset } from '@ownpilot/core/social';
+import type { SocialProvider } from '@ownpilot/core/social';
+import type { MediaAsset } from '@ownpilot/core/media';
 
 import { executeSocialPublishNode } from './workflow/executors/social.js';
 import pg from 'pg';
@@ -203,8 +204,15 @@ describe.skipIf(!url)('Social Publish Integration', () => {
     });
     const media: MediaAsset[] = [1, 2, 3, 4, 5].map((i) => ({
       id: `m${i}`,
-      url: 'x',
-      type: 'image',
+      userId: 'user',
+      workspaceId: 'ws',
+      storageKey: 'key',
+      checksum: 'chk',
+      mediaType: 'image',
+      status: 'READY',
+      filename: 'file.jpg',
+      createdAt: new Date(),
+      updatedAt: new Date(),
       mimeType: 'img',
       sizeBytes: 10,
     }));
