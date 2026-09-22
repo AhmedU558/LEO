@@ -40,7 +40,12 @@ export interface ActionLedgerProvider {
     durationMs: number
   ): Promise<ActionLedgerEntry | undefined>;
   getEntries(userId?: string, limit?: number, offset?: number): Promise<ActionLedgerEntry[]>;
-  getByWorkspaceId(workspaceId: string, userId?: string, limit?: number, offset?: number): Promise<ActionLedgerEntry[]>;
+  getByWorkspaceId(
+    workspaceId: string,
+    userId?: string,
+    limit?: number,
+    offset?: number
+  ): Promise<ActionLedgerEntry[]>;
   getByActionId(actionId: string, userId?: string): Promise<ActionLedgerEntry | undefined>;
   clear(): Promise<void>;
 }
@@ -68,7 +73,9 @@ export class ActionLedger {
       return this.provider.record(entryData);
     }
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.');
+      throw new Error(
+        'ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.'
+      );
     }
 
     return new Promise((resolve, reject) => {
@@ -114,11 +121,13 @@ export class ActionLedger {
   ): Promise<ActionLedgerEntry | undefined> {
     if (this.provider) {
       return this.provider.updateResult(actionId, resultData, durationMs);
-    
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.');
     }
-}
+
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.'
+      );
+    }
 
     const entry = this.indexByActionId.get(actionId);
     if (!entry) return undefined;
@@ -141,26 +150,41 @@ export class ActionLedger {
     return updated;
   }
 
-  public static async getEntries(userId?: string, limit?: number, offset?: number): Promise<ActionLedgerEntry[]> {
+  public static async getEntries(
+    userId?: string,
+    limit?: number,
+    offset?: number
+  ): Promise<ActionLedgerEntry[]> {
     if (this.provider) return this.provider.getEntries(userId, limit, offset);
-    
+
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.');
+      throw new Error(
+        'ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.'
+      );
     }
-const filtered = userId ? this.entries.filter((e) => e.userId === userId) : this.entries;
+    const filtered = userId ? this.entries.filter((e) => e.userId === userId) : this.entries;
     // Return deep copies so callers cannot mutate the ledger
-    const res = filtered.slice(offset || 0, limit ? (offset || 0) + limit : undefined); return res.map((e) => ({ ...e }));
+    const res = filtered.slice(offset || 0, limit ? (offset || 0) + limit : undefined);
+    return res.map((e) => ({ ...e }));
   }
 
-  public static async getByWorkspaceId(workspaceId: string, userId?: string, limit?: number, offset?: number): Promise<ActionLedgerEntry[]> {
+  public static async getByWorkspaceId(
+    workspaceId: string,
+    userId?: string,
+    limit?: number,
+    offset?: number
+  ): Promise<ActionLedgerEntry[]> {
     if (this.provider) return this.provider.getByWorkspaceId(workspaceId, userId, limit, offset);
-    
+
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.');
+      throw new Error(
+        'ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.'
+      );
     }
-let arr = this.indexByWorkspace.get(workspaceId) || [];
+    let arr = this.indexByWorkspace.get(workspaceId) || [];
     if (userId) arr = arr.filter((e) => e.userId === userId);
-    const res = arr.slice(offset || 0, limit ? (offset || 0) + limit : undefined); return res.map((e) => ({ ...e }));
+    const res = arr.slice(offset || 0, limit ? (offset || 0) + limit : undefined);
+    return res.map((e) => ({ ...e }));
   }
 
   public static async getByActionId(
@@ -168,11 +192,13 @@ let arr = this.indexByWorkspace.get(workspaceId) || [];
     userId?: string
   ): Promise<ActionLedgerEntry | undefined> {
     if (this.provider) return this.provider.getByActionId(actionId, userId);
-    
+
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.');
+      throw new Error(
+        'ActionLedger: Production environment must use a persistent ActionLedgerProvider. Cannot silently fall back to in-memory.'
+      );
     }
-const entry = this.indexByActionId.get(actionId);
+    const entry = this.indexByActionId.get(actionId);
     if (entry && (!userId || entry.userId === userId)) {
       return { ...entry };
     }

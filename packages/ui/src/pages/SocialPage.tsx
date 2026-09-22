@@ -30,7 +30,7 @@ export function SocialPage() {
 
   const fetchDrafts = async () => {
     try {
-      const res = await fetch('/api/v1/social/content');
+      const res = await fetch('/api/v1/social/publish');
       if (res.ok) {
         const data = await res.json();
         setDrafts(data.content || []);
@@ -71,7 +71,7 @@ export function SocialPage() {
     if (!acc) return;
 
     try {
-      const res = await fetch('/api/v1/social/content', {
+      const res = await fetch('/api/v1/social/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform: acc.platform, accountId: acc.id, text: draftText }),
@@ -88,7 +88,7 @@ export function SocialPage() {
 
   const handlePublish = async (id: string) => {
     try {
-      const res = await fetch('/api/v1/social/content/' + id + '/publish', {
+      const res = await fetch('/api/v1/social/publish/' + id + '/publish', {
         method: 'POST',
       });
       if (res.ok) {

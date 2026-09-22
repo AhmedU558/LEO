@@ -1,92 +1,181 @@
-import type { SocialContent, SocialAccount, SocialPublishResult } from '@ownpilot/core/social';
-import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
+import type { SocialPost, PublishRequest, SocialAccount } from '@ownpilot/core/social';
+import { SocialRepository } from '../../db/repositories/social.js';
+import { socialProviderRegistry } from './provider-registry.js';
+import { ExecutionTaskService } from '../execution-task-service.js';
+import { createWorkflowsRepository } from '../../db/repositories/workflows/index.js';
+import { randomUUID } from 'node:crypto';
+import { getLog } from '../log.js';
+import { ActionLedger, PolicyEngine, RiskEngine } from '@ownpilot/core/security';
+
+const log = getLog('SocialService');
 
 export class SocialService {
-  private policyEngine = new PolicyEngine();
-  private riskEngine = new RiskEngine();
+  constructor(
+    private userId: string,
+    private workspaceId: string
+  ) {}
 
-  async publishWithPolicy(
-    userId: string,
-    workspaceId: string,
-    content: SocialContent,
-    account: SocialAccount
-  ): Promise<SocialPublishResult> {
-    const action = 'social.publish';
-    const capability = 'social.write';
-    const risk = this.riskEngine.classify(capability, action);
+  private async getOrCreateSystemWorkflow(): Promise<string> {
+    const wfRepo = createWorkflowsRepository(this.userId);
+    const workflows = await wfRepo.getPage(100, 0);
+    let wf = workflows.find((w) => w.name === '__system_social_publish');
+    if (!wf) {
+      wf = await wfRepo.create({
+        name: '__system_social_publish',
+        description: 'System workflow for durable social publishing',
+        status: 'active',
+        nodes: [
+          { id: 'publish_node', type: 'socialPublishNode', position: { x: 0, y: 0 }, data: {} },
+        ],
+        edges: [],
+      });
+    }
+    return wf.id;
+  }
 
-    // 1. Policy check
-    const policyResult = this.policyEngine.evaluate({
-      identity: {
-        userId,
-        workspaceId,
-        roles: ['user'],
-      },
-      action,
-      resource: content.id,
-      capability,
-      risk,
-      environment: 'production',
-      autonomous: false,
-      requestedParameters: { platform: account.platform },
+  async listAccounts(): Promise<Omit<SocialAccount, 'accessToken' | 'refreshToken'>[]> {
+    const repo = new SocialRepository(this.userId, this.workspaceId);
+    const accounts = await repo.listAccounts();
+    return accounts.map((a) => {
+      const { accessToken: _a, refreshToken: _r, ...rest } = a as Record<string, unknown>;
+      return rest as unknown as Omit<SocialAccount, 'accessToken' | 'refreshToken'>;
+    });
+  }
+
+  async getAccount(id: string) {
+    const repo = new SocialRepository(this.userId, this.workspaceId);
+    return repo.getAccount(id);
+  }
+
+  async getAccountStatus(accountId: string) {
+    const account = await this.getAccount(accountId);
+    if (!account) throw new Error('Account not found');
+    const repo = new SocialRepository(this.userId, this.workspaceId);
+    const creds = await repo.getAccountCredentials(accountId);
+    if (!creds?.accessToken) return 'disconnected';
+    const provider = socialProviderRegistry.get(account.platform);
+    return provider.getConnectionStatus(creds.accessToken);
+  }
+
+  async createPublishTask(
+    postInput: Omit<SocialPost, 'id' | 'userId' | 'workspaceId' | 'createdAt' | 'updatedAt'>
+  ): Promise<{ request: PublishRequest; taskId: string }> {
+    const repo = new SocialRepository(this.userId, this.workspaceId);
+    const account = await repo.getAccount(postInput.accountId);
+    if (!account) throw new Error('Account not found');
+    if (account.platform !== postInput.platform) throw new Error('Platform mismatch');
+
+    // Risk and Policy Checks
+    const identity = { userId: this.userId, workspaceId: this.workspaceId, roles: [] };
+    const resourceId = `social_account:${account.id}`;
+    const policyResult = new PolicyEngine().evaluate(identity, 'social.publish', resourceId, {
+      platform: account.platform,
+    });
+    if (!policyResult.allowed) throw new Error(`Policy denied: ${policyResult.reason}`);
+
+    const riskLevel = new RiskEngine().classify(identity, 'social.publish', {
+      platform: account.platform,
+      text: postInput.text,
     });
 
-    // 2. Action Ledger entry (pending)
-    const ledgerEntry = await ActionLedger.record({
-      userId,
-      workspaceId,
-      tool: 'social_service',
-      action,
-      resource: content.id,
-      resourceType: 'social_content',
-      capability,
-      policyDecision: policyResult.decision,
-      riskLevel: risk,
-      executionEnvironment: 'production',
-      // Recorded up-front; ActionLedger.updateResult() fills the real duration.
-      durationMs: 0,
-    });
+    // Ledger
+    await ActionLedger.record(
+      identity,
+      null,
+      null,
+      null,
+      'social_publish',
+      'publish_request',
+      resourceId,
+      'social_account',
+      account.id,
+      'social.publish',
+      policyResult.allowed ? 'allow' : 'deny',
+      riskLevel.level,
+      'trusted',
+      { status: 'created' },
+      null,
+      0
+    );
 
-    if (policyResult.decision === 'DENY') {
-      const errorMsg = 'Social publish denied by policy.';
-      ActionLedger.updateResult(ledgerEntry.actionId, { error: errorMsg }, 50);
-      return { success: false, error: errorMsg, retryable: false };
-    }
-
-    if (policyResult.decision === 'REQUIRE_APPROVAL') {
-      const errorMsg = 'Approval required to publish.';
-      ActionLedger.updateResult(ledgerEntry.actionId, { error: errorMsg }, 50);
-      return { success: false, error: errorMsg, retryable: false };
-    }
-
-    // 3. Publish to provider logic
-    const startTime = Date.now();
-    try {
-      // Production paths must never fabricate success.
-      // Fail since real provider is not configured.
-      const providerResult: SocialPublishResult = {
-        success: false,
-        error: 'No production social publish provider configured.',
-        retryable: false,
-      };
-
-      const duration = Date.now() - startTime;
-      if (providerResult.success) {
-        ActionLedger.updateResult(
-          ledgerEntry.actionId,
-          { result: 'Published successfully' },
-          duration
-        );
-      } else {
-        ActionLedger.updateResult(ledgerEntry.actionId, { error: providerResult.error }, duration);
+    const provider = socialProviderRegistry.get(postInput.platform);
+    if (postInput.media && postInput.media.length > 0) {
+      const capabilities = provider.getCapabilities();
+      if (postInput.media.length > capabilities.maxMediaCount) {
+        throw new Error(`Platform limits media to ${capabilities.maxMediaCount} items`);
       }
-
-      return providerResult;
-    } catch (err: unknown) {
-      const duration = Date.now() - startTime;
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      ActionLedger.updateResult(ledgerEntry.actionId, { error: errorMessage }, duration);
-      return { success: false, error: errorMessage, retryable: true };
     }
+
+    const postId = `post_${randomUUID()}`;
+    const requestId = `pubreq_${randomUUID()}`;
+
+    const post = await repo.createPost({
+      ...postInput,
+      id: postId,
+      userId: this.userId,
+      workspaceId: this.workspaceId,
+    });
+
+    const request = await repo.createPublishRequest({
+      id: requestId,
+      postId: post.id,
+      accountId: account.id,
+      status: 'pending',
+      userId: this.userId,
+      workspaceId: this.workspaceId,
+    });
+
+    const workflowId = await this.getOrCreateSystemWorkflow();
+    const executionTaskService = new ExecutionTaskService(this.userId, this.workspaceId);
+    const task = await executionTaskService.start({
+      workflowId,
+      requestKey: `social_publish_${requestId}`,
+      inputs: { publishRequestId: request.id },
+    });
+
+    const updatedRequest = await repo.updatePublishRequest(request.id, {
+      executionTaskId: task.id,
+    });
+
+    return { request: updatedRequest, taskId: task.id };
+  }
+
+  async getPublishStatus(id: string) {
+    const repo = new SocialRepository(this.userId, this.workspaceId);
+    return repo.getPublishRequest(id);
+  }
+
+  async cancelPublish(id: string): Promise<boolean> {
+    const repo = new SocialRepository(this.userId, this.workspaceId);
+    const request = await repo.getPublishRequest(id);
+    if (!request) throw new Error('Request not found');
+    if (request.status !== 'pending' && request.status !== 'publishing') {
+      throw new Error(`Cannot cancel request in state: ${request.status}`);
+    }
+
+    const account = await repo.getAccount(request.accountId);
+    if (!account) throw new Error('Account not found');
+
+    const provider = socialProviderRegistry.get(account.platform);
+    const capabilities = provider.getCapabilities();
+
+    if (capabilities.supportsCancellation && request.providerPostId) {
+      const creds = await repo.getAccountCredentials(account.id);
+      if (creds?.accessToken) {
+        try {
+          await provider.cancelPublish(request.providerPostId, creds.accessToken);
+        } catch (e) {
+          log.warn(`Provider failed to cancel post ${request.providerPostId}: ${e}`);
+        }
+      }
+    }
+
+    if (request.executionTaskId) {
+      const etService = new ExecutionTaskService(this.userId, this.workspaceId);
+      await etService.cancel(request.executionTaskId);
+    }
+
+    await repo.updatePublishRequest(id, { status: 'cancelled' });
+    return true;
   }
 }

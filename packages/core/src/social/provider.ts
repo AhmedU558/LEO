@@ -1,11 +1,18 @@
-﻿import type { SocialPlatform, SocialContent, SocialAccount } from './models.js';
+﻿import type {
+  SocialPlatform,
+  SocialAccount,
+  SocialPost,
+  MediaAsset,
+  PublishResult,
+  PlatformError,
+} from './models.js';
 
-export interface SocialPublishResult {
-  success: boolean;
-  providerPostId?: string;
-  publishedUrl?: string;
-  error?: string;
-  retryable?: boolean;
+export interface ProviderCapability {
+  supportsScheduling: boolean;
+  supportsVideo: boolean;
+  supportsImages: boolean;
+  supportsCancellation: boolean;
+  maxMediaCount: number;
 }
 
 export interface SocialProvider {
@@ -13,6 +20,11 @@ export interface SocialProvider {
    * The platform this provider handles.
    */
   readonly platform: SocialPlatform;
+
+  /**
+   * Capability discovery for this provider.
+   */
+  getCapabilities(): ProviderCapability;
 
   /**
    * Connect/exchange auth code for a provider account.
@@ -25,17 +37,32 @@ export interface SocialProvider {
   >;
 
   /**
-   * Validate if an existing connection is still active.
+   * Return the current status of the account connection.
    */
-  validateConnection(accountId: string, accessToken: string): Promise<boolean>;
+  getConnectionStatus(accessToken: string): Promise<'active' | 'disconnected' | 'error'>;
 
   /**
-   * Publish content to the platform.
+   * Validate media against platform limits before publishing.
    */
-  publish(content: SocialContent, accessToken: string): Promise<SocialPublishResult>;
+  validateMedia(media: MediaAsset[]): Promise<{ valid: boolean; error?: string }>;
 
   /**
-   * Check status of a previously published post (e.g. video processing).
+   * Publish post to the platform immediately or at the scheduled time (if supported).
    */
-  checkStatus(providerPostId: string, accessToken: string): Promise<SocialPublishResult>;
+  publish(post: SocialPost, accessToken: string): Promise<PublishResult>;
+
+  /**
+   * Check status of a previously published post (e.g. video processing or scheduled post).
+   */
+  checkPublishStatus(providerPostId: string, accessToken: string): Promise<PublishResult>;
+
+  /**
+   * Cancel a scheduled post if the provider supports it.
+   */
+  cancelPublish(providerPostId: string, accessToken: string): Promise<boolean>;
+
+  /**
+   * Normalize an unknown provider error to PlatformError.
+   */
+  normalizeError(error: unknown): PlatformError;
 }

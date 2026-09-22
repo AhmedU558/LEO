@@ -7,6 +7,7 @@
 
 import { getLog } from '../../services/log.js';
 import { EXECUTION_TASKS_SQL } from './execution-tasks.js';
+import { SOCIAL_SQL } from './social.js';
 
 import { CORE_TABLES_SQL, CORE_MIGRATIONS_SQL, CORE_INDEXES_SQL } from './core.js';
 import {
@@ -88,6 +89,7 @@ export const MIGRATIONS_SQL = [
   CLAW_MIGRATIONS_SQL,
   UI_SESSIONS_MIGRATIONS_SQL,
   EXECUTION_TASKS_SQL,
+  SOCIAL_SQL,
 ].join('\n');
 
 /**

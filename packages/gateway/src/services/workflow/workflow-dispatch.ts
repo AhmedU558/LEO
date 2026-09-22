@@ -50,6 +50,7 @@ import {
   executeAggregateNode,
   executeWebhookResponseNode,
   executeClawNode,
+  executeSocialPublishNode,
 } from './node-executors.js';
 
 const log = getLog('WorkflowService');
@@ -611,6 +612,20 @@ async function _dispatchNodeImpl(
   }
 
   // ── stickyNoteNode ──
+  // ???? socialPublishNode ????
+  if (node.type === 'socialPublishNode') {
+    onProgress?.({ type: 'node_start', nodeId, toolName: 'social_publish' });
+    if (dryRun) {
+      return { nodeId, status: 'skipped', output: 'dry run' };
+    }
+    return await cb.retryFn(
+      node,
+      () => executeSocialPublishNode(ctx, node),
+      abortSignal,
+      onProgress
+    );
+  }
+
   if (node.type === 'stickyNoteNode') {
     return {
       nodeId,

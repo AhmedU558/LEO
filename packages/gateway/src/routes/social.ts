@@ -2,91 +2,62 @@ import { getUserId, getWorkspaceId } from './helpers.js';
 import { Hono } from 'hono';
 import { apiResponse, apiError, ERROR_CODES, parseJsonBody } from './helpers.js';
 import { SocialService } from '../services/social/service.js';
-import type { SocialContent, SocialAccount } from '@ownpilot/core/social';
+import type { SocialPost } from '@ownpilot/core/social';
+import { SocialRepository } from '../db/repositories/social.js';
 
 export const socialRoutes = new Hono();
-const socialService = new SocialService();
 
-// In-memory stubs for MVP (Production would use Postgres)
-const accounts: SocialAccount[] = [];
-const drafts: SocialContent[] = [];
-
-socialRoutes.get('/accounts', (c) => {
+socialRoutes.get('/accounts', async (c) => {
+  const service = new SocialService(getUserId(c), getWorkspaceId(c));
+  const accounts = await service.listAccounts();
   return apiResponse(c, { accounts });
 });
 
-socialRoutes.post('/accounts', async (c) => {
-  const body = (await parseJsonBody(c)) as Partial<SocialAccount> | null;
-  if (!body || !body.platform || !body.accountName) {
-    return apiError(
-      c,
-      { code: ERROR_CODES.INVALID_INPUT, message: 'Platform and name required' },
-      400
-    );
-  }
-
-  const newAccount: SocialAccount = {
-    id: 'acc_' + Date.now(), userId: getUserId(c),
-    platform: body.platform as import('@ownpilot/core/social').SocialPlatform,
-    accountId: 'provider_' + Date.now(),
-    accountName: body.accountName,
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  accounts.push(newAccount);
-  return apiResponse(c, newAccount);
+socialRoutes.get('/accounts/:id/status', async (c) => {
+  const service = new SocialService(getUserId(c), getWorkspaceId(c));
+  const status = await service.getAccountStatus(c.req.param('id'));
+  return apiResponse(c, { status });
 });
 
-socialRoutes.get('/content', (c) => {
-  return apiResponse(c, { content: drafts });
+socialRoutes.get('/publish', async (c) => {
+  const repo = new SocialRepository(getUserId(c), getWorkspaceId(c));
+  // Replace the protected query with listPublishRequests if it exists or define it
+  // Wait, I will just add listPublishRequests to SocialRepository!
+  const content = await repo.listPublishRequests();
+  return apiResponse(c, { content });
 });
 
-socialRoutes.post('/content', async (c) => {
-  const body = (await parseJsonBody(c)) as Partial<SocialContent> | null;
+socialRoutes.post('/publish', async (c) => {
+  const body = (await parseJsonBody(c)) as Omit<
+    SocialPost,
+    'id' | 'userId' | 'workspaceId' | 'createdAt' | 'updatedAt'
+  > | null;
   if (!body || !body.text || !body.platform || !body.accountId) {
     return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Missing fields' }, 400);
   }
 
-  const newContent: SocialContent = {
-    id: 'cnt_' + Date.now(),
-    userId: getUserId(c), accountId: body.accountId,
-    platform: body.platform as import('@ownpilot/core/social').SocialPlatform,
-    status: 'draft',
-    text: body.text,
-    media: body.media || [],
-    metadata: body.metadata || {},
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  drafts.push(newContent);
-  return apiResponse(c, newContent);
+  const service = new SocialService(getUserId(c), getWorkspaceId(c));
+  try {
+    const result = await service.createPublishTask(body);
+    return apiResponse(c, result);
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
+  }
 });
 
-socialRoutes.post('/content/:id/publish', async (c) => {
-  const id = c.req.param('id');
-  const content = drafts.find((d) => d.id === id);
-  if (!content)
-    return apiError(c, { code: ERROR_CODES.NOT_FOUND, message: 'Content not found' }, 404);
+socialRoutes.get('/publish/:id', async (c) => {
+  const service = new SocialService(getUserId(c), getWorkspaceId(c));
+  const request = await service.getPublishStatus(c.req.param('id'));
+  if (!request) return apiError(c, { code: ERROR_CODES.NOT_FOUND, message: 'Not found' }, 404);
+  return apiResponse(c, { request });
+});
 
-  const account = accounts.find((a) => a.id === content.accountId);
-  if (!account)
-    return apiError(c, { code: ERROR_CODES.NOT_FOUND, message: 'Account not found' }, 404);
-
-  content.status = 'publishing';
-
-  const result = await socialService.publishWithPolicy(getUserId(c), getWorkspaceId(c), content, account);
-
-  if (result.success) {
-    content.status = 'published';
-    content.publishedUrl = result.publishedUrl;
-    content.providerPostId = result.providerPostId;
-    content.updatedAt = new Date().toISOString();
-  } else {
-    content.status = 'failed';
-    content.errorMessage = result.error;
-    content.updatedAt = new Date().toISOString();
+socialRoutes.post('/publish/:id/cancel', async (c) => {
+  const service = new SocialService(getUserId(c), getWorkspaceId(c));
+  try {
+    const success = await service.cancelPublish(c.req.param('id'));
+    return apiResponse(c, { success });
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
   }
-
-  return apiResponse(c, { success: result.success, content, result });
 });
