@@ -8,7 +8,13 @@ export type ComputerActionType =
   | 'read_file'
   | 'write_file'
   | 'press_key'
-  | 'hover';
+  | 'hover'
+  | 'extract'
+  | 'wait'
+  | 'select'
+  | 'navigate_back'
+  | 'get_state'
+  | 'accessibility_tree';
 
 export interface ComputerAction {
   type: ComputerActionType;

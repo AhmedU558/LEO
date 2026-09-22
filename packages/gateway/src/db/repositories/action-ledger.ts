@@ -28,6 +28,8 @@ interface LedgerRow {
   cost_usd: string | null;
   previous_hash: string;
   hash: string;
+  execution_task_id: string | null;
+  session_id: string | null;
 }
 
 function rowToEntry(row: LedgerRow): ActionLedgerEntry {
@@ -56,6 +58,8 @@ function rowToEntry(row: LedgerRow): ActionLedgerEntry {
     costUsd: row.cost_usd ? parseFloat(row.cost_usd) : undefined,
     previousHash: row.previous_hash,
     hash: row.hash,
+    executionTaskId: row.execution_task_id ?? undefined,
+    sessionId: row.session_id ?? undefined,
   };
 }
 
@@ -71,7 +75,9 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
     // We use a transaction to lock the tail, generate the hash, and append the record
     return await this.transaction(async () => {
       // Lock the tail row for update to serialize writes
-      const tailRow = await this.queryOne<{ last_hash: string }>('SELECT last_hash FROM action_ledger_tail WHERE id = 1 FOR UPDATE');
+      const tailRow = await this.queryOne<{ last_hash: string }>(
+        'SELECT last_hash FROM action_ledger_tail WHERE id = 1 FOR UPDATE'
+      );
       const timestamp = new Date();
       const previousHash = tailRow ? tailRow.last_hash : 'genesis';
       const hashData = `${actionId}:${timestamp.toISOString()}:${previousHash}:${entryData.userId}:${entryData.action}`;
@@ -80,12 +86,12 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
       await this.execute(
         `INSERT INTO action_ledger (
           action_id, timestamp, user_id, workspace_id, agent_id, task_id, run_id,
-          tool, action, resource, resource_type, credential_id, capability,
-          policy_decision, risk_level, approval_id, approval_status, execution_environment,
-          result, error, duration_ms, cost_usd, previous_hash, hash
+            tool, action, resource, resource_type, credential_id, capability,
+            policy_decision, risk_level, approval_id, approval_status, execution_environment,
+            result, error, duration_ms, cost_usd, previous_hash, hash, execution_task_id, session_id
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
-        )`,
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+          )`,
         [
           actionId,
           timestamp.toISOString(),
@@ -145,7 +151,11 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
     return row ? rowToEntry(row) : undefined;
   }
 
-  async getEntries(userId?: string, limit: number = 100, offset: number = 0): Promise<ActionLedgerEntry[]> {
+  async getEntries(
+    userId?: string,
+    limit: number = 100,
+    offset: number = 0
+  ): Promise<ActionLedgerEntry[]> {
     if (userId) {
       const rows = await this.query<LedgerRow>(
         'SELECT * FROM action_ledger WHERE user_id = $1 ORDER BY timestamp ASC LIMIT $2 OFFSET $3',
@@ -153,11 +163,19 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
       );
       return rows.map(rowToEntry);
     }
-    const rows = await this.query<LedgerRow>('SELECT * FROM action_ledger ORDER BY timestamp ASC LIMIT $1 OFFSET $2', [limit, offset]);
+    const rows = await this.query<LedgerRow>(
+      'SELECT * FROM action_ledger ORDER BY timestamp ASC LIMIT $1 OFFSET $2',
+      [limit, offset]
+    );
     return rows.map(rowToEntry);
   }
 
-  async getByWorkspaceId(workspaceId: string, userId?: string, limit: number = 100, offset: number = 0): Promise<ActionLedgerEntry[]> {
+  async getByWorkspaceId(
+    workspaceId: string,
+    userId?: string,
+    limit: number = 100,
+    offset: number = 0
+  ): Promise<ActionLedgerEntry[]> {
     if (userId) {
       const rows = await this.query<LedgerRow>(
         'SELECT * FROM action_ledger WHERE workspace_id = $1 AND user_id = $2 ORDER BY timestamp ASC LIMIT $3 OFFSET $4',

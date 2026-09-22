@@ -380,6 +380,8 @@ export const BROWSER_ACTION_TIMEOUT_MS = 10_000;
 
 /** Maximum extracted text length (chars) */
 export const BROWSER_MAX_TEXT_LENGTH = 50_000;
+export const BROWSER_MAX_CONCURRENT_SESSIONS = 10;
+export const BROWSER_MAX_SCREENSHOT_SIZE_BYTES = 5 * 1024 * 1024;
 
 // ============================================================================
 // CLI Tool Service

@@ -10,6 +10,8 @@ export interface ActionLedgerEntry {
   workspaceId: string;
   agentId?: string;
   taskId?: string;
+  executionTaskId?: string;
+  sessionId?: string;
   runId?: string;
   tool: string;
   action: string;
