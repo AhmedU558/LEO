@@ -50,7 +50,12 @@ export async function executeSocialPublishNode(
       throw e;
     }
 
+        // Inject provider account ID so providers that need it (like Instagram) have access to it
+    if (!post.metadata) post.metadata = {};
+    post.metadata.providerAccountId = account.accountId;
+
     // Validate media
+
     if (post.media && post.media.length > 0) {
       const valid = await provider.validateMedia(post.media);
       if (!valid.valid) {

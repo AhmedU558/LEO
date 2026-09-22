@@ -212,6 +212,13 @@ export const SocialPage: React.FC = () => {
                 >
                   Connect YouTube
                 </a>
+                <a
+                  href="/api/v1/social/instagram/connect"
+                  className="w-full inline-block text-center py-2 bg-pink-600/10 text-pink-500 rounded-lg hover:bg-pink-600/20 transition-colors text-sm font-medium mt-2"
+                >
+                  Connect Instagram
+                </a>
+
               </div>
             </div>
           </Card>
@@ -387,3 +394,4 @@ export const SocialPage: React.FC = () => {
     </PageContainer>
   );
 };
+

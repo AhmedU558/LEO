@@ -1,6 +1,7 @@
-import { getLog } from '../log.js';
+﻿import { getLog } from '../log.js';
 import type { SocialProvider, SocialPlatform } from '@ownpilot/core/social';
 import { YouTubeProvider } from './providers/youtube.js';
+import { InstagramProvider } from './providers/instagram.js';
 
 const log = getLog('SocialProviderRegistry');
 
@@ -23,3 +24,5 @@ export class SocialProviderRegistry {
 
 export const socialProviderRegistry = new SocialProviderRegistry();
 socialProviderRegistry.register(new YouTubeProvider());
+socialProviderRegistry.register(new InstagramProvider());
+

@@ -128,3 +128,54 @@ socialRoutes.get('/youtube/callback', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
   }
 });
+socialRoutes.get('/instagram/connect', async (c) => {
+  const clientId = process.env.META_CLIENT_ID || '';
+  const redirectUri = `${new URL(c.req.url).origin}/api/v1/social/instagram/callback`;
+  const state = randomUUID();
+
+  const authUrl =
+    `https://www.facebook.com/v19.0/dialog/oauth?` +
+    new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
+      state,
+    }).toString();
+
+  return c.redirect(authUrl);
+});
+
+socialRoutes.get('/instagram/callback', async (c) => {
+  const code = c.req.query('code');
+  if (!code) return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Missing code' }, 400);
+
+  const redirectUri = `${new URL(c.req.url).origin}/api/v1/social/instagram/callback`;
+  const provider = socialProviderRegistry.get('instagram');
+
+  try {
+    const authData = await provider.connect(code, redirectUri);
+
+    const repo = new SocialRepository(getUserId(c), getWorkspaceId(c));
+
+    await repo.createAccount({
+      id: `acc_${randomUUID()}`,
+      platform: 'instagram',
+      accountId: authData.accountId!,
+      accountName: authData.accountName!,
+      profileUrl: authData.profileUrl,
+      status: 'active',
+    });
+
+    await repo.storeCredentials(authData.accountId!, {
+      accessToken: authData.accessToken!,
+      refreshToken: authData.refreshToken,
+    });
+
+    return apiResponse(c, { success: true, message: 'Instagram account connected' });
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
+  }
+});
+
+
