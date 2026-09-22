@@ -178,4 +178,65 @@ socialRoutes.get('/instagram/callback', async (c) => {
   }
 });
 
+socialRoutes.get('/facebook/connect', async (c) => {
+  const clientId = process.env.META_CLIENT_ID || '';
+  const redirectUri = `${new URL(c.req.url).origin}/api/v1/social/facebook/callback`;
+  const state = randomUUID();
 
+  const authUrl =
+    `https://www.facebook.com/v19.0/dialog/oauth?` +
+    new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'pages_manage_posts,pages_read_engagement,pages_show_list',
+      state,
+    }).toString();
+
+  return c.redirect(authUrl);
+});
+
+socialRoutes.get('/facebook/callback', async (c) => {
+  const code = c.req.query('code');
+  if (!code) return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Missing code' }, 400);
+
+  const redirectUri = `${new URL(c.req.url).origin}/api/v1/social/facebook/callback`;
+
+  try {
+    // 1. Exchange code
+    const tokenRes = await fetch(
+      `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${process.env.META_CLIENT_ID}&client_secret=${process.env.META_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`
+    );
+    if (!tokenRes.ok) throw new Error('Failed to exchange code');
+    const tokenData = await tokenRes.json();
+
+    // 2. Fetch pages
+    const pagesRes = await fetch(
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${tokenData.access_token}`
+    );
+    if (!pagesRes.ok) throw new Error('Failed to fetch pages');
+    const pagesData = await pagesRes.json();
+
+    const repo = new SocialRepository(getUserId(c), getWorkspaceId(c));
+
+    const pages = pagesData.data || [];
+    for (const page of pages) {
+      if (!page.id || !page.access_token) continue;
+      await repo.createAccount({
+        id: `acc_${randomUUID()}`,
+        platform: 'facebook',
+        accountId: page.id,
+        accountName: page.name,
+        profileUrl: `https://facebook.com/${page.id}`,
+        status: 'active',
+      });
+      await repo.storeCredentials(page.id, {
+        accessToken: page.access_token,
+      });
+    }
+
+    return apiResponse(c, { success: true, message: `Connected ${pages.length} Facebook pages` });
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
+  }
+});
