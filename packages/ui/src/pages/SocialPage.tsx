@@ -213,12 +213,14 @@ export const SocialPage: React.FC = () => {
                   Connect YouTube
                 </a>
 
+
                 <a
-                  href="/api/v1/social/facebook/connect"
-                  className="w-full inline-block text-center py-2 bg-blue-600/10 text-blue-500 rounded-lg hover:bg-blue-600/20 transition-colors text-sm font-medium mt-2"
+                  href="/api/v1/social/tiktok/connect"
+                  className="w-full inline-block text-center py-2 bg-black/10 text-black dark:text-white dark:bg-white/10 rounded-lg hover:bg-black/20 transition-colors text-sm font-medium mt-2"
                 >
-                  Connect Facebook
+                  Connect TikTok
                 </a>
+
               </div>
             </div>
           </Card>
@@ -394,3 +396,4 @@ export const SocialPage: React.FC = () => {
     </PageContainer>
   );
 };
+

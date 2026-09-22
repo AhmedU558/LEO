@@ -240,3 +240,52 @@ socialRoutes.get('/facebook/callback', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
   }
 });
+socialRoutes.get('/tiktok/connect', async (c) => {
+  const clientKey = process.env.TIKTOK_CLIENT_KEY || '';
+  const redirectUri = `${new URL(c.req.url).origin}/api/v1/social/tiktok/callback`;
+  const state = randomUUID();
+
+  const authUrl =
+    `https://www.tiktok.com/v2/auth/authorize/?` +
+    new URLSearchParams({
+      client_key: clientKey,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'user.info.basic,video.publish',
+      state,
+    }).toString();
+
+  return c.redirect(authUrl);
+});
+
+socialRoutes.get('/tiktok/callback', async (c) => {
+  const code = c.req.query('code');
+  if (!code) return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Missing code' }, 400);
+
+  const redirectUri = `${new URL(c.req.url).origin}/api/v1/social/tiktok/callback`;
+  const provider = socialProviderRegistry.get('tiktok');
+
+  try {
+    const authData = await provider.connect(code, redirectUri);
+    const repo = new SocialRepository(getUserId(c), getWorkspaceId(c));
+
+    await repo.createAccount({
+      id: `acc_${randomUUID()}`,
+      platform: 'tiktok',
+      accountId: authData.accountId!,
+      accountName: authData.accountName!,
+      profileUrl: authData.profileUrl,
+      status: 'active',
+    });
+
+    await repo.storeCredentials(authData.accountId!, {
+      accessToken: authData.accessToken!,
+      refreshToken: authData.refreshToken,
+    });
+
+    return apiResponse(c, { success: true, message: 'TikTok account connected' });
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
+  }
+});
+

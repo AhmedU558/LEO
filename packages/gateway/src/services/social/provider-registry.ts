@@ -3,6 +3,7 @@ import type { SocialProvider, SocialPlatform } from '@ownpilot/core/social';
 import { YouTubeProvider } from './providers/youtube.js';
 import { InstagramProvider } from './providers/instagram.js';
 import { FacebookProvider } from './providers/facebook.js';
+import { TikTokProvider } from './providers/tiktok.js';
 
 const log = getLog('SocialProviderRegistry');
 
@@ -27,3 +28,5 @@ export const socialProviderRegistry = new SocialProviderRegistry();
 socialProviderRegistry.register(new YouTubeProvider());
 socialProviderRegistry.register(new InstagramProvider());
 socialProviderRegistry.register(new FacebookProvider());
+socialProviderRegistry.register(new TikTokProvider());
+
