@@ -1,21 +1,28 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { createWorkflowApprovalsRepository } from './db/repositories/workflows/approvals.js';
 import { closeAdapter, initializeAdapter } from './db/adapters/index.js';
 
 const url = process.env.LEO_QA_POSTGRES_URL;
 
 describe('QA-012/QA-013 Integration: Approval Integrity and Liveness', () => {
+  const database = `leo_qa012_${randomUUID().replaceAll('-', '')}`;
+  let admin: pg.Pool | undefined;
   beforeAll(async () => {
-    if (url) {
-      process.env.DATABASE_URL = url;
-      await initializeAdapter();
-    }
+    if (!url) throw new Error('LEO_QA_POSTGRES_URL is required for the approval integration tests');
+    admin = new pg.Pool({ connectionString: url });
+    await admin.query(`CREATE DATABASE "${database}"`);
+    const testUrl = new URL(url);
+    testUrl.pathname = `/${database}`;
+    await initializeAdapter({ type: 'postgres', postgresUrl: testUrl.toString() });
   });
 
   afterAll(async () => {
-    if (url) {
-      await closeAdapter();
+    await closeAdapter();
+    if (admin) {
+      await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
+      await admin.end();
     }
   });
 

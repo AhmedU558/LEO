@@ -117,6 +117,8 @@ export class ActionLedgerRepository extends BaseRepository implements ActionLedg
           entryData.costUsd ?? null,
           previousHash,
           hash,
+          entryData.executionTaskId ?? null,
+          entryData.sessionId ?? null,
         ]
       );
 

@@ -2,24 +2,37 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { YouTubeProvider } from './providers/youtube.js';
 import type { SocialPost } from '@ownpilot/core/social';
 import type { MediaAsset } from '@ownpilot/core/media';
-import { Readable } from 'node:stream';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-vi.mock('../../storage/index.js', () => ({
-  storageProvider: {
-    download: vi.fn(async () => Readable.from(['fake_data'])),
-  }
-}));
+const fixture = vi.hoisted(() => ({ storage: '' }));
+vi.mock('../storage/index.js', async () => {
+  const { LocalStorageProvider } = await import('../storage/local-provider.js');
+  return {
+    get storageProvider() {
+      return new LocalStorageProvider(fixture.storage);
+    },
+  };
+});
 
 describe('YouTubeProvider', () => {
   let provider: YouTubeProvider;
+  let fixtureRoot: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), 'leo-youtube-'));
+    fixture.storage = join(fixtureRoot, '.ownpilot', 'storage');
+    await mkdir(fixture.storage, { recursive: true });
+    await writeFile(join(fixture.storage, 'k1'), 'fake_data');
     provider = new YouTubeProvider();
     vi.stubGlobal('fetch', vi.fn());
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    await rm(fixtureRoot, { recursive: true, force: true });
   });
 
   it('connect: exchanges code for tokens and fetches channel', async () => {
@@ -41,9 +54,7 @@ describe('YouTubeProvider', () => {
   });
 
   it('validateMedia: rejects non-video', async () => {
-    const res = await provider.validateMedia([
-      { id: '1', mediaType: 'image' } as MediaAsset,
-    ]);
+    const res = await provider.validateMedia([{ id: '1', mediaType: 'image' } as MediaAsset]);
     expect(res.valid).toBe(false);
   });
 
@@ -57,10 +68,10 @@ describe('YouTubeProvider', () => {
       headers: mockHeaders,
     } as any);
 
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ id: 'vid123' }),
-    } as any);
+    fetchMock.mockImplementationOnce(async (_url, init) => {
+      expect(await new Response(init?.body).text()).toBe('fake_data');
+      return new Response(JSON.stringify({ id: 'vid123' }));
+    });
 
     const post: SocialPost = {
       id: 'p1',
@@ -71,7 +82,9 @@ describe('YouTubeProvider', () => {
       text: 'desc',
       hashtags: ['tag'],
       metadata: {},
-      media: [{ id: 'm1', storageKey: 'k1', mediaType: 'video', mimeType: 'video/mp4' } as MediaAsset],
+      media: [
+        { id: 'm1', storageKey: 'k1', mediaType: 'video', mimeType: 'video/mp4' } as MediaAsset,
+      ],
     };
 
     const res = await provider.publish(post, 'token');
@@ -91,11 +104,10 @@ describe('YouTubeProvider', () => {
       headers: mockHeaders,
     } as any);
 
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      text: async () => 'Internal Server Error',
-    } as any);
+    fetchMock.mockImplementationOnce(async (_url, init) => {
+      expect(await new Response(init?.body).text()).toBe('fake_data');
+      return new Response('Internal Server Error', { status: 500 });
+    });
 
     const post: SocialPost = {
       id: 'p1',
@@ -106,7 +118,9 @@ describe('YouTubeProvider', () => {
       text: 'desc',
       hashtags: ['tag'],
       metadata: {},
-      media: [{ id: 'm1', storageKey: 'k1', mediaType: 'video', mimeType: 'video/mp4' } as MediaAsset],
+      media: [
+        { id: 'm1', storageKey: 'k1', mediaType: 'video', mimeType: 'video/mp4' } as MediaAsset,
+      ],
     };
 
     const res = await provider.publish(post, 'token');

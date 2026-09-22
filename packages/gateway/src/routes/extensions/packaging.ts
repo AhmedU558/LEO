@@ -151,7 +151,7 @@ packagingRoutes.get('/:id/package', async (c) => {
     });
     const filename = `${skillName}-v${safeVersion}.skill`;
 
-    return new Response(zipBuffer, {
+    return new Response(Uint8Array.from(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',

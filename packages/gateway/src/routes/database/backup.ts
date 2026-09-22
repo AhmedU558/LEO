@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import { spawn, type ChildProcess } from 'child_process';
 import { existsSync, unlinkSync, readdirSync, statSync } from 'fs';
 import { createReadStream } from 'node:fs';
-import { Readable } from 'node:stream';
+import { toWebByteStream } from '../../utils/web-stream.js';
 import { join, basename } from 'path';
 import { z } from 'zod';
 import { apiResponse, apiError, ERROR_CODES, sanitizeId, getErrorMessage } from '../helpers.js';
@@ -27,7 +27,7 @@ const log = getLog('Database');
 
 function toResponseBody(stream: ReturnType<typeof createReadStream>): ReadableStream {
   try {
-    return Readable.toWeb(stream);
+    return toWebByteStream(stream);
   } catch {
     return stream as never;
   }

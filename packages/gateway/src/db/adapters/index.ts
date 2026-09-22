@@ -38,7 +38,12 @@ export async function createAdapter(config?: DatabaseConfig): Promise<DatabaseAd
         const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
 
         if (isTest) {
-          try {
+          // Querying a missing table aborts PostgreSQL's transaction even if
+          // JavaScript catches the error. Check existence without raising SQL errors.
+          const table = await pgAdapter.query<{ name: string | null }>(
+            "SELECT to_regclass('public.system_settings') AS name"
+          );
+          if (table[0]?.name) {
             const res = await pgAdapter.query<{ value: string }>(
               'SELECT value FROM system_settings WHERE key = $1',
               ['schema_init_time']
@@ -54,8 +59,6 @@ export async function createAdapter(config?: DatabaseConfig): Promise<DatabaseAd
                 );
               }
             }
-          } catch {
-            // Table doesn't exist, ignore
           }
         }
 
@@ -63,14 +66,10 @@ export async function createAdapter(config?: DatabaseConfig): Promise<DatabaseAd
           await initializeSchema(async (sql) => pgAdapter.exec(sql));
 
           if (isTest) {
-            try {
-              await pgAdapter.execute(
-                "INSERT INTO system_settings (key, value) VALUES ('schema_init_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
-                [Date.now().toString()]
-              );
-            } catch {
-              // Ignore
-            }
+            await pgAdapter.execute(
+              "INSERT INTO system_settings (key, value) VALUES ('schema_init_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+              [Date.now().toString()]
+            );
           }
         }
       });

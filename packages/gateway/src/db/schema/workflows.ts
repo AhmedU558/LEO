@@ -104,6 +104,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 `;
 
 export const WORKFLOWS_MIGRATIONS_SQL = `
+ALTER TABLE workflow_approvals ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(50);
+ALTER TABLE workflow_approvals ADD COLUMN IF NOT EXISTS action VARCHAR(255);
+ALTER TABLE workflow_approvals ADD COLUMN IF NOT EXISTS capability VARCHAR(255);
+CREATE INDEX IF NOT EXISTS idx_workflow_approvals_workspace ON workflow_approvals(workspace_id);
 -- =====================================================
 -- WORKFLOWS: Add input_schema column
 -- =====================================================

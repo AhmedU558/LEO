@@ -11,7 +11,7 @@ import { getUserId } from './helpers.js';
 import { Hono } from 'hono';
 import { createReadStream } from 'node:fs';
 import { stat, unlink } from 'node:fs/promises';
-import { Readable } from 'node:stream';
+import { toWebByteStream } from '../utils/web-stream.js';
 import { basename } from 'node:path';
 import { getLog } from '../services/log.js';
 import { apiResponse, apiError, ERROR_CODES, getErrorMessage, parseJsonBody } from './helpers.js';
@@ -42,7 +42,7 @@ import type { SessionWorkspaceInfo } from '../workspace/file-workspace.js';
 
 function toResponseBody(stream: ReturnType<typeof createReadStream>): ReadableStream {
   try {
-    return Readable.toWeb(stream);
+    return toWebByteStream(stream);
   } catch {
     return stream as never;
   }
@@ -252,7 +252,7 @@ app.get('/:id/file/*', async (c) => {
     // If download requested, return as binary
     if (download) {
       const filename = sanitizeFilename(basename(filePath));
-      return new Response(content, {
+      return new Response(Uint8Array.from(content), {
         headers: {
           'Content-Disposition': `attachment; filename="${filename}"`,
           'Content-Type': 'application/octet-stream',
@@ -288,7 +288,7 @@ app.get('/:id/file/*', async (c) => {
         });
       }
       const contentType = mimeTypes[ext] || 'application/octet-stream';
-      return new Response(content, {
+      return new Response(Uint8Array.from(content), {
         headers: {
           'Content-Type': contentType,
           'Content-Length': String(content.length),

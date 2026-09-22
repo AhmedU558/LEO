@@ -7,6 +7,7 @@
   PlatformError,
 } from '@ownpilot/core/social';
 import type { MediaAsset } from '@ownpilot/core/media';
+import { toWebByteStream } from '../../../utils/web-stream.js';
 
 interface YouTubeConfig {
   clientId: string;
@@ -57,7 +58,11 @@ export class YouTubeProvider implements SocialProvider {
       throw new Error(`Failed to exchange code: ${err}`);
     }
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    };
 
     // Get channel info to use as accountName/accountId
     const channelRes = await fetch(
@@ -111,7 +116,8 @@ export class YouTubeProvider implements SocialProvider {
     if (media.length > 1) return { valid: false, error: 'YouTube supports only 1 video per post' };
 
     const asset = media[0]!;
-    if (asset.mediaType !== 'video') return { valid: false, error: 'YouTube requires a video asset' };
+    if (asset.mediaType !== 'video')
+      return { valid: false, error: 'YouTube requires a video asset' };
 
     return { valid: true };
   }
@@ -171,12 +177,13 @@ export class YouTubeProvider implements SocialProvider {
       }
 
       // 3. Upload the actual video data
-      const uploadRes = await fetch(uploadUrl, {
+      const uploadOptions: RequestInit & { duplex: 'half' } = {
         method: 'PUT',
         headers: { 'Content-Type': videoAsset.mimeType || 'video/mp4' },
-        body: mediaStream,
+        body: toWebByteStream(mediaStream),
         duplex: 'half',
-      } as RequestInit & { duplex?: string });
+      };
+      const uploadRes = await fetch(uploadUrl, uploadOptions);
 
       if (!uploadRes.ok) {
         // If upload fails in the middle or returns 500, we don't know if YT processed it
@@ -227,7 +234,9 @@ export class YouTubeProvider implements SocialProvider {
       };
     }
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as {
+      items?: Array<{ status: { uploadStatus: string; failureReason?: string } }>;
+    };
 
     if (!data?.items || data?.items.length === 0) {
       return {
@@ -236,14 +245,14 @@ export class YouTubeProvider implements SocialProvider {
       };
     }
 
-    const uploadStatus = data?.items[0].status.uploadStatus;
+    const uploadStatus = data.items[0]!.status.uploadStatus;
     if (uploadStatus === 'rejected' || uploadStatus === 'failed') {
       return {
         status: 'failed',
         providerPostId,
         error: {
           code: 'YT_PROCESSING_FAILED',
-          message: data?.items[0].status.failureReason || 'Failed',
+          message: data.items[0]!.status.failureReason || 'Failed',
           retryable: false,
         },
       };
@@ -281,6 +290,3 @@ export class YouTubeProvider implements SocialProvider {
     };
   }
 }
-
-
-

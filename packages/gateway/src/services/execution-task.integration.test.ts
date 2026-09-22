@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,18 +71,6 @@ describe.skipIf(!url)('durable execution tasks with PostgreSQL and real workflow
     db.adapter = new PostgresAdapter({ type: 'postgres', postgresUrl: testUrl.toString() });
     await db.adapter.initialize();
     await initializeSchema((sql) => db.adapter.exec(sql));
-    await db.adapter.exec(
-      await readFile(
-        new URL('../db/migrations/postgres/003_action_ledger.sql', import.meta.url),
-        'utf8'
-      )
-    );
-    await db.adapter.exec(
-      await readFile(
-        new URL('../db/migrations/postgres/004_approval_integrity.sql', import.meta.url),
-        'utf8'
-      )
-    );
     await db.adapter.exec(EXECUTION_TASKS_SQL);
     ActionLedger.setProvider(new ActionLedgerRepository());
   });

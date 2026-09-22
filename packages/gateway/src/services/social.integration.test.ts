@@ -56,12 +56,9 @@ describe.skipIf(!url)('Social Publish Integration', () => {
   };
 
   beforeAll(async () => {
-    console.log('beforeAll running', { url });
     if (!url) return;
     admin = new pg.Pool({ connectionString: url });
-    console.log('Admin pool created with url:', url);
     await admin.query(`CREATE DATABASE "${database}"`);
-    console.log('Database created:', database);
     const testUrl = new URL(url!);
     testUrl.pathname = `/${database}`;
     db.adapter = new PostgresAdapter({ postgresUrl: testUrl.toString() } as any);
@@ -69,19 +66,6 @@ describe.skipIf(!url)('Social Publish Integration', () => {
     await initializeSchema(async (sql) => {
       await db.adapter!.query(sql);
     });
-    const { readFile } = await import('node:fs/promises');
-    await db.adapter!.query(
-      await readFile(
-        new URL('../db/migrations/postgres/003_action_ledger.sql', import.meta.url),
-        'utf8'
-      )
-    );
-    await db.adapter!.query(
-      await readFile(
-        new URL('../db/migrations/postgres/004_approval_integrity.sql', import.meta.url),
-        'utf8'
-      )
-    );
 
     socialProviderRegistry.register(mockProvider);
     socialProviderRegistry.register(failingProvider);
