@@ -178,4 +178,35 @@ export class SocialService {
     await repo.updatePublishRequest(id, { status: 'cancelled' });
     return true;
   }
+  async reconcilePublish(id: string): Promise<PublishResult> {
+    const repo = new SocialRepository(this.userId, this.workspaceId);
+    const request = await repo.getPublishRequest(id);
+    if (!request) throw new Error('Request not found');
+    if (request.status !== 'unknown') {
+      throw new Error(`Cannot reconcile request in state: ${request.status}`);
+    }
+
+    const account = await repo.getAccount(request.accountId);
+    if (!account) throw new Error('Account not found');
+
+    const provider = socialProviderRegistry.get(account.platform);
+    if (!request.providerPostId) {
+      // If we don't have the post ID, we can't easily reconcile via checkPublishStatus
+      // We'd have to search the channel for a matching video title, etc.
+      // For now, if no providerPostId, it's unrecoverable without manual intervention
+      throw new Error('No provider correlation ID to reconcile');
+    }
+
+    const creds = await repo.getAccountCredentials(account.id);
+    if (!creds?.accessToken) throw new Error('No access token available');
+
+    const result = await provider.checkPublishStatus(request.providerPostId, creds.accessToken);
+    await repo.updatePublishRequest(id, {
+      status: result.status,
+      publishedUrl: result.publishedUrl,
+      error: result.error,
+    });
+
+    return result;
+  }
 }

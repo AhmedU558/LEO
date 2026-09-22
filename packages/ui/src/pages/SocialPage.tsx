@@ -62,7 +62,7 @@ export function SocialPage() {
     }
   };
 
-  const handleCreateDraft = async () => {
+  const _handleCreateDraft = async () => {
     if (!draftText || !selectedAccountId) {
       toast.error('Please enter text and select an account');
       return;
@@ -189,13 +189,47 @@ export function SocialPage() {
         {tab === 'drafts' && (
           <div className="flex flex-col gap-6">
             <div className="bg-bg-secondary border border-border rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-3">Create Draft</h3>
+              <h3 className="text-lg font-medium mb-3">Create Draft / Publish</h3>
+
+              <input
+                type="text"
+                className="w-full bg-bg-tertiary border border-border rounded-lg p-3 mb-3"
+                placeholder="Title (required for YouTube)"
+                id="draft-title"
+              />
+
               <textarea
                 className="w-full bg-bg-tertiary border border-border rounded-lg p-3 min-h-[100px] mb-3"
-                placeholder="What do you want to share?"
+                placeholder="What do you want to share? (Description for YouTube)"
                 value={draftText}
                 onChange={(e) => setDraftText(e.target.value)}
               />
+
+              <input
+                type="text"
+                className="w-full bg-bg-tertiary border border-border rounded-lg p-3 mb-3"
+                placeholder="Video URL (required for YouTube, e.g. https://example.com/video.mp4)"
+                id="draft-media-url"
+              />
+
+              <div className="flex gap-3 mb-3">
+                <input
+                  type="text"
+                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3 w-full"
+                  placeholder="Tags (comma separated)"
+                  id="draft-tags"
+                />
+
+                <select
+                  id="draft-privacy"
+                  className="bg-bg-tertiary border border-border rounded-lg px-3"
+                >
+                  <option value="private">Private</option>
+                  <option value="unlisted">Unlisted</option>
+                  <option value="public">Public</option>
+                </select>
+              </div>
+
               <div className="flex gap-3 items-center">
                 <select
                   className="bg-bg-tertiary border border-border rounded px-2 py-1"
@@ -210,10 +244,58 @@ export function SocialPage() {
                   ))}
                 </select>
                 <button
-                  onClick={handleCreateDraft}
+                  onClick={async () => {
+                    const title = (document.getElementById('draft-title') as HTMLInputElement)
+                      ?.value;
+                    const mediaUrl = (
+                      document.getElementById('draft-media-url') as HTMLInputElement
+                    )?.value;
+                    const tagsStr = (document.getElementById('draft-tags') as HTMLInputElement)
+                      ?.value;
+                    const privacy = (document.getElementById('draft-privacy') as HTMLSelectElement)
+                      ?.value;
+
+                    const media = mediaUrl
+                      ? [
+                          {
+                            id: 'm1',
+                            url: mediaUrl,
+                            type: 'video',
+                            mimeType: 'video/mp4',
+                            sizeBytes: 0,
+                          },
+                        ]
+                      : [];
+
+                    const tags = tagsStr ? tagsStr.split(',').map((t) => t.trim()) : [];
+
+                    if (!selectedAccountId || !draftText) return;
+                    const account = accounts.find((a) => a.id === selectedAccountId);
+                    if (!account) return;
+
+                    try {
+                      await fetch('/api/v1/social/publish', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          platform: account.platform,
+                          accountId: account.id,
+                          title,
+                          text: draftText,
+                          hashtags: tags,
+                          media,
+                          metadata: { privacyStatus: privacy },
+                        }),
+                      });
+                      setDraftText('');
+                      fetchDrafts();
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
                   className="flex items-center gap-1 bg-accent text-white px-4 py-1.5 rounded hover:opacity-90"
                 >
-                  <PenTool className="w-4 h-4" /> Save Draft
+                  <PenTool className="w-4 h-4" /> Publish Now
                 </button>
               </div>
             </div>
@@ -224,7 +306,10 @@ export function SocialPage() {
                 {drafts
                   .filter(
                     (d) =>
-                      d.status === 'draft' || d.status === 'failed' || d.status === 'publishing'
+                      d.status === 'draft' ||
+                      d.status === 'failed' ||
+                      d.status === 'publishing' ||
+                      d.status === 'unknown'
                   )
                   .map((d) => (
                     <div key={d.id} className="p-4 rounded-lg border border-border bg-bg-secondary">
@@ -239,6 +324,19 @@ export function SocialPage() {
                         <p className="text-xs text-error mb-3">Error: {d.errorMessage}</p>
                       )}
                       <div className="flex gap-2">
+                        {d.status === 'unknown' && (
+                          <button
+                            onClick={async () => {
+                              await fetch(`/api/v1/social/publish/${d.id}/reconcile`, {
+                                method: 'POST',
+                              });
+                              fetchDrafts();
+                            }}
+                            className="text-xs px-3 py-1 bg-yellow-500/10 text-yellow-500 rounded hover:bg-yellow-500/20"
+                          >
+                            Reconcile
+                          </button>
+                        )}
                         <button
                           onClick={() => handlePublish(d.id)}
                           className="text-xs px-3 py-1 bg-accent/10 text-accent rounded hover:bg-accent/20"

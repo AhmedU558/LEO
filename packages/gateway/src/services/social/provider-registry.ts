@@ -1,5 +1,6 @@
 import { getLog } from '../log.js';
 import type { SocialProvider, SocialPlatform } from '@ownpilot/core/social';
+import { YouTubeProvider } from './providers/youtube.js';
 
 const log = getLog('SocialProviderRegistry');
 
@@ -21,3 +22,4 @@ export class SocialProviderRegistry {
 }
 
 export const socialProviderRegistry = new SocialProviderRegistry();
+socialProviderRegistry.register(new YouTubeProvider());
