@@ -14,7 +14,12 @@ export type ComputerActionType =
   | 'select'
   | 'navigate_back'
   | 'get_state'
-  | 'accessibility_tree';
+  | 'accessibility_tree'
+  | 'navigate_forward'
+  | 'reload'
+  | 'find'
+  | 'inspect_page'
+  | 'fill_form';
 
 export interface ComputerAction {
   type: ComputerActionType;

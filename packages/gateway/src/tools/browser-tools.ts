@@ -6,8 +6,9 @@
  */
 
 import type { ToolDefinition } from '@ownpilot/core/tools';
-import { getErrorMessage } from '@ownpilot/core/services';
 import { getBrowserService } from '../services/browser-service.js';
+import { ComputerService } from '../services/computer/service.js';
+import type { ComputerAction } from '@ownpilot/core/computer';
 
 // ============================================================================
 // Tool Definitions
@@ -366,13 +367,10 @@ export const BROWSER_TOOL_NAMES = BROWSER_TOOLS.map((t) => t.name);
 export async function executeBrowserTool(
   toolName: string,
   args: Record<string, unknown>,
-  userId?: string,
-  context?: any
+  _userId?: string,
+  _context?: unknown
 ): Promise<{ success: boolean; result?: unknown; error?: string }> {
-  const service = getBrowserService();
-
-  // Check availability for all tools
-  if (!(await service.isAvailable())) {
+  if (!(await getBrowserService().isAvailable())) {
     return {
       success: false,
       error:
@@ -380,144 +378,93 @@ export async function executeBrowserTool(
     };
   }
 
-  const uid = userId ?? 'default';
-  const workspaceId = context?.workspaceDir ?? 'default';
-  const executionId = context?.conversationId ?? 'default';
-  const sessionId = `${uid}:${workspaceId}:${executionId}`;
+  // We no longer call getBrowserService directly here.
 
-  try {
-    switch (toolName) {
-      case 'browse_web': {
-        const url = args.url as string;
-        if (!url) return { success: false, error: 'url is required' };
-        const result = await service.navigate(sessionId, uid, url);
-        return {
-          success: true,
-          result: {
-            url: result.url,
-            title: result.title,
-            text: result.text,
-          },
-        };
-      }
+  // We use ComputerService to enforce ExecutionTaskContext, PolicyEngine, and ActionLedger.
+  const computerService = new ComputerService();
+  let action: ComputerAction;
 
-      case 'browser_click': {
-        const selector = args.selector as string;
-        if (!selector) return { success: false, error: 'selector is required' };
-        const result = await service.click(sessionId, selector);
-        return { success: true, result };
-      }
-
-      case 'browser_type': {
-        const selector = args.selector as string;
-        const text = args.text as string;
-        if (!selector || !text) return { success: false, error: 'selector and text are required' };
-        const result = await service.type(sessionId, selector, text);
-        return { success: true, result };
-      }
-
-      case 'browser_fill_form': {
-        const fields = args.fields as { selector: string; value: string }[];
-        if (!Array.isArray(fields) || fields.length === 0) {
-          return { success: false, error: 'fields array is required and must not be empty' };
-        }
-        const result = await service.fillForm(sessionId, fields);
-        return {
-          success: true,
-          result: {
-            url: result.url,
-            title: result.title,
-            piiWarnings: result.piiWarnings.length > 0 ? result.piiWarnings : undefined,
-          },
-        };
-      }
-
-      case 'browser_screenshot': {
-        const result = await service.screenshot(sessionId, {
-          fullPage: args.fullPage as boolean | undefined,
-          selector: args.selector as string | undefined,
-        });
-        return {
-          success: true,
-          result: {
-            url: result.url,
-            title: result.title,
-            screenshot: `data:image/png;base64,${result.screenshot}`,
-          },
-        };
-      }
-
-      case 'browser_extract': {
-        const dataSelectors = args.dataSelectors as Record<string, string> | undefined;
-        if (dataSelectors && typeof dataSelectors === 'object') {
-          const result = await service.extractData(sessionId, dataSelectors);
-          return { success: true, result };
-        }
-        const result = await service.extractText(sessionId, args.selector as string | undefined);
-        return { success: true, result };
-      }
-
-      case 'browser_wait_for': {
-        const selector = args.selector as string | undefined;
-        const timeoutMs = typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined;
-        const result = await service.wait(sessionId, selector, timeoutMs);
-        return { success: true, result };
-      }
-
-      case 'browser_scroll': {
-        const direction = args.direction as 'up' | 'down' | undefined;
-        if (direction !== 'up' && direction !== 'down') {
-          return { success: false, error: 'direction must be "up" or "down"' };
-        }
-        const pixels = typeof args.pixels === 'number' ? args.pixels : undefined;
-        const result = await service.scroll(sessionId, direction, pixels);
-        return { success: true, result };
-      }
-
-      case 'browser_select': {
-        const selector = args.selector as string;
-        const value = args.value as string;
-        if (!selector || typeof value !== 'string') {
-          return { success: false, error: 'selector and value are required' };
-        }
-        const result = await service.select(sessionId, selector, value);
-        return { success: true, result };
-      }
-
-      case 'browser_press_key': {
-        const key = args.key as string;
-        if (!key) return { success: false, error: 'key is required' };
-        const selector = args.selector as string | undefined;
-        const result = await service.pressKey(sessionId, key, selector);
-        return { success: true, result };
-      }
-
-      case 'browser_navigate_back': {
-        const result = await service.goBack(sessionId);
-        return { success: true, result };
-      }
-
-      case 'browser_hover': {
-        const selector = args.selector as string;
-        if (!selector) return { success: false, error: 'selector is required' };
-        const result = await service.hover(sessionId, selector);
-        return { success: true, result };
-      }
-
-      case 'browser_get_state': {
-        const result = await service.getState(sessionId);
-        return { success: true, result };
-      }
-
-      case 'browser_accessibility_tree': {
-        const result = await service.accessibilityTree(sessionId, args.selector as string | undefined);
-        return { success: true, result };
-      }
-
-      default:
-        return { success: false, error: `Unknown browser tool: ${toolName}` };
-    }
-  } catch (err) {
-    return { success: false, error: getErrorMessage(err) };
+  switch (toolName) {
+    case 'browse_web':
+      action = { type: 'navigate', params: { url: args.url } };
+      break;
+    case 'browser_click':
+      action = { type: 'click', params: { selector: args.selector } };
+      break;
+    case 'browser_type':
+      action = { type: 'type', params: { selector: args.selector, text: args.text } };
+      break;
+    case 'browser_fill_form':
+      action = { type: 'fill_form', params: { fields: args.fields } };
+      break;
+    case 'browser_screenshot':
+      action = { type: 'screenshot', params: { fullPage: args.fullPage, selector: args.selector } };
+      break;
+    case 'browser_extract':
+      action = {
+        type: 'extract',
+        params: { dataSelectors: args.dataSelectors, selector: args.selector },
+      };
+      break;
+    case 'browser_wait_for':
+      action = { type: 'wait', params: { selector: args.selector, timeoutMs: args.timeoutMs } };
+      break;
+    case 'browser_scroll':
+      action = { type: 'scroll', params: { direction: args.direction, pixels: args.pixels } };
+      break;
+    case 'browser_select':
+      action = { type: 'select', params: { selector: args.selector, value: args.value } };
+      break;
+    case 'browser_press_key':
+      action = { type: 'press_key', params: { key: args.key, selector: args.selector } };
+      break;
+    case 'browser_navigate_back':
+      action = { type: 'navigate_back', params: {} };
+      break;
+    case 'browser_navigate_forward':
+      action = { type: 'navigate_forward', params: {} };
+      break;
+    case 'browser_reload':
+      action = { type: 'reload', params: {} };
+      break;
+    case 'browser_find':
+      action = { type: 'find', params: { query: args.query } };
+      break;
+    case 'browser_inspect_page':
+      action = { type: 'inspect_page', params: { selector: args.selector } };
+      break;
+    case 'browser_hover':
+      action = { type: 'hover', params: { selector: args.selector } };
+      break;
+    case 'browser_get_state':
+      action = { type: 'get_state', params: {} };
+      break;
+    case 'browser_accessibility_tree':
+      action = { type: 'accessibility_tree', params: { selector: args.selector } };
+      break;
+    default:
+      return { success: false, error: `Unknown browser tool: ${toolName}` };
   }
+
+  // Ensure tool execute is bound to the task context.
+  // It is expected that the caller (ToolExecutor) has set up ExecutionTaskContext.
+  const result = await computerService.executeAction(action);
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  // Return the inner result data instead of wrapping it again,
+  // keeping compatibility with expected browser tool responses.
+  if (
+    toolName === 'browse_web' ||
+    toolName === 'browser_screenshot' ||
+    toolName === 'browser_accessibility_tree' ||
+    toolName === 'browser_inspect_page' ||
+    toolName === 'browser_fill_form' ||
+    toolName === 'browser_find'
+  ) {
+    return { success: true, result: result.data || result };
+  }
+
+  return { success: true, result: result.data };
 }

@@ -20,6 +20,8 @@ export class ComputerService {
       case 'extract':
       case 'get_state':
       case 'accessibility_tree':
+      case 'find':
+      case 'inspect_page':
         return 'browser.read';
       case 'navigate':
       case 'click':
@@ -29,6 +31,9 @@ export class ComputerService {
       case 'select':
       case 'wait':
       case 'navigate_back':
+      case 'navigate_forward':
+      case 'reload':
+      case 'fill_form':
         return 'browser.navigate';
       case 'press_key':
         return 'computer.control';

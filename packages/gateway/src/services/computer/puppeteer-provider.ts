@@ -49,6 +49,13 @@ export class PuppeteerBrowserProvider implements BrowserProvider {
             action.params.pixels as number | undefined
           );
           break;
+
+        case 'fill_form':
+          data = await service.fillForm(
+            this.sessionId,
+            action.params.fields as { selector: string; value: string }[]
+          );
+          break;
         case 'screenshot':
           data = await service.screenshot(
             this.sessionId,
@@ -80,6 +87,22 @@ export class PuppeteerBrowserProvider implements BrowserProvider {
             this.sessionId,
             action.params.selector as string,
             action.params.value as string
+          );
+          break;
+
+        case 'navigate_forward':
+          data = await service.goForward(this.sessionId);
+          break;
+        case 'reload':
+          data = await service.reload(this.sessionId);
+          break;
+        case 'find':
+          data = await service.find(this.sessionId, action.params.query as string);
+          break;
+        case 'inspect_page':
+          data = await service.accessibilityTree(
+            this.sessionId,
+            action.params.selector as string | undefined
           );
           break;
         case 'navigate_back':

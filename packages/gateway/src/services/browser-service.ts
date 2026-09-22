@@ -1,4 +1,5 @@
-﻿/**
+/// <reference lib="dom" />
+/**
  * Browser Service
  *
  * Headless browser automation via puppeteer-core.
@@ -316,6 +317,25 @@ export class BrowserService {
    * `navigated: false` when there is no history to go back to (the agent then
    * knows to navigate by URL instead of assuming it moved).
    */
+
+  async goForward(sessionId: string): Promise<{ url: string; title: string; navigated: boolean }> {
+    const page = await this.getExistingPage(sessionId);
+    const response = await page.goForward({
+      waitUntil: 'domcontentloaded',
+      timeout: DEFAULT_NAVIGATION_TIMEOUT,
+    });
+    return { url: page.url(), title: await page.title(), navigated: response !== null };
+  }
+
+  async reload(sessionId: string): Promise<{ url: string; title: string }> {
+    const page = await this.getExistingPage(sessionId);
+    await page.reload({
+      waitUntil: 'domcontentloaded',
+      timeout: DEFAULT_NAVIGATION_TIMEOUT,
+    });
+    return { url: page.url(), title: await page.title() };
+  }
+
   async goBack(sessionId: string): Promise<{ url: string; title: string; navigated: boolean }> {
     const page = await this.getExistingPage(sessionId);
     const response = await page.goBack({
@@ -426,6 +446,36 @@ export class BrowserService {
   // --------------------------------------------------------------------------
   // Extract Text
   // --------------------------------------------------------------------------
+
+  async find(
+    sessionId: string,
+    textOrSelector: string
+  ): Promise<{ url: string; title: string; matches: string[] }> {
+    const page = await this.getExistingPage(sessionId);
+    const matches = await page.evaluate((query) => {
+      const results: string[] = [];
+      try {
+        const elements = document.querySelectorAll(query);
+        if (elements.length > 0) {
+          elements.forEach((el) => results.push((el as HTMLElement).innerText || ''));
+          return results.slice(0, 50);
+        }
+      } catch {}
+
+      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+      let n;
+      while ((n = walk.nextNode())) {
+        if (n.textContent && n.textContent.includes(query)) {
+          const parent = n.parentElement;
+          if (parent && parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE') {
+            results.push(parent.innerText || n.textContent);
+          }
+        }
+      }
+      return Array.from(new Set(results)).slice(0, 50);
+    }, textOrSelector);
+    return { url: page.url(), title: await page.title(), matches };
+  }
 
   async extractText(
     sessionId: string,
@@ -616,7 +666,7 @@ export class BrowserService {
 
     try {
       await session.page.close();
-        await session.context.close();
+      await session.context.close();
     } catch {
       // Page may already be closed
     }
@@ -690,18 +740,21 @@ export class BrowserService {
       }
 
       // SSRF protection and domain allowlist for all subresources and redirects
-        const url = req.url();
-        if (url.startsWith('data:') || url.startsWith('blob:')) {
-          req.continue();
-          return;
-        }
-        try {
-          await this.validateUrl(url, sessionId);
-          req.continue();
-        } catch (e: any) {
-          log.warn('Aborting browser request due to policy/SSRF', { url, error: e.message });
-          req.abort();
-        }
+      const url = req.url();
+      if (url.startsWith('data:') || url.startsWith('blob:')) {
+        req.continue();
+        return;
+      }
+      try {
+        await this.validateUrl(url, sessionId);
+        req.continue();
+      } catch (e: unknown) {
+        log.warn('Aborting browser request due to policy/SSRF', {
+          url,
+          error: (e as Error).message,
+        });
+        req.abort();
+      }
     });
 
     const session: PageSession = {
@@ -820,7 +873,11 @@ export class BrowserService {
     const parsedSession = this.parseSessionId(sessionId);
     const policyEngine = new PolicyEngine();
     const policyResult = policyEngine.evaluate({
-      identity: { userId: parsedSession.userId || 'system', workspaceId: parsedSession.workspaceId || 'system', roles: [] },
+      identity: {
+        userId: parsedSession.userId || 'system',
+        workspaceId: parsedSession.workspaceId || 'system',
+        roles: [],
+      },
       action: 'browse_web',
       resource: url || '',
       capability: 'browser.navigate',
@@ -923,7 +980,7 @@ export class BrowserService {
         log.debug('Closing stale browser session', { sessionId });
         try {
           await session.page.close();
-        await session.context.close();
+          await session.context.close();
         } catch {
           // Ignore
         }
@@ -962,6 +1019,3 @@ export function resetBrowserService(): void {
     instance = null;
   }
 }
-
-
-
