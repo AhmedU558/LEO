@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { closeAdapter, initializeAdapter } from './db/adapters/index.js';
-import { app } from './app.js';
+import { createApp } from './app.js';
+const app = createApp();
 
 const url = process.env.LEO_QA_POSTGRES_URL;
 

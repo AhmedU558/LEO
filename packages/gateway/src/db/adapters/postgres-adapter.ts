@@ -244,7 +244,9 @@ export class PostgresAdapter implements DatabaseAdapter {
 
   async exec(sql: string): Promise<void> {
     if (!this.pool) throw new Error('Database not initialized');
-    await this.pool.query(sql);
+    const txClient = txClientStorage.getStore();
+    const client = txClient ?? this.pool;
+    await client.query(sql);
   }
 
   async close(): Promise<void> {

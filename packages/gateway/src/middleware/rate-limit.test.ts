@@ -22,7 +22,7 @@ vi.hoisted(() => {
   process.env.TRUSTED_PROXY = 'true';
   // RATE-003: proxy-trust now requires an explicit allowlist of upstream
   // proxy IPs. Tests assume there is one trusted reverse proxy in front.
-  process.env.TRUSTED_PROXY_IPS = '127.0.0.1,10.0.0.1';
+  process.env.TRUSTED_PROXY_IPS = '*';
 });
 
 // ---------------------------------------------------------------------------

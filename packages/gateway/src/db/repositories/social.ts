@@ -164,7 +164,7 @@ export class SocialRepository extends BaseRepository {
   }
   // --- Campaigns ---
   async createCampaign(campaign: PublishingCampaign): Promise<void> {
-    await this.run(
+    await this.execute(
       `INSERT INTO social_campaigns (id, user_id, workspace_id, content_item_id, execution_task_id, status, scheduled_for, version, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
@@ -187,8 +187,8 @@ export class SocialRepository extends BaseRepository {
       `SELECT * FROM social_campaigns WHERE id = $1 AND user_id = $2 AND workspace_id = $3`,
       [id, this.userId, this.workspaceId]
     );
-    if (!res.rows[0]) return null;
-    return this.mapCampaign(res.rows[0]);
+    if (!res[0]) return null;
+    return this.mapCampaign(res[0]);
   }
 
   async updateCampaign(id: string, updates: Partial<PublishingCampaign>): Promise<void> {
@@ -223,7 +223,7 @@ export class SocialRepository extends BaseRepository {
     values.push(new Date());
 
     values.push(id, this.userId, this.workspaceId);
-    await this.run(
+    await this.execute(
       `UPDATE social_campaigns SET ${setClauses.join(', ')} WHERE id = ${i - 2} AND user_id = ${i - 1} AND workspace_id = ${i}`,
       values
     );
@@ -234,11 +234,11 @@ export class SocialRepository extends BaseRepository {
       `SELECT * FROM social_campaigns WHERE user_id = $1 AND workspace_id = $2 ORDER BY created_at DESC`,
       [this.userId, this.workspaceId]
     );
-    return res.rows.map((r) => this.mapCampaign(r));
+    return res.map((r) => this.mapCampaign(r));
   }
 
   async createCampaignTarget(target: CampaignTarget): Promise<void> {
-    await this.run(
+    await this.execute(
       `INSERT INTO social_campaign_targets (id, campaign_id, user_id, workspace_id, account_id, platform, publish_request_id, status, error, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
@@ -262,7 +262,7 @@ export class SocialRepository extends BaseRepository {
       `SELECT * FROM social_campaign_targets WHERE campaign_id = $1 AND user_id = $2 AND workspace_id = $3`,
       [campaignId, this.userId, this.workspaceId]
     );
-    return res.rows.map((r) => this.mapTarget(r));
+    return res.map((r) => this.mapTarget(r));
   }
 
   async updateCampaignTarget(id: string, updates: Partial<CampaignTarget>): Promise<void> {
@@ -284,13 +284,13 @@ export class SocialRepository extends BaseRepository {
     values.push(new Date());
 
     values.push(id, this.userId, this.workspaceId);
-    await this.run(
+    await this.execute(
       `UPDATE social_campaign_targets SET ${setClauses.join(', ')} WHERE id = ${i - 2} AND user_id = ${i - 1} AND workspace_id = ${i}`,
       values
     );
   }
 
-  private mapCampaign(row: unknown): PublishingCampaign {
+  private mapCampaign(row: any): PublishingCampaign {
     return {
       id: row.id,
       userId: row.user_id,
@@ -305,7 +305,7 @@ export class SocialRepository extends BaseRepository {
     };
   }
 
-  private mapTarget(row: unknown): CampaignTarget {
+  private mapTarget(row: any): CampaignTarget {
     return {
       id: row.id,
       campaignId: row.campaign_id,
@@ -320,4 +320,25 @@ export class SocialRepository extends BaseRepository {
       updatedAt: row.updated_at.toISOString(),
     };
   }
+  async storeCredentials(
+    accountId: string,
+    creds: { accessToken: string; refreshToken?: string; expiresAt?: Date }
+  ): Promise<void> {
+    await this.execute(
+      `UPDATE social_accounts 
+       SET access_token = $1, refresh_token = $2, token_expires_at = $3, updated_at = $4
+       WHERE id = $5 AND workspace_id = $6`,
+      [
+        creds.accessToken,
+        creds.refreshToken || null,
+        creds.expiresAt?.toISOString() || null,
+        new Date().toISOString(),
+        accountId,
+        this.workspaceId,
+      ]
+    );
+  }
 }
+
+
+

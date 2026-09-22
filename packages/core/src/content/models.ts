@@ -1,4 +1,4 @@
-﻿export type ContentStatus =
+export type ContentStatus =
   'DRAFT' | 'READY' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED' | 'UNKNOWN';
 
 export interface PlatformVariant {

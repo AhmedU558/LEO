@@ -1,4 +1,4 @@
-﻿import type { VoiceMessage, VoiceSessionStatus } from './models.js';
+import type { VoiceMessage, VoiceSessionStatus } from './models.js';
 
 export interface VoiceProviderEvents {
   onStatusChange: (status: VoiceSessionStatus) => void;

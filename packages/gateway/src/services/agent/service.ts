@@ -485,7 +485,7 @@ async function createChatAgentInstance(
   _pageContext?: { path?: string } | null,
   gatewayUrl?: string,
   userId?: string,
-  workspaceId?: string
+  _workspaceId?: string
 ): Promise<Agent> {
   // ── CLI Chat Provider path ──
   // CLI providers (cli-claude, cli-codex, cli-gemini) use login-based auth

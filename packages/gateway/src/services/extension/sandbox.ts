@@ -1,13 +1,13 @@
 ﻿import { executeIsolatedJavaScript } from '@ownpilot/core/sandbox';
-import { getLog } from '../log.js';
 
-const log = getLog('ExtSandbox');
+
+
 
 export class ExtensionSandboxManager {
-  private callToolHandler?: (...args: any[]) => Promise<any>;
+  
 
-  setCallToolHandler(handler: (...args: any[]) => Promise<any>) {
-    this.callToolHandler = handler;
+  setCallToolHandler(_handler: (...args: any[]) => Promise<any>) {
+    
   }
 
   async execute(options: {
@@ -27,10 +27,12 @@ export class ExtensionSandboxManager {
       const wrappedCode = `
         const module = { exports: {} };
         ${options.code}
-        if (typeof module.exports === 'function') {
-          return await module.exports(args, utils);
-        }
-        return module.exports;
+        return await (async () => {
+          if (typeof module.exports === 'function') {
+            return await module.exports(args, utils);
+          }
+          return module.exports;
+        })();
       `;
       
       const value = await executeIsolatedJavaScript(wrappedCode, globals, {

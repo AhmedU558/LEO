@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostgresAdapter } from '../db/adapters/postgres-adapter.js';
 import { initializeSchema } from '../db/schema/index.js';

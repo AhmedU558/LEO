@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { McpClientService } from './client.js';
 import type { McpServerRecord } from '../../db/repositories/mcp-servers.js';
 import { getMcpServersRepo } from '../../db/repositories/mcp-servers.js';

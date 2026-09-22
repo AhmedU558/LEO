@@ -1,4 +1,4 @@
-﻿import type { StorageProvider } from '@ownpilot/core/storage';
+import type { StorageProvider } from '@ownpilot/core/storage';
 import type { Readable } from 'node:stream';
 import { createWriteStream, createReadStream } from 'node:fs';
 import { mkdir, unlink } from 'node:fs/promises';

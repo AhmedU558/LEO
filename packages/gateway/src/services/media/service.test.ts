@@ -1,20 +1,23 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MediaService } from './service.js';
 import { storageProvider } from '../storage/index.js';
 import { Readable } from 'node:stream';
 
-vi.mock('../../db/client.js', () => ({
-  db: {
-    insert: vi.fn(() => ({ values: vi.fn() })),
-    select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => []) })) })),
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn() })) })),
-    delete: vi.fn(() => ({ where: vi.fn() })),
-  },
+vi.mock('../../db/repositories/media.js', () => ({
+  createMediaRepository: vi.fn(() => ({
+    insert: vi.fn(),
+    list: vi.fn(() => []),
+    get: vi.fn(() => ({})),
+    deleteAsset: vi.fn(),
+  })),
 }));
 
 vi.mock('../storage/index.js', () => ({
   storageProvider: {
-    upload: vi.fn(async () => 'test_key'),
+    upload: vi.fn(async (workspaceId, filename, stream) => {
+      for await (const chunk of stream) {}
+      return 'test_key';
+    }),
     download: vi.fn(),
     delete: vi.fn(),
     init: vi.fn(),
@@ -27,6 +30,8 @@ describe('MediaService', () => {
   beforeEach(() => {
     service = new MediaService('user1', 'ws1');
     vi.clearAllMocks();
+    process.env.APP_SECRET = 'test_secret';
+    process.env.APP_URL = 'http://test.local';
   });
 
   it('rejects unsupported mime types', async () => {
@@ -34,12 +39,6 @@ describe('MediaService', () => {
     await expect(service.uploadMedia('test.txt', 'text/plain', stream)).rejects.toThrow(
       /Unsupported MIME type/
     );
-  });
-
-  it('rejects oversized media', async () => {
-    // To trigger the 500MB limit inside the stream, we would need to push 500MB
-    // or test the explicit check if we added one at the top level
-    // Wait, let's just make sure the mock handles it or add a generic size check test
   });
 
   it('uploads video and stores asset', async () => {
@@ -51,5 +50,42 @@ describe('MediaService', () => {
     expect(asset.storageKey).toBe('test_key');
     expect(asset.status).toBe('READY');
     expect(storageProvider.upload).toHaveBeenCalled();
+  });
+
+  it('creates valid delivery URLs', () => {
+    const url = service.createDeliveryUrl('asset_123', 1000);
+    expect(url).toContain('http://test.local/api/v1/media/delivery/ws1/asset_123');
+    expect(url).toContain('signature=');
+    expect(url).toContain('expiresAt=');
+  });
+
+  it('validates authentic signatures', () => {
+    const url = service.createDeliveryUrl('asset_123', 1000);
+    const urlObj = new URL(url);
+    const expiresAt = parseInt(urlObj.searchParams.get('expiresAt')!, 10);
+    const signature = urlObj.searchParams.get('signature')!;
+
+    const isValid = MediaService.validateDeliverySignature('ws1', 'asset_123', expiresAt, signature);
+    expect(isValid).toBe(true);
+  });
+
+  it('rejects expired signatures', () => {
+    const url = service.createDeliveryUrl('asset_123', -1000); // Already expired
+    const urlObj = new URL(url);
+    const expiresAt = parseInt(urlObj.searchParams.get('expiresAt')!, 10);
+    const signature = urlObj.searchParams.get('signature')!;
+
+    const isValid = MediaService.validateDeliverySignature('ws1', 'asset_123', expiresAt, signature);
+    expect(isValid).toBe(false); // Should be false because Date.now() > expiresAt
+  });
+
+  it('rejects tampered signatures or wrong workspace isolation', () => {
+    const url = service.createDeliveryUrl('asset_123', 10000);
+    const urlObj = new URL(url);
+    const expiresAt = parseInt(urlObj.searchParams.get('expiresAt')!, 10);
+    const signature = urlObj.searchParams.get('signature')!;
+
+    const isValid = MediaService.validateDeliverySignature('ws2', 'asset_123', expiresAt, signature);
+    expect(isValid).toBe(false);
   });
 });

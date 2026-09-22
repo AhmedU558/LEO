@@ -1,5 +1,5 @@
 /**
- * Workflow Service — DAG Execution Engine
+ * Workflow Service â€” DAG Execution Engine
  *
  * Executes visual workflows as Directed Acyclic Graphs.
  * Uses topological sort for execution order, parallel execution within levels,
@@ -55,7 +55,7 @@ interface WorkflowServiceOptions {
    */
   jobifiedMaxWaitMs?: number;
   /**
-   * If true, every node executes inline via dispatchNode — the persistent job
+   * If true, every node executes inline via dispatchNode â€” the persistent job
    * queue is bypassed entirely. Intended for tests and deployments without a
    * running job worker. Production defaults to false so workflows get crash
    * recovery via the job queue. Controlled via WORKFLOW_INLINE_EXECUTION env.
@@ -140,7 +140,7 @@ export class WorkflowService implements IWorkflowService {
 
     // The execution lock is already held (tryAcquireExecutionLock above). Log
     // creation and the 'started' callback run before the main try/finally, so a
-    // throw here — a DB error in createLog, or a throwing onProgress consumer —
+    // throw here â€” a DB error in createLog, or a throwing onProgress consumer â€”
     // would leak the lock and wedge the workflow as permanently "running"
     // ("Workflow is already running" on every later run until the gateway
     // restarts). Release the lock explicitly on that setup path.
@@ -164,7 +164,7 @@ export class WorkflowService implements IWorkflowService {
       const nodeMap = new Map(executableNodes.map((n) => [n.id, n]));
       const nodeOutputs: Record<string, NodeResult> = {};
 
-      // Pre-compute ForEach body nodes — these are handled internally by executeForEachNode
+      // Pre-compute ForEach body nodes â€” these are handled internally by executeForEachNode
       const forEachBodyNodeSet = new Set<string>();
       for (const node of executableNodes) {
         if (node.type === 'forEachNode') {
@@ -173,7 +173,7 @@ export class WorkflowService implements IWorkflowService {
         }
       }
 
-      // Build alias map: nodeId → alias name (from outputAlias field on any node)
+      // Build alias map: nodeId â†’ alias name (from outputAlias field on any node)
       const aliasToNodeId = new Map<string, string>();
       for (const node of executableNodes) {
         const alias = nodeDataField(node, 'outputAlias') as string | undefined;
@@ -191,7 +191,7 @@ export class WorkflowService implements IWorkflowService {
 
       // Node types that must stay synchronous (not yet jobified).
       // Defined in node-types.ts so its parity with executeNodeInline's switch
-      // is enforced by node-types.test.ts — a type in neither falls through to
+      // is enforced by node-types.test.ts â€” a type in neither falls through to
       // the jobified handler's default branch.
       const SYNC_ONLY_TYPES = SYNC_ONLY_NODE_TYPES;
 
@@ -333,7 +333,7 @@ export class WorkflowService implements IWorkflowService {
             // Promise.allSettled captures it as a rejected result, so we must
             // re-throw it (below, after the rest of the level is captured).
             // Otherwise it is recorded as a failed node and the finalize step
-            // overwrites the 'awaiting_approval' status with 'failed' — leaving
+            // overwrites the 'awaiting_approval' status with 'failed' â€” leaving
             // the workflow un-resumable. Keep the node's persisted 'running'
             // state rather than marking it an error.
             approvalPause = settled.reason;
@@ -523,7 +523,7 @@ export class WorkflowService implements IWorkflowService {
       const finalLog = await repo.getLog(wfLog.id);
       return finalLog ?? wfLog;
     } catch (error) {
-      // Approval pause — not a failure, workflow is waiting for approval
+      // Approval pause â€” not a failure, workflow is waiting for approval
       if (error instanceof ApprovalPauseError) {
         const finalLog = await repo.getLog(wfLog.id);
         return finalLog ?? wfLog;
@@ -569,8 +569,8 @@ export class WorkflowService implements IWorkflowService {
 
     if (!approval) throw new Error('Approval not found');
     if (
-      approval.context.executionTaskId &&
-      approval.context.executionTaskId !== executionTaskContext.getStore()?.taskId
+      ((approval.context || {}) as any).executionTaskId &&
+      ((approval.context || {}) as any).executionTaskId !== executionTaskContext.getStore()?.taskId
     )
       throw new Error('Managed approval requires its execution task worker');
     if (approval.status === 'rejected') throw new Error('Approval was rejected');
@@ -617,7 +617,7 @@ export class WorkflowService implements IWorkflowService {
     // The execution lock is already held (tryAcquireExecutionLock above). The
     // status update and 'started' callback run before the main try/finally, so
     // a throw here would leak the lock and wedge the workflow as permanently
-    // "running" — and it would be stuck un-resumable. Release on the setup path.
+    // "running" â€” and it would be stuck un-resumable. Release on the setup path.
     try {
       // Update log status to running for resume
       await repo.updateLog(logId, { status: 'running', nodeResults: savedNodeOutputs });
@@ -756,7 +756,7 @@ export class WorkflowService implements IWorkflowService {
           if (settled.status === 'fulfilled') {
             nodeOutputs[nodeId] = settled.value;
           } else if (settled.reason instanceof ApprovalPauseError) {
-            // A second approval node hit during resume — re-throw (after the
+            // A second approval node hit during resume â€” re-throw (after the
             // level) so the workflow pauses again rather than being marked
             // failed. See the matching note in executeWorkflow.
             approvalPause = settled.reason;
@@ -991,20 +991,20 @@ export class WorkflowService implements IWorkflowService {
   }
 
   // ==========================================================================
-  // Centralized node dispatch — eliminates duplicate if/else chains
+  // Centralized node dispatch â€” eliminates duplicate if/else chains
   // ==========================================================================
 
   /**
    * Dispatch execution of a single node by type.
    * Used by both executeWorkflow() and resumeFromApproval().
    */
-  /** Dispatch node to its executor — delegates to workflow-dispatch.ts. */
+  /** Dispatch node to its executor â€” delegates to workflow-dispatch.ts. */
   private async dispatchNode(ctx: Parameters<typeof dispatchNodeImpl>[0]): Promise<NodeResult> {
     await assertExecutionTaskActive();
     return dispatchNodeImpl(ctx, this.dispatchCallbacks);
   }
 
-  /** Wrap node execution with retry/timeout — delegates to workflow-dispatch.ts. */
+  /** Wrap node execution with retry/timeout â€” delegates to workflow-dispatch.ts. */
   private async executeWithRetryAndTimeout(
     node: WorkflowNode,
     executeFn: () => Promise<NodeResult>,
@@ -1027,3 +1027,8 @@ export function getWorkflowService(): WorkflowService {
   }
   return _workflowService;
 }
+
+
+
+
+

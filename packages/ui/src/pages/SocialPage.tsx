@@ -1,4 +1,4 @@
-﻿export const SocialPage = () => {
+export const SocialPage = () => {
   const { session } = useAuth();
   const [accounts, setAccounts] = useState<unknown[]>([]);
   const [campaigns, setCampaigns] = useState<unknown[]>([]);

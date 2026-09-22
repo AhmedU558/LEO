@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ComputerService } from './service.js';
 
 // Mock ActionLedger so we don't hit DB

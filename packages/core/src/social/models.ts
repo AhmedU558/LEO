@@ -1,4 +1,4 @@
-﻿import type { MediaAsset } from '../media/models.js';
+import type { MediaAsset } from '../media/models.js';
 export type SocialPlatform = 'instagram' | 'tiktok' | 'youtube' | 'facebook' | 'linkedin' | 'x';
 
 export interface SocialAccount {

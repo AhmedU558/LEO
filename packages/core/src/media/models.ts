@@ -1,4 +1,4 @@
-﻿export type MediaType = 'video' | 'image' | 'audio' | 'unknown';
+export type MediaType = 'video' | 'image' | 'audio' | 'unknown';
 export type MediaStatus = 'UPLOADING' | 'PROCESSING' | 'READY' | 'FAILED' | 'DELETING' | 'DELETED';
 
 export interface MediaAsset {

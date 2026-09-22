@@ -61,8 +61,8 @@ describe('QA-012/QA-013 Integration: Approval Integrity and Liveness', () => {
 
     // Try to approve an already expired approval
     const decided = await repo.decide(approval.id, 'approved', workspaceId);
-    // Should return null (not updated) because of the expires_at constraint
-    expect(decided).toBeNull();
+    // Should return the original pending state because it lost the race
+    expect(decided?.status).toBe('pending');
   });
   it('QA-012: Concurrent approve vs cancel (workflow rejection)', async () => {
     const userId = randomUUID();
@@ -77,7 +77,7 @@ describe('QA-012/QA-013 Integration: Approval Integrity and Liveness', () => {
     });
     await repo.rejectByWorkflow(workflowId);
     const decided = await repo.decide(approval.id, 'approved', workspaceId);
-    expect(decided).toBeNull();
+    expect(decided?.status).toBe('rejected');
     const finalState = await repo.get(approval.id);
     expect(finalState?.status).toBe('rejected');
   });

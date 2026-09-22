@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   SocialProvider,
   ProviderCapability,
   SocialPost,
@@ -6,17 +6,18 @@
   PlatformError,
 } from '@ownpilot/core/social';
 import type { MediaAsset } from '@ownpilot/core/media';
+import { MediaService } from '../../media/service.js';
 
 export class TikTokProvider implements SocialProvider {
   readonly platform = 'tiktok';
 
   getCapabilities(): ProviderCapability {
     return {
-      supportsScheduling: false, // TikTok Direct Post API doesn't support scheduling (only Drafts or immediate publish)
+      supportsScheduling: false,
       supportsVideo: true,
-      supportsImages: false, // Currently the TikTok Content Posting API is for Video (there is a Photo Carousel API but let's stick to video for standard direct post)
+      supportsImages: false,
       supportsCancellation: false,
-      maxMediaCount: 1, // Single video
+      maxMediaCount: 1,
     };
   }
 
@@ -35,29 +36,25 @@ export class TikTokProvider implements SocialProvider {
       body: p.toString(),
     });
 
-    const tokenData = await tokenRes.json();
+    const tokenData = await tokenRes.json() as any;
     if (!tokenRes.ok || tokenData.error) {
       throw new Error(`Failed to exchange code: ${tokenData.error || tokenData.message}`);
     }
 
-    const { access_token, refresh_token, open_id } = tokenData;
+    const { access_token, refresh_token } = tokenData;
 
-    // Fetch user info
     const userRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,avatar_url,display_name', {
       headers: { Authorization: `Bearer ${access_token}` },
     });
 
-    const userData = await userRes.json();
+    const userData = await userRes.json() as any;
     if (!userRes.ok || userData.error?.code !== 'ok') {
-      throw new Error(`Failed to fetch user info: ${userData.error?.message}`);
+      throw new Error(`Failed to fetch user: ${userData.error?.message || 'unknown'}`);
     }
 
-    const info = userData.data?.user || {};
-
     return {
-      accountId: open_id, // For TikTok, the unique identifier per user per app is usually open_id
-      accountName: info.display_name || 'TikTok User',
-      profileUrl: info.avatar_url, // TikTok doesn't easily return the profile URL, avatar_url is just image
+      accountId: userData.data.user.open_id,
+      accountName: userData.data.user.display_name,
       accessToken: access_token,
       refreshToken: refresh_token,
     };
@@ -68,9 +65,7 @@ export class TikTokProvider implements SocialProvider {
       const res = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const data = await res.json();
-      if (!res.ok || data.error?.code !== 'ok') return 'disconnected';
-      return 'active';
+      return res.ok ? 'active' : 'disconnected';
     } catch {
       return 'error';
     }
@@ -83,8 +78,15 @@ export class TikTokProvider implements SocialProvider {
     if (media.length > 1) {
       return { valid: false, error: 'Maximum 1 video supported' };
     }
-    if (media[0]!.mediaType !== 'video') {
+    const m = media[0]!;
+    if (m.mediaType !== 'video') {
       return { valid: false, error: 'Only video media is supported by this provider' };
+    }
+    if (m.sizeBytes > 4 * 1024 * 1024 * 1024) {
+      return { valid: false, error: 'Video exceeds 4GB limit' };
+    }
+    if (!['video/mp4', 'video/webm'].includes(m.mimeType)) {
+      return { valid: false, error: 'Video must be MP4 or WEBM' };
     }
     return { valid: true };
   }
@@ -94,13 +96,13 @@ export class TikTokProvider implements SocialProvider {
       return { status: 'failed', error: { code: 'INVALID_INPUT', message: 'Media required', retryable: false } };
     }
 
-    const baseUrl = process.env.APP_URL || 'https://leo.local';
     const media = post.media[0]!;
-    const mediaUrl = `${baseUrl}/api/v1/media/${media.id}/raw?token=mock_signed_token`;
+    const mediaService = new MediaService('system', post.workspaceId);
+    const mediaUrl = mediaService.createDeliveryUrl(media.id);
 
     const body = {
       post_info: {
-        title: post.text || '', // title acts as caption
+        title: post.text || '',
         privacy_level: 'PUBLIC_TO_EVERYONE',
         disable_comment: false,
         disable_duet: false,
@@ -121,12 +123,11 @@ export class TikTokProvider implements SocialProvider {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
+    const data = await res.json() as any;
     if (!res.ok || data.error?.code !== 'ok') {
       return { status: 'failed', error: this.normalizeError(data) };
     }
 
-    // data.data.publish_id is what we need to poll
     const publishId = data.data?.publish_id;
     if (!publishId) {
       return { status: 'unknown', error: { code: 'NO_PUBLISH_ID', message: 'No publish ID returned', retryable: false } };
@@ -146,38 +147,35 @@ export class TikTokProvider implements SocialProvider {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
+    const data = await res.json() as any;
     if (!res.ok || data.error?.code !== 'ok') {
       return { status: 'unknown', error: this.normalizeError(data) };
     }
 
     const status = data.data?.status;
-    if (status === 'PUBLISH_COMPLETE') {
-      const publicUrl = data.data?.public_url;
-      return { status: 'published', providerPostId, publishedUrl: publicUrl };
-    } else if (status === 'FAILED') {
-      const failReason = data.data?.fail_reason || 'Unknown processing error';
-      return { status: 'failed', providerPostId, error: { code: 'PROCESSING_ERROR', message: failReason, retryable: false } };
-    } else if (status === 'PROCESSING_DOWNLOAD' || status === 'PROCESSING_UPLOAD') {
+    if (status === 'PUBLISH_SUCCESS' || status === 'PUBLISH_COMPLETE') {
+      return { status: 'published', providerPostId, publishedUrl: data.data?.public_url };
+    } else if (status === 'PUBLISH_PROCESSING') {
       return { status: 'publishing', providerPostId };
+    } else if (status === 'PUBLISH_FAILED') {
+      return { status: 'failed', providerPostId, error: { code: 'PUBLISH_FAILED', message: data.data?.fail_reason || 'Publish failed', retryable: false } };
     }
 
     return { status: 'unknown' };
   }
 
   async cancelPublish(_providerPostId: string, _accessToken: string): Promise<boolean> {
-    return false; // TikTok API does not support cancelling an already initialized PULL_FROM_URL publish
+    return false;
   }
 
   normalizeError(error: unknown): PlatformError {
-    const err = error as Record<string, Record<string, unknown>>;
-    const code = String(err?.error?.code || 'UNKNOWN');
-    const message = String(err?.error?.message || String(error));
-    // TikTok returns "ok" as code when successful, but error codes are strings (e.g., 'invalid_param', 'spam_risk')
-    // Transient errors typically include internal server error
-    const retryable = code === 'internal_error' || code === 'rate_limit_exceeded';
-    return { code, message, retryable };
+    const err = error as Record<string, any>;
+    const code = err?.error?.code || 'UNKNOWN';
+    const message = err?.error?.message || String(error);
+    const retryable = code === 1 || code === 2;
+    return { code: String(code), message: String(message), retryable };
   }
 }
+
 
 

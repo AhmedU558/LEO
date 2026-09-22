@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   SocialProvider,
   ProviderCapability,
   SocialAccount,
@@ -57,11 +57,7 @@ export class YouTubeProvider implements SocialProvider {
       throw new Error(`Failed to exchange code: ${err}`);
     }
 
-    const data = (await res.json()) as {
-      access_token: string;
-      refresh_token?: string;
-      expires_in: number;
-    };
+    const data = (await res.json()) as any;
 
     // Get channel info to use as accountName/accountId
     const channelRes = await fetch(
@@ -79,7 +75,7 @@ export class YouTubeProvider implements SocialProvider {
       items?: Array<{ id: string; snippet: { title: string } }>;
     };
 
-    const channel = channelData.items?.[0];
+    const channel = channelData?.items?.[0];
     if (!channel) {
       throw new Error('No YouTube channel found for this account.');
     }
@@ -115,7 +111,7 @@ export class YouTubeProvider implements SocialProvider {
     if (media.length > 1) return { valid: false, error: 'YouTube supports only 1 video per post' };
 
     const asset = media[0]!;
-    if (asset.type !== 'video') return { valid: false, error: 'YouTube requires a video asset' };
+    if (asset.mediaType !== 'video') return { valid: false, error: 'YouTube requires a video asset' };
 
     return { valid: true };
   }
@@ -231,27 +227,23 @@ export class YouTubeProvider implements SocialProvider {
       };
     }
 
-    const data = (await res.json()) as {
-      access_token: string;
-      refresh_token?: string;
-      expires_in: number;
-    };
+    const data = (await res.json()) as any;
 
-    if (!data.items || data.items.length === 0) {
+    if (!data?.items || data?.items.length === 0) {
       return {
         status: 'failed',
         error: { code: 'NOT_FOUND', message: 'Video not found', retryable: false },
       };
     }
 
-    const uploadStatus = data.items[0].status.uploadStatus;
+    const uploadStatus = data?.items[0].status.uploadStatus;
     if (uploadStatus === 'rejected' || uploadStatus === 'failed') {
       return {
         status: 'failed',
         providerPostId,
         error: {
           code: 'YT_PROCESSING_FAILED',
-          message: data.items[0].status.failureReason || 'Failed',
+          message: data?.items[0].status.failureReason || 'Failed',
           retryable: false,
         },
       };
@@ -289,3 +281,6 @@ export class YouTubeProvider implements SocialProvider {
     };
   }
 }
+
+
+

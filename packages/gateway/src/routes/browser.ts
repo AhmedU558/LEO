@@ -1,4 +1,4 @@
-import { getUserId } from './helpers.js';
+﻿import { getUserId } from './helpers.js';
 /**
  * Browser Routes
  *
@@ -147,7 +147,7 @@ browserRoutes.post('/navigate', async (c) => {
     const body = validateBody(browserNavigateSchema, await c.req.json());
 
     const service = getBrowserService();
-    const result = await service.navigate(userId, body.url);
+    const result = await service.navigate('session-id', userId, body.url);
     return apiResponse(c, result);
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('Validation failed:'))
@@ -395,3 +395,4 @@ browserRoutes.delete('/workflows/:id', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: getErrorMessage(err) }, 500);
   }
 });
+

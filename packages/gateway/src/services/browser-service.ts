@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Browser Service
  *
  * Headless browser automation via puppeteer-core.
@@ -38,8 +38,8 @@ const MAX_NAV_ATTEMPTS = 2;
 const NAV_RETRY_DELAY_MS = 400;
 
 /**
- * Chromium navigation faults that are typically transient — a connection reset,
- * a dropped socket, a network change, or a timeout — where an immediate retry
+ * Chromium navigation faults that are typically transient â€” a connection reset,
+ * a dropped socket, a network change, or a timeout â€” where an immediate retry
  * usually succeeds. Permanent faults (ERR_NAME_NOT_RESOLVED / DNS, ERR_ABORTED,
  * invalid URL, SSRF blocks) are deliberately excluded so they fail fast instead
  * of wasting a retry. Exported for direct unit testing.
@@ -95,7 +95,7 @@ export function renderAxNode(node: SerializedAXNode, depth: number): string {
   return line;
 }
 
-/** Accessibility roles an agent can act on — used to build a recovery hint. */
+/** Accessibility roles an agent can act on â€” used to build a recovery hint. */
 const ACTIONABLE_ROLES = new Set([
   'button',
   'link',
@@ -143,7 +143,7 @@ export async function buildActionableElementsHint(page: Page): Promise<string> {
 
 /**
  * waitForSelector that, on timeout (selector never appeared), throws an error
- * naming the actionable elements that ARE present — turning a dead-end "not
+ * naming the actionable elements that ARE present â€” turning a dead-end "not
  * found" into a self-correction cue. Non-timeout errors pass through unchanged.
  * Exported for unit testing.
  */
@@ -281,7 +281,7 @@ export class BrowserService {
         timeout: Math.min(DEFAULT_ACTION_TIMEOUT, 5000),
       });
     } catch (err) {
-      // Only tolerate the idle wait timing out — anything else is a real fault.
+      // Only tolerate the idle wait timing out â€” anything else is a real fault.
       if (!(err instanceof Error && /timeout|timed out|waiting for/i.test(err.message))) {
         throw err;
       }
@@ -330,7 +330,7 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   /**
-   * Hover the pointer over an element — reveals dropdown menus, tooltips, and
+   * Hover the pointer over an element â€” reveals dropdown menus, tooltips, and
    * hover-gated controls that must be visible before they can be clicked.
    */
   async hover(sessionId: string, selector: string): Promise<{ url: string; title: string }> {
@@ -474,8 +474,8 @@ export class BrowserService {
   // --------------------------------------------------------------------------
   // Accessibility Tree
   //
-  // Returns the page as a structured accessibility (a11y) outline — role + name
-  // hierarchy — instead of raw HTML. This is the representation Hermes Agent
+  // Returns the page as a structured accessibility (a11y) outline â€” role + name
+  // hierarchy â€” instead of raw HTML. This is the representation Hermes Agent
   // uses: far more compact and easier for an LLM to reason about and navigate
   // than DOM/HTML, since it surfaces the same elements assistive tech exposes.
   // --------------------------------------------------------------------------
@@ -486,7 +486,7 @@ export class BrowserService {
   ): Promise<{ tree: string; url: string; title: string }> {
     const page = await this.getExistingPage(sessionId);
 
-    // Type inferred from page.$ — avoids naming DOM lib types (Element/Node),
+    // Type inferred from page.$ â€” avoids naming DOM lib types (Element/Node),
     // which aren't in the gateway tsconfig's lib set.
     let root = null as Awaited<ReturnType<typeof page.$>>;
     if (selector) {
@@ -564,14 +564,14 @@ export class BrowserService {
   /**
    * Press a single keyboard key on the active page. Maps directly to
    * Puppeteer's `keyboard.press`, which supports both single characters
-   * ('a', 'A') and named keys (Enter, Tab, Escape, ArrowDown, …).
+   * ('a', 'A') and named keys (Enter, Tab, Escape, ArrowDown, â€¦).
    *
    * Critical for agent autonomy on real sites: many search bars submit
    * on Enter rather than via a button, and modal dialogs close on Esc.
-   * Without this, agents could only type strings — not actually progress
+   * Without this, agents could only type strings â€” not actually progress
    * through keyboard-driven UIs.
    *
-   * `selector` is optional — when supplied, the element is focused first
+   * `selector` is optional â€” when supplied, the element is focused first
    * so the key targets the right input. Without it, the key fires on
    * whatever currently has focus (useful for global shortcuts).
    */
@@ -597,7 +597,7 @@ export class BrowserService {
    *
    * Agents need this to verify that a previous click / form-submit
    * landed where they expected before proceeding. Returns null when the
-   * user has no open page (instead of throwing — letting agents probe
+   * user has no open page (instead of throwing â€” letting agents probe
    * cheaply without exception handling).
    */
   async getState(sessionId: string): Promise<{ url: string; title: string } | null> {
@@ -730,7 +730,7 @@ export class BrowserService {
 
     // Single-flight: concurrent cold-starts must share ONE launch. Without
     // this, two overlapping callers both pass the connected check while
-    // this.browser is still null and both launch — the loser's assignment is
+    // this.browser is still null and both launch â€” the loser's assignment is
     // overwritten, orphaning a Chromium instance that is never closed, while
     // its 'disconnected' handler stays registered on `this` and later evicts
     // the LIVE browser's sessions (round 71).
@@ -820,9 +820,9 @@ export class BrowserService {
     const parsedSession = this.parseSessionId(sessionId);
     const policyEngine = new PolicyEngine();
     const policyResult = policyEngine.evaluate({
-      identity: { userId: parsedSession.userId, workspaceId: parsedSession.workspaceId, roles: [] },
+      identity: { userId: parsedSession.userId || 'system', workspaceId: parsedSession.workspaceId || 'system', roles: [] },
       action: 'browse_web',
-      resource: url,
+      resource: url || '',
       capability: 'browser.navigate',
       risk: 'LOW',
       environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
@@ -962,3 +962,6 @@ export function resetBrowserService(): void {
     instance = null;
   }
 }
+
+
+

@@ -12,12 +12,12 @@ export async function executeSocialPublishNode(
 
   try {
     // Inputs come from ExecutionTask mapping
-    const publishRequestId = (context as Record<string, unknown>).workflowInputs
+    const publishRequestId = (context as any).workflowInputs
       ?.publishRequestId as string | undefined;
     if (!publishRequestId) throw new Error('Missing publishRequestId input');
 
     // Need workspaceId which was missing from the DispatchNodeContext type in this context?
-    const workspaceId = (context as Record<string, unknown>).workspaceId || 'default';
+    const workspaceId = (context as any).workspaceId || 'default';
 
     const repo = new SocialRepository(context.userId, workspaceId);
     const request = await repo.getPublishRequest(publishRequestId);
@@ -96,3 +96,4 @@ export async function executeSocialPublishNode(
     };
   }
 }
+

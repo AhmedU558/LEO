@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FacebookProvider } from './facebook.js';
 
 vi.stubGlobal(
@@ -29,6 +29,7 @@ describe('FacebookProvider', () => {
 
   beforeEach(() => {
     provider = new FacebookProvider();
+    process.env.APP_SECRET = 'test_secret';
     vi.clearAllMocks();
   });
 
@@ -140,3 +141,4 @@ describe('FacebookProvider', () => {
     expect(res).toBe(true);
   });
 });
+

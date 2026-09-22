@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { JobQueueService, jobExecutionContext } from '../services/job-queue-service.js';
 import { WorkflowService } from '../services/workflow/workflow-service.js';
 import { AgenticOrchestrator } from '@ownpilot/core/agentic';

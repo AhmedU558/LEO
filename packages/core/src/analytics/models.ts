@@ -1,4 +1,4 @@
-﻿export interface MetricData {
+export interface MetricData {
   timestamp: string;
   category: 'task' | 'tool' | 'social' | 'cost' | 'agent';
   metric: string;

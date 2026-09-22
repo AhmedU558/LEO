@@ -1,4 +1,4 @@
-﻿export const MEDIA_CONTENT_SQL = `
+export const MEDIA_CONTENT_SQL = `
 CREATE TABLE IF NOT EXISTS media_assets (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

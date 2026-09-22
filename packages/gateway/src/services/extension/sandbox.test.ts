@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ExtensionSandboxManager, getExtensionSandbox, resetExtensionSandbox } from './sandbox.js';
 
 vi.mock('@ownpilot/core/sandbox', () => ({

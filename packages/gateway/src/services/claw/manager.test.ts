@@ -35,6 +35,12 @@ vi.mock('../../db/repositories/claws.js', () => ({
   getClawsRepository: mockGetClawsRepo,
 }));
 
+vi.mock('../manager-helpers.js', () => ({
+  scaffoldClawDir: vi.fn(),
+  runRetentionCleanup: vi.fn(),
+  ensureConversationRow: vi.fn(),
+}));
+
 vi.mock('../../workspace/file-workspace.js', () => ({
   getOrCreateSessionWorkspace: mockGetOrCreateSessionWorkspace,
   updateSessionWorkspaceMeta: vi.fn(),

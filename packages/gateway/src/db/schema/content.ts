@@ -1,4 +1,4 @@
-﻿import { pgTable, text, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 export const contentItems = pgTable('content_items', {
   id: text('id').primaryKey(),

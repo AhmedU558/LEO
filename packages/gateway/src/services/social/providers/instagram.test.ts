@@ -25,7 +25,7 @@ vi.stubGlobal(
     if (url.includes('ig1?fields=')) {
       return { ok: true, json: async () => ({ id: 'ig1', username: 'testig' }) };
     }
-    if (url.includes('/media?') && url.includes('POST')) {
+    if (url.includes('/media?')) {
       return { ok: true, json: async () => ({ id: 'container_1' }) };
     }
     if (url.includes('status_code')) {
@@ -40,6 +40,7 @@ describe('InstagramProvider', () => {
 
   beforeEach(() => {
     provider = new InstagramProvider();
+    process.env.APP_SECRET = 'test_secret';
     vi.clearAllMocks();
   });
 
@@ -104,3 +105,5 @@ describe('InstagramProvider', () => {
   });
 
 });
+
+

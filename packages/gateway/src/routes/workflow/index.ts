@@ -102,28 +102,28 @@ function validateWorkflowSemantics(nodes: WfNode[], edges: WfEdge[]): string[] {
   const errors: string[] = [];
   const nodeIds = new Set(nodes.map((n) => n.id));
 
-  // ── Max node count ──
+  // â”€â”€ Max node count â”€â”€
   if (nodes.length > MAX_WORKFLOW_NODES) {
     errors.push(`Workflow exceeds maximum node count (${nodes.length}/${MAX_WORKFLOW_NODES})`);
   }
 
-  // ── Max 1 trigger ──
+  // â”€â”€ Max 1 trigger â”€â”€
   const triggers = nodes.filter((n) => n.type === 'triggerNode');
   if (triggers.length > 1) {
     errors.push(`Only one trigger node allowed (found ${triggers.length})`);
   }
 
-  // ── Max 1 error handler ──
+  // â”€â”€ Max 1 error handler â”€â”€
   const errorHandlers = nodes.filter((n) => n.type === 'errorHandlerNode');
   if (errorHandlers.length > 1) {
     errors.push(`Only one error handler node allowed (found ${errorHandlers.length})`);
   }
 
-  // ── Per-node required fields ──
+  // â”€â”€ Per-node required fields â”€â”€
   for (const node of nodes) {
     const d = node.data;
 
-    // Unknown node types would silently execute as tool nodes — reject at save time
+    // Unknown node types would silently execute as tool nodes â€” reject at save time
     if (node.type && !WORKFLOW_NODE_TYPES.has(node.type)) {
       errors.push(`Node "${node.id}": Unknown node type "${node.type}"`);
       continue;
@@ -131,7 +131,7 @@ function validateWorkflowSemantics(nodes: WfNode[], edges: WfEdge[]): string[] {
 
     switch (node.type) {
       case 'llmNode':
-        // provider/model are optional — the executor resolves the user's
+        // provider/model are optional â€” the executor resolves the user's
         // configured defaults when they are empty or "default"
         if (!d.userMessage) errors.push(`Node "${node.id}": LLM node requires "userMessage"`);
         break;
@@ -248,7 +248,7 @@ function validateWorkflowSemantics(nodes: WfNode[], edges: WfEdge[]): string[] {
         break;
     }
 
-    // ── Common field range checks ──
+    // â”€â”€ Common field range checks â”€â”€
     if (d) {
       if (typeof d.retryCount === 'number' && (d.retryCount < 0 || d.retryCount > 5)) {
         errors.push(`Node "${node.id}": retryCount must be between 0 and 5`);
@@ -260,7 +260,7 @@ function validateWorkflowSemantics(nodes: WfNode[], edges: WfEdge[]): string[] {
     }
   }
 
-  // ── Edge reference validation ──
+  // â”€â”€ Edge reference validation â”€â”€
   for (const edge of edges) {
     if (!nodeIds.has(edge.source)) {
       errors.push(`Edge source "${edge.source}" references non-existent node`);
@@ -270,7 +270,7 @@ function validateWorkflowSemantics(nodes: WfNode[], edges: WfEdge[]): string[] {
     }
   }
 
-  // ── Branching edge sourceHandle validation ──
+  // â”€â”€ Branching edge sourceHandle validation â”€â”€
   const branchingNodes = new Map<string, WfNode>();
   for (const node of nodes) {
     if (['conditionNode', 'forEachNode', 'switchNode', 'parallelNode'].includes(node.type)) {
@@ -319,7 +319,7 @@ function validateWorkflowSemantics(nodes: WfNode[], edges: WfEdge[]): string[] {
     }
   }
 
-  // ── Output alias validation ──
+  // â”€â”€ Output alias validation â”€â”€
   const RESERVED_ALIASES = new Set(['variables', 'workflow', 'trigger', 'webhook']);
   const aliasMap = new Map<string, string>(); // alias -> nodeId
   for (const node of nodes) {
@@ -345,7 +345,7 @@ function validateWorkflowSemantics(nodes: WfNode[], edges: WfEdge[]): string[] {
     }
   }
 
-  // ── Cycle detection ──
+  // â”€â”€ Cycle detection â”€â”€
   const cycleError = detectCycle(nodes, edges);
   if (cycleError) {
     errors.push(cycleError);
@@ -518,7 +518,7 @@ workflowRoutes.post('/:id/clone', async (c) => {
     id: idMap.get(node.id) ?? node.id,
     data: {
       ...node.data,
-      // Strip trigger link — user must reconfigure triggers
+      // Strip trigger link â€” user must reconfigure triggers
       triggerId: undefined,
     },
   }));
@@ -634,7 +634,7 @@ workflowRoutes.patch('/:id', async (c) => {
     try {
       await repo.createVersion(id);
     } catch {
-      // Ignore version errors (e.g. workflow not found — will be caught below)
+      // Ignore version errors (e.g. workflow not found â€” will be caught below)
     }
   }
 
@@ -833,14 +833,15 @@ workflowRoutes.get('/approvals/pending', pagination(), async (c) => {
   ]);
 
   return apiResponse(c, {
-    items: approvals,
-    total,
-    page: Math.floor(offset / limit) + 1,
-    limit,
-  });
+      items: approvals,
+      total,
+      page: Math.floor(offset / limit) + 1,
+      limit,
+      hasMore: offset + limit < total,
+    });
 });
 
-workflowRoutes.get('/approvals', pagination(), async (c) => {
+workflowRoutes.get('/approvals/all', pagination(), async (c) => {
   const userId = getUserId(c);
   const workspaceId = getWorkspaceId(c);
   const { limit, offset } = c.get('pagination')!;
@@ -852,12 +853,12 @@ workflowRoutes.get('/approvals', pagination(), async (c) => {
   ]);
 
   return apiResponse(c, {
-    approvals,
-    total,
-    limit,
-    offset,
-    hasMore: offset + limit < total,
-  });
+      items: approvals,
+      total,
+      page: Math.floor(offset / limit) + 1,
+      limit,
+      hasMore: offset + limit < total,
+    });
 });
 
 workflowRoutes.post('/approvals/:id/approve', async (c) => {
@@ -867,7 +868,7 @@ workflowRoutes.post('/approvals/:id/approve', async (c) => {
 
   const repo = createWorkflowApprovalsRepository(userId);
   const approval = await repo.decide(id, 'approved', workspaceId);
-  if (approval?.context.executionTaskId)
+  if ((approval?.context || {} as any).executionTaskId)
     return apiError(c, 'Use the execution task approval endpoint', 409);
   if (!approval || approval.status !== 'approved') {
     return apiError(
@@ -883,7 +884,7 @@ workflowRoutes.post('/approvals/:id/approve', async (c) => {
   if (approval.workflowId && approval.workflowLogId) {
     const service = getWorkflowService();
     service.resumeFromApproval(approval.id, userId).catch((err: unknown) => {
-      // Log but don't fail the approval response — workflow resume is best-effort
+      // Log but don't fail the approval response â€” workflow resume is best-effort
       const wfRepo = createWorkflowsRepository(userId);
       // The original error (`err`) was already captured in the parent
       // .catch; if updateLog itself fails, we can't do anything useful
@@ -908,7 +909,7 @@ workflowRoutes.post('/approvals/:id/reject', async (c) => {
 
   const repo = createWorkflowApprovalsRepository(userId);
   const approval = await repo.decide(id, 'rejected', workspaceId);
-  if (approval?.context.executionTaskId)
+  if ((approval?.context || {} as any).executionTaskId)
     return apiError(c, 'Use the execution task approval endpoint', 409);
   if (!approval || approval.status !== 'rejected') {
     return apiError(
@@ -1006,7 +1007,7 @@ workflowRoutes.post('/:id/run', async (c) => {
     resolveLogId = resolve;
   });
 
-  // Start execution in background — signal logIdPromise on first 'started' event
+  // Start execution in background â€” signal logIdPromise on first 'started' event
   const executionPromise = service.executeWorkflow(
     id,
     userId,
@@ -1036,7 +1037,7 @@ workflowRoutes.post('/:id/run', async (c) => {
     logIdTimer = null;
   }
 
-  // Don't await the full execution — it runs in the background.
+  // Don't await the full execution â€” it runs in the background.
   // Execution errors are persisted to the workflow log row by the runner.
   executionPromise.catch(silentCatch('workflow.execution.background'));
 
@@ -1090,7 +1091,7 @@ workflowRoutes.get('/:id/run/:logId', async (c) => {
 });
 
 // ============================================================================
-// Replay Execution — re-run a workflow from a completed log
+// Replay Execution â€” re-run a workflow from a completed log
 // ============================================================================
 
 workflowRoutes.post('/logs/:logId/replay', async (c) => {
@@ -1136,3 +1137,5 @@ workflowRoutes.post('/logs/:logId/replay', async (c) => {
     }
   });
 });
+
+

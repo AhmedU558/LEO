@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { getJobsRepository } from './jobs.js';
 import { closeAdapter, initializeAdapter } from '../adapters/index.js';

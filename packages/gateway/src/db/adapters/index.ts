@@ -31,7 +31,10 @@ export async function createAdapter(config?: DatabaseConfig): Promise<DatabaseAd
 
     // Initialize schema on first connection
     if (!schemaInitialized) {
-      await initializeSchema(async (sql) => pgAdapter.exec(sql));
+      await pgAdapter.transaction(async () => {
+        await pgAdapter.exec('SELECT pg_advisory_xact_lock(1492)');
+        await initializeSchema(async (sql) => pgAdapter.exec(sql));
+      });
       schemaInitialized = true;
     }
   } catch (err) {

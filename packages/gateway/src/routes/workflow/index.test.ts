@@ -851,10 +851,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // POST /workflows/:id/cancel — workflow not found
+  // POST /workflows/:id/cancel â€” workflow not found
   // ========================================================================
 
-  describe('POST /workflows/:id/cancel — workflow not found', () => {
+  describe('POST /workflows/:id/cancel â€” workflow not found', () => {
     it('returns 404 when workflow does not exist', async () => {
       mockRepo.get.mockResolvedValue(null);
 
@@ -991,7 +991,7 @@ describe('Workflow Routes', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
-      expect(json.data.approvals).toHaveLength(1);
+      expect(json.data.items).toHaveLength(1);
       expect(json.data.total).toBe(1);
       expect(json.data.hasMore).toBe(false);
     });
@@ -1004,7 +1004,7 @@ describe('Workflow Routes', () => {
 
       expect(res.status).toBe(200);
       const json = await res.json();
-      expect(json.data.approvals).toHaveLength(0);
+      expect(json.data.items).toHaveLength(0);
       expect(json.data.total).toBe(0);
     });
   });
@@ -1031,7 +1031,7 @@ describe('Workflow Routes', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
-      expect(json.data.approvals).toHaveLength(1);
+      expect(json.data.items).toHaveLength(1);
       expect(json.data.total).toBe(3);
       expect(json.data.hasMore).toBe(true);
     });
@@ -1058,7 +1058,7 @@ describe('Workflow Routes', () => {
       const json = await res.json();
       expect(json.success).toBe(true);
       expect(json.data.status).toBe('approved');
-      expect(mockApprovalsRepo.decide).toHaveBeenCalledWith('apr-1', 'approved');
+      expect(mockApprovalsRepo.decide).toHaveBeenCalledWith('apr-1', 'approved', 'default');
     });
 
     it('returns 404 when approval not found', async () => {
@@ -1107,7 +1107,7 @@ describe('Workflow Routes', () => {
       const json = await res.json();
       expect(json.success).toBe(true);
       expect(json.data.status).toBe('rejected');
-      expect(mockApprovalsRepo.decide).toHaveBeenCalledWith('apr-1', 'rejected');
+      expect(mockApprovalsRepo.decide).toHaveBeenCalledWith('apr-1', 'rejected', 'default');
     });
 
     it('marks associated workflow log as failed when log is awaiting_approval', async () => {
@@ -1275,7 +1275,7 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // GET /workflows/:id/run/:logId (Public API — poll status)
+  // GET /workflows/:id/run/:logId (Public API â€” poll status)
   // ========================================================================
 
   describe('GET /workflows/:id/run/:logId', () => {
@@ -1444,10 +1444,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // PATCH /workflows/:id — createVersion side-effect
+  // PATCH /workflows/:id â€” createVersion side-effect
   // ========================================================================
 
-  describe('PATCH /workflows/:id — version snapshot', () => {
+  describe('PATCH /workflows/:id â€” version snapshot', () => {
     it('calls createVersion before updating when nodes are included in patch', async () => {
       mockRepo.get.mockResolvedValue(sampleWorkflow);
       mockRepo.update.mockResolvedValue({ ...sampleWorkflow, name: 'Updated' });
@@ -1630,10 +1630,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // validateWorkflowSemantics — per-node type validation
+  // validateWorkflowSemantics â€” per-node type validation
   // ========================================================================
 
-  describe('validateWorkflowSemantics — node type validation', () => {
+  describe('validateWorkflowSemantics â€” node type validation', () => {
     async function postWorkflow(nodes: unknown[], edges: unknown[]) {
       return app.request('/workflows', {
         method: 'POST',
@@ -1895,10 +1895,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // validateWorkflowSemantics — edge reference validation
+  // validateWorkflowSemantics â€” edge reference validation
   // ========================================================================
 
-  describe('validateWorkflowSemantics — edge reference validation', () => {
+  describe('validateWorkflowSemantics â€” edge reference validation', () => {
     async function postWorkflow(nodes: unknown[], edges: unknown[]) {
       return app.request('/workflows', {
         method: 'POST',
@@ -1931,10 +1931,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // validateWorkflowSemantics — branching sourceHandle validation
+  // validateWorkflowSemantics â€” branching sourceHandle validation
   // ========================================================================
 
-  describe('validateWorkflowSemantics — branching sourceHandle validation', () => {
+  describe('validateWorkflowSemantics â€” branching sourceHandle validation', () => {
     async function postWorkflow(nodes: unknown[], edges: unknown[]) {
       return app.request('/workflows', {
         method: 'POST',
@@ -2058,10 +2058,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // validateWorkflowSemantics — output alias validation
+  // validateWorkflowSemantics â€” output alias validation
   // ========================================================================
 
-  describe('validateWorkflowSemantics — output alias validation', () => {
+  describe('validateWorkflowSemantics â€” output alias validation', () => {
     async function postWorkflow(nodes: unknown[], edges: unknown[]) {
       return app.request('/workflows', {
         method: 'POST',
@@ -2118,10 +2118,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // validateWorkflowSemantics — cycle detection via detectCycle
+  // validateWorkflowSemantics â€” cycle detection via detectCycle
   // ========================================================================
 
-  describe('validateWorkflowSemantics — detectCycle integration', () => {
+  describe('validateWorkflowSemantics â€” detectCycle integration', () => {
     it('returns 400 VALIDATION_ERROR when detectCycle reports a cycle', async () => {
       vi.mocked(mockDetectCycle).mockReturnValue('Cycle detected: n1 -> n2 -> n1');
 
@@ -2149,10 +2149,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // POST /workflows — validateBody throws (line 257)
+  // POST /workflows â€” validateBody throws (line 257)
   // ========================================================================
 
-  describe('POST /workflows — validateBody throws', () => {
+  describe('POST /workflows â€” validateBody throws', () => {
     it('returns 400 VALIDATION_ERROR when validateBody throws', async () => {
       vi.mocked(mockValidateBody).mockImplementationOnce(() => {
         throw new Error('Required field "name" is missing');
@@ -2172,10 +2172,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // PATCH /workflows/:id — validateBody throws (line 446) and semantic errors (line 468)
+  // PATCH /workflows/:id â€” validateBody throws (line 446) and semantic errors (line 468)
   // ========================================================================
 
-  describe('PATCH /workflows/:id — additional validation coverage', () => {
+  describe('PATCH /workflows/:id â€” additional validation coverage', () => {
     it('returns 400 when validateBody throws during PATCH (line 446)', async () => {
       vi.mocked(mockValidateBody).mockImplementationOnce(() => {
         throw new Error('Invalid field type for update');
@@ -2213,10 +2213,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // POST /workflows/:id/execute — SSE callback lines 561 & 569
+  // POST /workflows/:id/execute â€” SSE callback lines 561 & 569
   // ========================================================================
 
-  describe('POST /workflows/:id/execute — SSE event callbacks', () => {
+  describe('POST /workflows/:id/execute â€” SSE event callbacks', () => {
     it('SSE stream writes node events when executeWorkflow calls onEvent (line 561)', async () => {
       mockRepo.get.mockResolvedValue(sampleWorkflow);
       mockService.isRunning.mockReturnValue(false);
@@ -2255,10 +2255,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // POST /workflows/:id/run — background execution success & timeout (lines 837–872)
+  // POST /workflows/:id/run â€” background execution success & timeout (lines 837â€“872)
   // ========================================================================
 
-  describe('POST /workflows/:id/run — background execution paths', () => {
+  describe('POST /workflows/:id/run â€” background execution paths', () => {
     const origEnv = process.env.ADMIN_KEY;
 
     afterEach(() => {
@@ -2270,7 +2270,7 @@ describe('Workflow Routes', () => {
       vi.useRealTimers();
     });
 
-    it('returns 200 with logId when executeWorkflow fires started event (lines 837–872)', async () => {
+    it('returns 200 with logId when executeWorkflow fires started event (lines 837â€“872)', async () => {
       process.env.ADMIN_KEY = 'secret-key';
       mockRepo.get.mockResolvedValue({ ...sampleWorkflow, inputSchema: [] });
       mockService.isRunning.mockReturnValue(false);
@@ -2331,10 +2331,10 @@ describe('Workflow Routes', () => {
   });
 
   // ========================================================================
-  // POST /workflows/logs/:logId/replay — SSE callback lines 950 & 953
+  // POST /workflows/logs/:logId/replay â€” SSE callback lines 950 & 953
   // ========================================================================
 
-  describe('POST /workflows/logs/:logId/replay — SSE event callbacks', () => {
+  describe('POST /workflows/logs/:logId/replay â€” SSE event callbacks', () => {
     it('SSE stream writes events when executeWorkflow calls onEvent during replay (line 950)', async () => {
       mockRepo.getLog.mockResolvedValue({ ...sampleLog, workflowId: 'wf-1' });
       mockRepo.get.mockResolvedValue(sampleWorkflow);
@@ -2374,3 +2374,4 @@ describe('Workflow Routes', () => {
     });
   });
 });
+

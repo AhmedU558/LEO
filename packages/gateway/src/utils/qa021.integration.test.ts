@@ -1,7 +1,7 @@
-﻿import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getClientIp, isProxyAwareConfigured, isRequestFromTrustedProxy } from './client-ip.js';
 import { getRequestOrigin } from './trusted-proxy.js';
-import { Context } from 'hono';
+import type { Context } from 'hono';
 import { getConnInfo } from '@hono/node-server/conninfo';
 
 vi.mock('@hono/node-server/conninfo', () => ({

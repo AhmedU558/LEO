@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { AnalyticsService } from './service.js';
 
 describe('AnalyticsService - QA-022 Regression', () => {

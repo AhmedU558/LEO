@@ -1,5 +1,5 @@
 /**
- * Dashboard — AI Briefing Generation
+ * Dashboard â€” AI Briefing Generation
  *
  * Cache, prompt building, AI generation, and fallback logic
  * for the daily briefing feature.
@@ -121,7 +121,7 @@ export const briefingCache = new BriefingCache();
  * double-invoke) dedup onto a single promise. Without this the second request
  * would hit the shared chat agent's single-flight guard
  * ("Agent is already processing a request") and silently fall back to the
- * non-AI briefing — and we'd pay for two identical LLM calls.
+ * non-AI briefing â€” and we'd pay for two identical LLM calls.
  */
 const inFlightBriefings = new Map<string, Promise<AIBriefing>>();
 
@@ -212,7 +212,7 @@ export async function generateAIBriefingStreaming(
         null,
         'dashboard-briefing-stream',
         undefined,
-        options.userId,
+        userId,
         'default'
       );
 
@@ -445,3 +445,4 @@ export function generateFallbackBriefing(data: DailyBriefingData): AIBriefing {
     cached: false,
   };
 }
+

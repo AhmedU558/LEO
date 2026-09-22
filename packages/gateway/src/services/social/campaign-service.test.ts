@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CampaignService } from './campaign-service.js';
 import { SocialRepository } from '../../db/repositories/social.js';
 import { ContentService } from '../content/service.js';

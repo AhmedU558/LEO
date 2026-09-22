@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getDatabaseConfig } from './types.js';
 
 describe('QA-023: Database Configuration', () => {

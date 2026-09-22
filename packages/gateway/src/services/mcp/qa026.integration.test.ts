@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { McpClientService } from './client.js';
 import type { McpServerRecord } from '../../db/repositories/mcp-servers.js';
 import { getMcpServersRepo } from '../../db/repositories/mcp-servers.js';
@@ -14,7 +14,8 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => {
   return {
     Client: class ClientMock {
-      constructor() { mockClientInstance = this; }
+      constructor() { // eslint-disable-next-line @typescript-eslint/no-this-alias
+      mockClientInstance = this; }
       connect = connectMock;
       listTools = vi.fn().mockResolvedValue({
         tools: [{ name: 'test-tool', description: 'desc', inputSchema: {} }],
@@ -119,7 +120,7 @@ describe('QA-026: MCP Provider Status and Integration', () => {
     connectMock.mockRejectedValueOnce(new Error('spawn node ENOENT'));
     
     await expect(mcpClient.connect(server)).rejects.toThrow('spawn node ENOENT');
-    expect(repoMock.updateStatus).toHaveBeenCalledWith(server.id, 'error');
+    expect(repoMock.updateStatus).toHaveBeenCalledWith(server.id, 'error', expect.any(String));
   });
 
   it('successful authorized execution', async () => {
@@ -146,3 +147,5 @@ describe('QA-026: MCP Provider Status and Integration', () => {
     expect(res.content).toContain('success');
   });
 });
+
+

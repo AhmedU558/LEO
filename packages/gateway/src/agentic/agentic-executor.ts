@@ -684,16 +684,10 @@ export class AgenticGatewayExecutor {
   // ── Direct LLM ────────────────────────────────────────────────────────
 
   private async dispatchDirectLlm(
-    step: ExecutionStep,
+    _step: ExecutionStep,
     _signal?: AbortSignal
   ): Promise<DispatchResult> {
     const startTime = Date.now();
-    const params = step.params as Record<string, unknown>;
-
-    const taskDesc = (params.task as string) || '';
-    const systemPrompt =
-      (params.systemPrompt as string) ||
-      'You are a helpful AI assistant. Respond concisely and accurately.';
 
     // Use LLMRouter.pick() to resolve provider+model, then return a placeholder.
     // Full streaming LLM completion requires the gateway chat agent infrastructure.

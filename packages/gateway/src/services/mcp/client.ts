@@ -69,9 +69,9 @@ export class McpClientService implements IMcpClientService {
       await client.connect(transport);
 
       // Handle post-connection transport/client errors gracefully
-      // Without these, a dying MCP server causes unhandled rejections → process crash
+      // Without these, a dying MCP server causes unhandled rejections â†’ process crash
       const handleTransportError = (err: unknown) => {
-        log.warn(`MCP server "${server.displayName}" transport error — disconnecting`, {
+        log.warn(`MCP server "${server.displayName}" transport error â€” disconnecting`, {
           error: err instanceof Error ? err.message : String(err),
         });
         this.handleUnexpectedDisconnect(server.name, server.id).catch((e) =>
@@ -118,7 +118,7 @@ export class McpClientService implements IMcpClientService {
         tools: mcpTools.map((t) => ({ name: t.name, description: t.description })),
       });
 
-      log.info(`Connected to MCP server "${server.displayName}" — ${mcpTools.length} tools`);
+      log.info(`Connected to MCP server "${server.displayName}" â€” ${mcpTools.length} tools`);
 
       return mcpTools;
     } catch (err) {
@@ -394,7 +394,7 @@ export class McpClientService implements IMcpClientService {
         context?: import('@ownpilot/core/tools').ToolContext
       ): Promise<ToolExecutionResult> => {
         // QA-025/QA-026: Workspace/User Isolation
-        const userId = context?.userId || context?.metadata?.userId;
+        const userId = context?.userId || (context as any)?.metadata?.userId;
         if (!userId) {
           return {
             content: 'PolicyEngine DENY: Missing execution context (userId) for MCP tool execution',
@@ -451,3 +451,4 @@ export class McpClientService implements IMcpClientService {
 // =============================================================================
 
 export const mcpClientService = new McpClientService();
+

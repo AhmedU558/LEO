@@ -1,4 +1,4 @@
-﻿import { getLog } from '../log.js';
+import { getLog } from '../log.js';
 import type { SocialProvider, SocialPlatform } from '@ownpilot/core/social';
 import { YouTubeProvider } from './providers/youtube.js';
 import { InstagramProvider } from './providers/instagram.js';

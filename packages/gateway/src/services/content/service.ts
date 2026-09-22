@@ -1,8 +1,6 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { ContentItem, PlatformVariant } from '@ownpilot/core/content';
-import { db } from '../../db/client.js';
-import { contentItems, platformVariants } from '../../db/schema/content.js';
-import { eq, and } from 'drizzle-orm';
+import { createContentRepository } from '../../db/repositories/content.js';
 
 export class ContentService {
   constructor(
@@ -22,57 +20,46 @@ export class ContentService {
       hashtags: data.hashtags || [],
       tags: data.tags || [],
       mediaAssetIds: data.mediaAssetIds || [],
-      status: 'DRAFT',
+      scheduledFor: data.scheduledFor,
+      status: data.status || 'DRAFT',
+      executionTaskId: data.executionTaskId,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await db.insert(contentItems).values(item);
+    
+    const repo = createContentRepository();
+    await repo.insertItem(item);
     return item;
   }
 
   async listContent(): Promise<ContentItem[]> {
-    return db
-      .select()
-      .from(contentItems)
-      .where(
-        and(eq(contentItems.workspaceId, this.workspaceId), eq(contentItems.userId, this.userId))
-      ) as Promise<ContentItem[]>;
+    const repo = createContentRepository();
+    return repo.listItems(this.workspaceId, this.userId);
   }
 
   async getContent(
     id: string
   ): Promise<{ item: ContentItem; variants: PlatformVariant[] } | undefined> {
-    const res = await db
-      .select()
-      .from(contentItems)
-      .where(
-        and(
-          eq(contentItems.id, id),
-          eq(contentItems.workspaceId, this.workspaceId),
-          eq(contentItems.userId, this.userId)
-        )
-      );
-    if (res.length === 0) return undefined;
-    const item = res[0] as ContentItem;
-
-    const variantsRes = await db
-      .select()
-      .from(platformVariants)
-      .where(eq(platformVariants.contentId, id));
-    return { item, variants: variantsRes as PlatformVariant[] };
+    const repo = createContentRepository();
+    const item = await repo.getItem(id, this.workspaceId, this.userId);
+    if (!item) return undefined;
+    
+    const variants = await repo.getVariants(id);
+    return { item, variants };
   }
 
   async updateContent(id: string, data: Partial<ContentItem>): Promise<ContentItem> {
     const existing = await this.getContent(id);
     if (!existing) throw new Error('Not found');
 
-    const updated = {
+    const updated: ContentItem = {
       ...existing.item,
       ...data,
       updatedAt: new Date(),
     };
 
-    await db.update(contentItems).set(updated).where(eq(contentItems.id, id));
+    const repo = createContentRepository();
+    await repo.updateItem(id, updated);
     return updated;
   }
 
@@ -81,21 +68,20 @@ export class ContentService {
     platform: string,
     data: Partial<PlatformVariant>
   ): Promise<PlatformVariant> {
-    const existingContent = await this.getContent(contentId);
-    if (!existingContent) throw new Error('Content not found');
+    const existing = await this.getContent(contentId);
+    if (!existing) throw new Error('Content not found');
 
-    const existingVariant = existingContent.variants.find((v) => v.platform === platform);
+    const repo = createContentRepository();
+    const variants = existing.variants;
+    const existingVariant = variants.find((v) => v.platform === platform);
 
     if (existingVariant) {
-      const updated = {
+      const updated: PlatformVariant = {
         ...existingVariant,
         ...data,
         updatedAt: new Date(),
       };
-      await db
-        .update(platformVariants)
-        .set(updated)
-        .where(eq(platformVariants.id, existingVariant.id));
+      await repo.updateVariant(existingVariant.id, updated);
       return updated;
     } else {
       const newVariant: PlatformVariant = {
@@ -109,11 +95,12 @@ export class ContentService {
         tags: data.tags || [],
         privacyStatus: data.privacyStatus,
         metadata: data.metadata || {},
-        validationState: 'unchecked',
+        validationState: data.validationState || 'unchecked',
+        validationErrors: data.validationErrors || [],
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      await db.insert(platformVariants).values(newVariant);
+      await repo.insertVariant(newVariant);
       return newVariant;
     }
   }

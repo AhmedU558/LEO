@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Node executors â€” Barrel re-export.
  *
  * Implementations live under `./executors/`:

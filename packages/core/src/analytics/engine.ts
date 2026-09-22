@@ -1,4 +1,4 @@
-﻿import type { MetricData, LearningRecommendation, UsageStats } from './models.js';
+import type { MetricData, LearningRecommendation, UsageStats } from './models.js';
 
 export interface AnalyticsEngine {
   recordMetric(metric: MetricData): Promise<void>;

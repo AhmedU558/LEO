@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerGatewayTools, registerDynamicTools } from './core-registration.js';
 import { ToolRegistry } from '@ownpilot/core/tools';
 import * as permissionService from '../../services/tool/permission.js';
@@ -24,12 +24,12 @@ describe('core-registration (QA-007)', () => {
 
     registerGatewayTools(tools, 'user-123', false);
     
-    // Pick any registered tool, e.g., 'core.read_file'
-    const tool = tools.get('core.read_file');
+    // Pick any registered tool, e.g., 'core.create_memory'
+    const tool = tools.get('core.create_memory');
     if (!tool) throw new Error('Tool not registered');
 
     // Execute the native tool directly on the registry
-    const result = await tool.execute({ path: 'test.txt' }, { userId: 'user-123' });
+    const result = await tools.execute('core.create_memory', { text: 'test' }, { userId: 'user-123' });
     
     // It should have failed closed
     expect(result.ok).toBe(true);
@@ -40,3 +40,5 @@ describe('core-registration (QA-007)', () => {
     expect(permissionService.checkToolPermission).toHaveBeenCalled();
   });
 });
+
+

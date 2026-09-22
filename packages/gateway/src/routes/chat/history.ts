@@ -1,4 +1,4 @@
-import { getUserId } from '../helpers.js';
+﻿import { getUserId } from '../helpers.js';
 /**
  * Chat History & Logs Routes
  *
@@ -175,7 +175,7 @@ chatHistoryRoutes.post('/history/bulk-delete', async (c) => {
     }
 
     // Clean up the per-conversation prompt-init cache. `lastExecPermHash` is
-    // keyed by userId, not conversationId — see chat.ts DELETE handler.
+    // keyed by userId, not conversationId â€” see chat.ts DELETE handler.
     for (const conversationId of idsToDelete) {
       promptInitializedConversations.delete(conversationId);
     }
@@ -287,7 +287,7 @@ chatHistoryRoutes.get('/history/:id', async (c) => {
 });
 
 /**
- * Get unified conversation detail — merges AI messages with channel messages.
+ * Get unified conversation detail â€” merges AI messages with channel messages.
  * For web conversations: returns standard messages.
  * For channel conversations: merges channel_messages (sender info, direction) with
  * messages (AI content, tool calls) into a single timeline sorted by timestamp.
@@ -308,7 +308,7 @@ chatHistoryRoutes.get('/history/:id/unified', async (c) => {
     const isChannel = meta.source === 'channel';
 
     if (!isChannel) {
-      // Web conversation — return standard messages with source tag
+      // Web conversation â€” return standard messages with source tag
       return apiResponse(c, {
         conversation: {
           id: data.conversation.id,
@@ -340,7 +340,7 @@ chatHistoryRoutes.get('/history/:id/unified', async (c) => {
       });
     }
 
-    // Channel conversation — merge both message sources
+    // Channel conversation â€” merge both message sources
     const channelMessages = await channelMessagesRepo.getByConversation(id, 500);
     const session = await channelSessionsRepo.findByConversation(id);
 
@@ -392,7 +392,7 @@ chatHistoryRoutes.get('/history/:id/unified', async (c) => {
     }
 
     // Add AI messages that don't overlap with channel messages
-    // (tool calls, system messages — things not captured in channel_messages)
+    // (tool calls, system messages â€” things not captured in channel_messages)
     const channelMessageIds = new Set(channelMessages.map((cm) => cm.id));
     for (const msg of data.messages) {
       // Skip user/assistant messages already captured via channel_messages
@@ -540,7 +540,7 @@ chatHistoryRoutes.post('/history/:conversationId/channel-reply', async (c) => {
         metadata: { platformChatId: session.platformChatId, sentVia: 'webui' },
       });
     } catch (err) {
-      // Non-fatal — message was already sent
+      // Non-fatal â€” message was already sent
       log.warn('Failed to persist channel message', { error: getErrorMessage(err) });
     }
 
@@ -708,7 +708,7 @@ chatHistoryRoutes.delete('/history/:id', async (c) => {
     }
 
     // Clean up the per-conversation prompt-init cache. `lastExecPermHash` is
-    // keyed by userId, not conversationId — see chat.ts DELETE handler.
+    // keyed by userId, not conversationId â€” see chat.ts DELETE handler.
     promptInitializedConversations.delete(id);
 
     return apiResponse(c, { deleted: true });
@@ -1018,7 +1018,8 @@ chatHistoryRoutes.post('/compact', async (c) => {
       provider,
       model,
       keepRecent,
-      userContextWindow
+      userContextWindow,
+      getUserId(c)
     );
     return apiResponse(c, result);
   } catch (err) {
@@ -1081,3 +1082,5 @@ chatHistoryRoutes.post('/search', async (c) => {
     );
   }
 });
+
+

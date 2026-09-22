@@ -46,7 +46,7 @@ socialRoutes.post('/publish', async (c) => {
 
   const service = new SocialService(getUserId(c), getWorkspaceId(c));
   try {
-    const result = await service.createPublishTask(body);
+    const result = await service.createPublishTask(body as any);
     return apiResponse(c, result);
   } catch (err: unknown) {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
@@ -116,6 +116,8 @@ socialRoutes.get('/youtube/callback', async (c) => {
       id: `acc_${randomUUID()}`,
       platform: 'youtube',
       accountId: authData.accountId!,
+        userId: getUserId(c),
+        workspaceId: getWorkspaceId(c),
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
@@ -162,6 +164,8 @@ socialRoutes.get('/instagram/callback', async (c) => {
       id: `acc_${randomUUID()}`,
       platform: 'instagram',
       accountId: authData.accountId!,
+        userId: getUserId(c),
+        workspaceId: getWorkspaceId(c),
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
@@ -212,20 +216,22 @@ socialRoutes.get('/facebook/callback', async (c) => {
 
     // 2. Fetch pages
     const pagesRes = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${tokenData.access_token}`
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${(tokenData as any).access_token}`
     );
     if (!pagesRes.ok) throw new Error('Failed to fetch pages');
     const pagesData = await pagesRes.json();
 
     const repo = new SocialRepository(getUserId(c), getWorkspaceId(c));
 
-    const pages = pagesData.data || [];
+    const pages = (pagesData as any).data || [];
     for (const page of pages) {
       if (!page.id || !page.access_token) continue;
       await repo.createAccount({
         id: `acc_${randomUUID()}`,
         platform: 'facebook',
         accountId: page.id,
+        userId: getUserId(c),
+        workspaceId: getWorkspaceId(c),
         accountName: page.name,
         profileUrl: `https://facebook.com/${page.id}`,
         status: 'active',
@@ -273,6 +279,8 @@ socialRoutes.get('/tiktok/callback', async (c) => {
       id: `acc_${randomUUID()}`,
       platform: 'tiktok',
       accountId: authData.accountId!,
+        userId: getUserId(c),
+        workspaceId: getWorkspaceId(c),
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
@@ -302,7 +310,7 @@ socialRoutes.post('/campaigns', async (c) => {
     const repo = getIdempotencyKeysRepository();
     const existing = await repo.getRecord(userId, idempotencyKey);
     if (existing) {
-      if ((existing.result as unknown).status === 'FAILED') {
+      if ((existing.result as any).status === 'FAILED') {
         // If it failed previously, allow retry by deleting the key or just proceed
         // But for safe idempotency, we return the failed result. Let's just return it.
       }
@@ -380,3 +388,5 @@ socialRoutes.post('/campaigns/:id/reconcile', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
   }
 });
+
+

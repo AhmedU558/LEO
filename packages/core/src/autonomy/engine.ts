@@ -1,4 +1,4 @@
-﻿import type { AutonomousTask, AutonomyStatus, AutonomyEvent } from './models.js';
+import type { AutonomousTask, AutonomyStatus, AutonomyEvent } from './models.js';
 
 export interface AutonomyEngine {
   startTask(task: AutonomousTask): Promise<void>;

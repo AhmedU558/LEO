@@ -4,9 +4,9 @@
  * REST API for voice operations (STT/TTS).
  *
  * Endpoints:
- *   GET  /config     — voice service availability + provider info
- *   POST /transcribe — upload audio → get text (multipart/form-data)
- *   POST /synthesize — send text → get audio binary
+ *   GET  /config     â€” voice service availability + provider info
+ *   POST /transcribe â€” upload audio â†’ get text (multipart/form-data)
+ *   POST /synthesize â€” send text â†’ get audio binary
  */
 
 import { getUserId, getWorkspaceId } from './helpers.js';
@@ -138,10 +138,10 @@ voiceRoutes.post('/transcribe', async (c) => {
       );
     }
 
-    // Per-endpoint throttle — see voiceThrottle declaration above.
+    // Per-endpoint throttle â€” see voiceThrottle declaration above.
     // Skip in test env so sequential tests don't collide.
     if (process.env.NODE_ENV !== 'test') {
-      const ip = getClientIp(c.req);
+      const ip = getClientIp(c as any);
       const throttleResult = voiceThrottle.check(ip);
       if (!throttleResult.allowed) {
         c.header('Retry-After', String(Math.ceil(throttleResult.retryAfterMs / 1000)));
@@ -227,7 +227,7 @@ voiceRoutes.post('/synthesize', async (c) => {
     }
 
     if (process.env.NODE_ENV !== 'test') {
-      const ip = getClientIp(c.req);
+      const ip = getClientIp(c as any);
       const throttleResult = voiceThrottle.check(ip);
       if (!throttleResult.allowed) {
         c.header('Retry-After', String(Math.ceil(throttleResult.retryAfterMs / 1000)));
@@ -326,3 +326,4 @@ voiceRoutes.post('/sessions/:id/tool_call', async (c) => {
 
   return apiResponse(c, result);
 });
+

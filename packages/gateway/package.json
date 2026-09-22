@@ -67,6 +67,7 @@
     "archiver": "^7.0.1",
     "discord.js": "^14.26.4",
     "dotenv": "^17.3.1",
+    "drizzle-orm": "^0.45.3",
     "grammy": "^1.41.1",
     "hono": ">=4.12.34",
     "imapflow": "^1.2.14",

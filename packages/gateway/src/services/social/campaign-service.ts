@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   PublishingCampaign,
   CampaignTarget,
   CreateCampaignRequest,
@@ -133,7 +133,7 @@ export class CampaignService {
           platform: account.platform,
           publishRequestId: `failed_${randomUUID()}`,
           status: 'FAILED',
-          error: { message: (e as Error).message },
+          error: { code: 'INTERNAL', message: (e as Error).message, retryable: false },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -275,3 +275,4 @@ export class CampaignService {
     }
   }
 }
+

@@ -1,13 +1,16 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContentService } from './service.js';
 
-vi.mock('../../db/client.js', () => ({
-  db: {
-    insert: vi.fn(() => ({ values: vi.fn() })),
-    select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => []) })) })),
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn() })) })),
-    delete: vi.fn(() => ({ where: vi.fn() })),
-  },
+vi.mock('../../db/repositories/content.js', () => ({
+  createContentRepository: vi.fn(() => ({
+    insertItem: vi.fn(),
+    listItems: vi.fn(() => []),
+    getItem: vi.fn(() => ({ id: 'c1' })),
+    getVariants: vi.fn(() => []),
+    updateItem: vi.fn(),
+    updateVariant: vi.fn(),
+    insertVariant: vi.fn(),
+  })),
 }));
 
 describe('ContentService', () => {
@@ -26,7 +29,7 @@ describe('ContentService', () => {
   });
 
   it('sets platform variant', async () => {
-    // Because getContent is mocked to return undefined by default, we have to mock it directly
+    // Override getContent just for this test since default mock returns id='c1'
     service.getContent = vi.fn(async () => ({
       item: { id: 'c1' } as any,
       variants: [],

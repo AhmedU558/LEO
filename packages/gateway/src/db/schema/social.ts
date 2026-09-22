@@ -1,4 +1,4 @@
-﻿export const SOCIAL_SQL = `
+export const SOCIAL_SQL = `
 CREATE TABLE IF NOT EXISTS social_accounts (
   id VARCHAR(255) PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,

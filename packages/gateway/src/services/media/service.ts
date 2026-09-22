@@ -1,9 +1,7 @@
-﻿import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, createHash, createHmac } from 'node:crypto';
 import type { MediaAsset, MediaType } from '@ownpilot/core/media';
 import { storageProvider } from '../storage/index.js';
-import { db } from '../../db/client.js';
-import { mediaAssets } from '../../db/schema/media.js';
-import { eq, and } from 'drizzle-orm';
+import { createMediaRepository } from '../../db/repositories/media.js';
 import type { Readable } from 'node:stream';
 import { PassThrough } from 'node:stream';
 import { getLog } from '../log.js';
@@ -71,7 +69,8 @@ export class MediaService {
         updatedAt: new Date(),
       };
 
-      await db.insert(mediaAssets).values(asset);
+      const repo = createMediaRepository();
+      await repo.insert(asset);
       return asset;
     } catch (e: unknown) {
       log.error(`Upload failed: ${(e as Error).message}`);
@@ -80,26 +79,13 @@ export class MediaService {
   }
 
   async listMedia(): Promise<MediaAsset[]> {
-    return db
-      .select()
-      .from(mediaAssets)
-      .where(
-        and(eq(mediaAssets.workspaceId, this.workspaceId), eq(mediaAssets.userId, this.userId))
-      ) as Promise<MediaAsset[]>;
+    const repo = createMediaRepository();
+    return repo.list(this.workspaceId, this.userId);
   }
 
   async getMedia(id: string): Promise<MediaAsset | undefined> {
-    const res = await db
-      .select()
-      .from(mediaAssets)
-      .where(
-        and(
-          eq(mediaAssets.id, id),
-          eq(mediaAssets.workspaceId, this.workspaceId),
-          eq(mediaAssets.userId, this.userId)
-        )
-      );
-    return res[0] as MediaAsset | undefined;
+    const repo = createMediaRepository();
+    return repo.get(id, this.workspaceId, this.userId);
   }
 
   async deleteMedia(id: string): Promise<void> {
@@ -107,6 +93,27 @@ export class MediaService {
     if (!asset) throw new Error('Not found');
 
     await storageProvider.delete(asset.storageKey);
-    await db.delete(mediaAssets).where(eq(mediaAssets.id, id));
+    const repo = createMediaRepository();
+    await repo.deleteAsset(id);
+  }
+
+  createDeliveryUrl(assetId: string, ttlMs: number = 24 * 60 * 60 * 1000): string {
+    const expiresAt = Date.now() + ttlMs;
+    const data = `${this.workspaceId}:${assetId}:${expiresAt}`;
+    const signature = createHmac('sha256', process.env.APP_SECRET || 'dev_secret')
+      .update(data)
+      .digest('hex');
+    
+    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+    return `${baseUrl}/api/v1/media/delivery/${this.workspaceId}/${assetId}?expiresAt=${expiresAt}&signature=${signature}`;
+  }
+
+  static validateDeliverySignature(workspaceId: string, assetId: string, expiresAt: number, signature: string): boolean {
+    if (Date.now() > expiresAt) return false;
+    const data = `${workspaceId}:${assetId}:${expiresAt}`;
+    const expected = createHmac('sha256', process.env.APP_SECRET || 'dev_secret')
+      .update(data)
+      .digest('hex');
+    return expected === signature;
   }
 }

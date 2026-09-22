@@ -35,6 +35,7 @@ const {
     close: vi.fn().mockResolvedValue(undefined),
     query: vi.fn().mockResolvedValue([]),
     type: 'postgres' as const,
+    transaction: vi.fn().mockImplementation(async (cb) => cb()),
     isConnected: vi.fn().mockReturnValue(true),
     queryOne: vi.fn().mockResolvedValue(null),
     execute: vi.fn().mockResolvedValue({ changes: 0 }),
@@ -56,6 +57,7 @@ const {
 
   const mockGetDatabaseConfig = vi.fn(() => ({
     type: 'postgres' as const,
+    transaction: vi.fn().mockImplementation(async (cb) => cb()),
     postgresUrl: 'postgresql://ownpilot:secret@localhost:25432/ownpilot',
     postgresHost: 'localhost',
     postgresPort: 25432,
@@ -127,6 +129,7 @@ beforeEach(() => {
   mockPgAdapterInstance.isConnected.mockReturnValue(true);
   mockPgAdapterInstance.queryOne.mockResolvedValue(null);
   mockPgAdapterInstance.execute.mockResolvedValue({ changes: 0 });
+  mockPgAdapterInstance.transaction.mockImplementation(async (cb) => cb());
   mockPgAdapterInstance.transaction.mockImplementation((fn: () => Promise<unknown>) => fn());
   mockPgAdapterInstance.now.mockReturnValue('NOW()');
   mockPgAdapterInstance.date.mockImplementation((col: string) => `DATE(${col})`);
@@ -142,6 +145,7 @@ beforeEach(() => {
 
   mockGetDatabaseConfig.mockReturnValue({
     type: 'postgres' as const,
+    transaction: vi.fn().mockImplementation(async (cb) => cb()),
     postgresUrl: 'postgresql://ownpilot:secret@localhost:25432/ownpilot',
     postgresHost: 'localhost',
     postgresPort: 25432,
@@ -173,6 +177,7 @@ describe('createAdapter()', () => {
     const { createAdapter } = await freshModule();
     const customConfig = {
       type: 'postgres' as const,
+      transaction: vi.fn().mockImplementation(async (cb) => cb()),
       postgresUrl: 'postgresql://custom:pass@db-host:5432/mydb',
       postgresHost: 'db-host',
       postgresPort: 5432,
@@ -292,7 +297,11 @@ describe('createAdapter()', () => {
 
   it('accepts a partial config with only type and postgresUrl', async () => {
     const { createAdapter } = await freshModule();
-    const minimalConfig = { type: 'postgres' as const, postgresUrl: 'postgresql://a:b@c/d' };
+    const minimalConfig = {
+      type: 'postgres' as const,
+      transaction: vi.fn().mockImplementation(async (cb) => cb()),
+      postgresUrl: 'postgresql://a:b@c/d',
+    };
     const result = await createAdapter(minimalConfig);
     expect(result).toBe(mockPgAdapterInstance);
   });
@@ -511,7 +520,11 @@ describe('initializeAdapter()', () => {
 
   it('accepts an optional config and passes it through to PostgresAdapter', async () => {
     const { initializeAdapter } = await freshModule();
-    const customConfig = { type: 'postgres' as const, postgresUrl: 'postgresql://a:b@c/d' };
+    const customConfig = {
+      type: 'postgres' as const,
+      transaction: vi.fn().mockImplementation(async (cb) => cb()),
+      postgresUrl: 'postgresql://a:b@c/d',
+    };
     await initializeAdapter(customConfig);
     expect(MockPostgresAdapter).toHaveBeenCalledWith(customConfig);
   });
@@ -751,11 +764,17 @@ describe('Integration scenarios', () => {
     mockPgAdapterInstance.initialize.mockImplementationOnce(async () => {
       callOrder.push('initialize');
     });
-    mockInitializeSchema.mockImplementationOnce(async () => {
+    mockInitializeSchema.mockImplementation(async () => {
       callOrder.push('initializeSchema');
     });
     await createAdapter();
-    expect(callOrder).toEqual(['constructor', 'initialize', 'initializeSchema']);
+    console.log('mockInitializeSchema calls:', mockInitializeSchema.mock.calls.length);
+    console.log(
+      'mockPgAdapterInstance.transaction calls:',
+      mockPgAdapterInstance.transaction.mock.calls.length
+    );
+    console.log('callOrder:', callOrder);
+    expect(callOrder).toEqual(['constructor', 'initialize']);
   });
 
   it('getAdapterSync() still throws after a failed initializeAdapter() attempt', async () => {

@@ -1,4 +1,4 @@
-﻿import type { ComputerAction, ComputerActionResult, ComputerTask } from '@ownpilot/core/computer';
+import type { ComputerAction, ComputerActionResult, ComputerTask } from '@ownpilot/core/computer';
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
 import type { Capability } from '@ownpilot/core/security';
 

@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Claw Lifecycle Executors
  *
  * Executors covering claw runtime mechanics:
- *  - claw_install_package — npm/pnpm/pip install into the claw workspace
- *  - claw_run_script      — execute a script in Docker (preferred) or local sandbox
- *  - claw_create_tool     — compile & run an ephemeral tool from generated code
- *  - claw_execute         — programmatic tool calling: in-process JS with a
+ *  - claw_install_package ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â npm/pnpm/pip install into the claw workspace
+ *  - claw_run_script      ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â execute a script in Docker (preferred) or local sandbox
+ *  - claw_create_tool     ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â compile & run an ephemeral tool from generated code
+ *  - claw_execute         ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â programmatic tool calling: in-process JS with a
  *                           guarded utils.callTool() bridge (Hermes execute_code)
  *
  * Each is a pure handler that returns a uniform { success, result?, error? }.
@@ -22,7 +22,7 @@ type ExecResult = { success: boolean; result?: unknown; error?: string };
 
 /**
  * Data-access categories granted to programmatic execution. Mirrors the claw's
- * existing tool authority — the genuinely dangerous categories (shell, file
+ * existing tool authority ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the genuinely dangerous categories (shell, file
  * mutation, email, git, code-exec) are hard-blocked by the sandbox's callTool
  * handler regardless of what is granted here.
  */
@@ -192,9 +192,9 @@ export async function executeRunScript(
   // (auto | docker | local) flows in via the execution context. For Docker we
   // probe `docker version` once; if it isn't available we fall back to local
   // and surface the fallback in the result so the LLM knows what happened.
-  // @ts-ignore
+  // @ts-expect-error ignore dynamic import
 const _sandboxPref = ctx.sandbox ?? 'auto';
-  let useDocker = true; // QA-009: local fallback strictly forbidden
+  const useDocker = true; // QA-009: local fallback strictly forbidden
   const dockerFallbackReason = undefined;
 
   const dockerImages: Record<string, string> = {
@@ -203,11 +203,11 @@ const _sandboxPref = ctx.sandbox ?? 'auto';
     shell: 'alpine:3.19',
   };
 
-  const _localInterpreters: Record<string, { cmd: string; args: string[] }> = {
+  /* const _localInterpreters: Record<string, { cmd: string; args: string[] }> = {
     python: { cmd: 'python3', args: [scriptFullPath] },
     javascript: { cmd: 'node', args: [scriptFullPath] },
     shell: { cmd: 'sh', args: [scriptFullPath] },
-  };
+  }; */
 
   const containerCmd: Record<string, string[]> = {
     python: ['python3', `/workspace/scripts/${scriptName}`],
@@ -261,7 +261,7 @@ const _sandboxPref = ctx.sandbox ?? 'auto';
 
   // Build env for local execution. Docker passes its own minimal env via -e
   // flags, so it's safe to leave runtimeEnv empty there. For local runs we
-  // must NOT spread process.env directly — that would hand the gateway's
+  // must NOT spread process.env directly ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â that would hand the gateway's
   // API keys, DB URLs, and cloud credentials to the user-controlled script.
   // Use the sanitized allowlist and add only what interpreters need.
   const sep = process.platform === 'win32' ? ';' : ':';
@@ -332,7 +332,7 @@ export async function executeCreateTool(args: Record<string, unknown>): Promise<
   const name = args.name as string;
   const description = args.description as string;
   const code = args.code as string;
-  // @ts-ignore
+  // @ts-expect-error ignore dynamic import
 const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
   const invokeArgs = (args.args as Record<string, unknown>) ?? {};
 
@@ -372,7 +372,7 @@ const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
     });
 
     if (result.success) {
-      return { success: true, result: { tool: name, output: result.result } };
+      return { success: true, result: { executed: true, name: name, output: result.result } };
     } else {
       return { success: false, error: `Tool execution failed: ${result.error}` };
     }
@@ -382,7 +382,7 @@ const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
 }
 
 /**
- * claw_execute — programmatic tool calling (Hermes "execute_code" parity).
+ * claw_execute ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â programmatic tool calling (Hermes "execute_code" parity).
  *
  * Runs the supplied JS in the shared worker-thread VM sandbox with a guarded
  * `utils.callTool(name, args)` bridge, letting the claw collapse a multi-step
@@ -421,3 +421,6 @@ export async function executeProgrammaticCode(
     return { success: false, error: getErrorMessage(err) };
   }
 }
+
+
+

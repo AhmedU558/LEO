@@ -1,13 +1,10 @@
-import type { SocialPost, PublishRequest, SocialAccount } from '@ownpilot/core/social';
+import type { SocialPost, PublishRequest, SocialAccount, PublishResult } from '@ownpilot/core/social';
 import { SocialRepository } from '../../db/repositories/social.js';
 import { socialProviderRegistry } from './provider-registry.js';
 import { ExecutionTaskService } from '../execution-task-service.js';
 import { createWorkflowsRepository } from '../../db/repositories/workflows/index.js';
 import { randomUUID } from 'node:crypto';
-import { getLog } from '../log.js';
 import { ActionLedger, PolicyEngine, RiskEngine } from '@ownpilot/core/security';
-
-const log = getLog('SocialService');
 
 export class SocialService {
   constructor(
@@ -37,7 +34,7 @@ export class SocialService {
     const repo = new SocialRepository(this.userId, this.workspaceId);
     const accounts = await repo.listAccounts();
     return accounts.map((a) => {
-      const { accessToken: _a, refreshToken: _r, ...rest } = a as Record<string, unknown>;
+      const { accessToken: _a, refreshToken: _r, ...rest } = a as any;
       return rest as unknown as Omit<SocialAccount, 'accessToken' | 'refreshToken'>;
     });
   }
@@ -68,35 +65,38 @@ export class SocialService {
     // Risk and Policy Checks
     const identity = { userId: this.userId, workspaceId: this.workspaceId, roles: [] };
     const resourceId = `social_account:${account.id}`;
-    const policyResult = new PolicyEngine().evaluate(identity, 'social.publish', resourceId, {
-      platform: account.platform,
+    
+    const riskLevel = new RiskEngine().classify('social.post.publish', 'publish');
+    
+    const policyResult = new PolicyEngine().evaluate({
+      identity,
+      action: 'social.publish',
+      resource: resourceId,
+      capability: 'social.post.publish',
+      risk: riskLevel,
+      environment: 'development',
+      autonomous: true,
+      requestedParameters: { platform: account.platform },
     });
-    if (!policyResult.allowed) throw new Error(`Policy denied: ${policyResult.reason}`);
-
-    const riskLevel = new RiskEngine().classify(identity, 'social.publish', {
-      platform: account.platform,
-      text: postInput.text,
-    });
+    
+    if (policyResult.decision === 'DENY') throw new Error(`Policy denied: ${policyResult.reason}`);
 
     // Ledger
-    await ActionLedger.record(
-      identity,
-      null,
-      null,
-      null,
-      'social_publish',
-      'publish_request',
-      resourceId,
-      'social_account',
-      account.id,
-      'social.publish',
-      policyResult.allowed ? 'allow' : 'deny',
-      riskLevel.level,
-      'trusted',
-      { status: 'created' },
-      null,
-      0
-    );
+        await ActionLedger.record({
+      userId: this.userId,
+      workspaceId: this.workspaceId,
+      agentId: 'social_publish',
+      tool: 'publish_request',
+      action: 'create',
+      resourceType: 'social_account',
+      resource: account.id,
+      capability: 'social.post.publish',
+      policyDecision: policyResult.decision,
+      riskLevel: riskLevel,
+      executionEnvironment: 'trusted',
+      durationMs: 0
+    });
+
 
     const provider = socialProviderRegistry.get(postInput.platform);
     if (postInput.media && postInput.media.length > 0) {
@@ -148,35 +148,40 @@ export class SocialService {
   async cancelPublish(id: string): Promise<boolean> {
     const repo = new SocialRepository(this.userId, this.workspaceId);
     const request = await repo.getPublishRequest(id);
-    if (!request) throw new Error('Request not found');
+    if (!request) throw new Error('Not found');
+
     if (request.status !== 'pending' && request.status !== 'publishing') {
-      throw new Error(`Cannot cancel request in state: ${request.status}`);
+      throw new Error(`Cannot cancel publish in state ${request.status}`);
     }
 
     const account = await repo.getAccount(request.accountId);
     if (!account) throw new Error('Account not found');
 
     const provider = socialProviderRegistry.get(account.platform);
-    const capabilities = provider.getCapabilities();
+    if (!provider.getCapabilities().supportsCancellation) {
+      throw new Error('Platform does not support cancellation');
+    }
 
-    if (capabilities.supportsCancellation && request.providerPostId) {
-      const creds = await repo.getAccountCredentials(account.id);
-      if (creds?.accessToken) {
-        try {
-          await provider.cancelPublish(request.providerPostId, creds.accessToken);
-        } catch (e) {
-          log.warn(`Provider failed to cancel post ${request.providerPostId}: ${e}`);
-        }
+    const creds = await repo.getAccountCredentials(account.id);
+    if (!creds) throw new Error('No credentials');
+
+    let success = false;
+    if (request.providerPostId) {
+      success = await provider.cancelPublish(request.providerPostId, creds.accessToken);
+    } else {
+      success = true;
+    }
+
+    if (success) {
+      await repo.updatePublishRequest(id, { status: 'cancelled' });
+
+      if (request.executionTaskId) {
+        const executionTaskService = new ExecutionTaskService(this.userId, this.workspaceId);
+        await executionTaskService.cancel(request.executionTaskId);
       }
     }
 
-    if (request.executionTaskId) {
-      const etService = new ExecutionTaskService(this.userId, this.workspaceId);
-      await etService.cancel(request.executionTaskId);
-    }
-
-    await repo.updatePublishRequest(id, { status: 'cancelled' });
-    return true;
+    return success;
   }
   async reconcilePublish(id: string): Promise<PublishResult> {
     const repo = new SocialRepository(this.userId, this.workspaceId);
@@ -191,9 +196,6 @@ export class SocialService {
 
     const provider = socialProviderRegistry.get(account.platform);
     if (!request.providerPostId) {
-      // If we don't have the post ID, we can't easily reconcile via checkPublishStatus
-      // We'd have to search the channel for a matching video title, etc.
-      // For now, if no providerPostId, it's unrecoverable without manual intervention
       throw new Error('No provider correlation ID to reconcile');
     }
 
@@ -210,3 +212,8 @@ export class SocialService {
     return result;
   }
 }
+
+
+
+
+

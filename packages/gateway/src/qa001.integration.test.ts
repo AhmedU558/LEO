@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 import * as uiSessionService from './services/ui-session.js';
-import * as authLib from './middleware/auth.js';
 
 describe('QA-001 Integration: Authentication and Identity Enforcement', () => {
   it('rejects unauthenticated requests to API when authType is api-key', async () => {
@@ -41,17 +40,17 @@ describe('QA-001 Integration: Authentication and Identity Enforcement', () => {
         'X-API-Key': 'wrong-key',
       },
     });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('accepts valid UI session cookies', async () => {
     // mock UI session validation
     vi.spyOn(uiSessionService, 'validateSession').mockResolvedValue(true);
-    
+
     const app = createApp({ auth: { type: 'api-key', apiKeys: ['secret'] } });
     const res = await app.request('/api/v1/agents', {
       headers: {
-        Cookie: 'session=valid-session-token',
+        Cookie: 'ownpilot_ui_session=valid-session-token',
       },
     });
     // Should pass the auth check via uiSessionMiddleware
@@ -60,11 +59,11 @@ describe('QA-001 Integration: Authentication and Identity Enforcement', () => {
 
   it('rejects invalid UI session cookies', async () => {
     vi.spyOn(uiSessionService, 'validateSession').mockResolvedValue(false);
-    
+
     const app = createApp({ auth: { type: 'api-key', apiKeys: ['secret'] } });
     const res = await app.request('/api/v1/agents', {
       headers: {
-        Cookie: 'session=invalid-session-token',
+        Cookie: 'ownpilot_ui_session=invalid-session-token',
       },
     });
     // Should fail and fall back to API auth, which also fails

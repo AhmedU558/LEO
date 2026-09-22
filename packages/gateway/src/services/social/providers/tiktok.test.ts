@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TikTokProvider } from './tiktok.js';
 
 vi.stubGlobal(
@@ -31,6 +31,7 @@ describe('TikTokProvider', () => {
 
   beforeEach(() => {
     provider = new TikTokProvider();
+    process.env.APP_SECRET = 'test_secret';
     vi.clearAllMocks();
   });
 
@@ -71,4 +72,5 @@ describe('TikTokProvider', () => {
     expect(res.publishedUrl).toBe('http://tiktok.com/v');
   });
 });
+
 

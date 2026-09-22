@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { VoiceService } from './service.js';
 
 vi.mock('@ownpilot/core/security', async (importOriginal) => {

@@ -1,4 +1,4 @@
-﻿import { pgTable, text, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
 
 export const mediaAssets = pgTable('media_assets', {
   id: text('id').primaryKey(),

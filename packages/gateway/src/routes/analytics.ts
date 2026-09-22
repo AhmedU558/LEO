@@ -1,4 +1,4 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { apiResponse, apiError, ERROR_CODES, parseJsonBody } from './helpers.js';
 import { AnalyticsService } from '../services/analytics/service.js';
 import type { MetricData, LearningRecommendation } from '@ownpilot/core/analytics';
