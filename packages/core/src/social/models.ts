@@ -61,3 +61,48 @@ export interface PublishResult {
   publishedUrl?: string;
   error?: PlatformError;
 }
+
+export type CampaignStatus =
+  | 'READY'
+  | 'QUEUED'
+  | 'WAITING_APPROVAL'
+  | 'PUBLISHING'
+  | 'PUBLISHED'
+  | 'PARTIAL'
+  | 'FAILED'
+  | 'UNKNOWN'
+  | 'CANCELLED'
+  | 'NEEDS_RECONCILIATION';
+
+export interface PublishingCampaign {
+  id: string;
+  userId: string;
+  workspaceId: string;
+  contentItemId: string;
+  executionTaskId?: string;
+  status: CampaignStatus;
+  scheduledFor?: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignTarget {
+  id: string;
+  campaignId: string;
+  userId: string;
+  workspaceId: string;
+  accountId: string;
+  platform: SocialPlatform;
+  publishRequestId: string;
+  status: CampaignStatus;
+  error?: PlatformError;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCampaignRequest {
+  contentItemId: string;
+  accountIds: string[];
+  scheduledFor?: string;
+}

@@ -289,3 +289,94 @@ socialRoutes.get('/tiktok/callback', async (c) => {
   }
 });
 
+import { CampaignService } from '../services/social/campaign-service.js';
+
+import { getIdempotencyKeysRepository } from '../db/repositories/idempotency-keys.js';
+
+socialRoutes.post('/campaigns', async (c) => {
+  const userId = getUserId(c);
+  const workspaceId = getWorkspaceId(c);
+  const idempotencyKey = c.req.header('Idempotency-Key');
+
+  if (idempotencyKey) {
+    const repo = getIdempotencyKeysRepository();
+    const existing = await repo.getRecord(userId, idempotencyKey);
+    if (existing) {
+      if ((existing.result as unknown).status === 'FAILED') {
+        // If it failed previously, allow retry by deleting the key or just proceed
+        // But for safe idempotency, we return the failed result. Let's just return it.
+      }
+      return apiResponse(c, existing.result);
+    }
+  }
+
+  try {
+    const body = await c.req.json();
+    const service = new CampaignService(userId, workspaceId);
+
+    // Check if campaign already exists for this contentItemId and same scheduledFor to prevent duplicates
+    // We can list campaigns and find one.
+    const existingCampaigns = await service.listCampaigns();
+    const duplicate = existingCampaigns.find(
+      (camp) =>
+        camp.contentItemId === body.contentItemId &&
+        camp.scheduledFor === body.scheduledFor &&
+        camp.status !== 'FAILED' &&
+        camp.status !== 'CANCELLED'
+    );
+
+    if (duplicate) {
+      return apiResponse(c, duplicate);
+    }
+
+    const campaign = await service.createCampaign(body);
+
+    if (idempotencyKey) {
+      const repo = getIdempotencyKeysRepository();
+      await repo.setRecord(userId, idempotencyKey, campaign);
+    }
+    return apiResponse(c, campaign);
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: (err as Error).message }, 400);
+  }
+});
+
+socialRoutes.get('/campaigns', async (c) => {
+  const service = new CampaignService(getUserId(c), getWorkspaceId(c));
+  const campaigns = await service.listCampaigns();
+  return apiResponse(c, campaigns);
+});
+
+socialRoutes.get('/campaigns/:id', async (c) => {
+  const service = new CampaignService(getUserId(c), getWorkspaceId(c));
+  const id = c.req.param('id');
+  const campaign = await service.getCampaign(id);
+  if (!campaign)
+    return apiError(c, { code: ERROR_CODES.NOT_FOUND, message: 'Campaign not found' }, 404);
+  const targets = await service.getCampaignTargets(id);
+  return apiResponse(c, { ...campaign, targets });
+});
+
+socialRoutes.post('/campaigns/:id/cancel', async (c) => {
+  const service = new CampaignService(getUserId(c), getWorkspaceId(c));
+  const id = c.req.param('id');
+  try {
+    await service.cancelCampaign(id);
+    return apiResponse(c, { success: true });
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
+  }
+});
+
+socialRoutes.post('/campaigns/:id/reconcile', async (c) => {
+  const service = new CampaignService(getUserId(c), getWorkspaceId(c));
+  const id = c.req.param('id');
+  try {
+    await service.reconcileCampaign(id);
+    const campaign = await service.getCampaign(id);
+    const targets = await service.getCampaignTargets(id);
+    return apiResponse(c, { ...campaign, targets });
+  } catch (err: unknown) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
+  }
+});

@@ -1,46 +1,38 @@
-﻿import React, { useEffect, useState } from 'react';
-import { PageContainer } from '../components/PageContainer';
-import { Card } from '../components/Card';
-import { toast } from 'react-hot-toast';
-import type { SocialAccount, PublishRequest } from '../types/leo';
+﻿export const SocialPage = () => {
+  const { session } = useAuth();
+  const [accounts, setAccounts] = useState<unknown[]>([]);
+  const [campaigns, setCampaigns] = useState<unknown[]>([]);
 
-export const SocialPage: React.FC = () => {
-  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
-  const [drafts, setDrafts] = useState<PublishRequest[]>([]);
-  const [draftText, setDraftText] = useState('');
   const [draftTitle, setDraftTitle] = useState('');
+  const [draftText, setDraftText] = useState('');
   const [draftTags, setDraftTags] = useState('');
-  const [draftPrivacy, setDraftPrivacy] = useState('private');
-  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [draftPrivacy] = useState('public');
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadedMediaId, setUploadedMediaId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAccounts();
-    fetchDrafts();
-  }, []);
+    fetchCampaigns();
+  }, [session]);
 
   const fetchAccounts = async () => {
     try {
       const res = await fetch('/api/v1/social/accounts');
-      if (res.ok) {
-        const data = await res.json();
-        setAccounts(data.accounts || []);
-      }
+      const data = await res.json();
+      setAccounts(data.data || []);
     } catch {
-      toast.error('Failed to fetch accounts');
+      console.error(e);
     }
   };
 
-  const fetchDrafts = async () => {
+  const fetchCampaigns = async () => {
     try {
-      const res = await fetch('/api/v1/social/publish');
-      if (res.ok) {
-        const data = await res.json();
-        setDrafts(data.requests || []);
-      }
+      const res = await fetch('/api/v1/social/campaigns');
+      const data = await res.json();
+      setCampaigns(data.data || []);
     } catch {
-      toast.error('Failed to fetch drafts');
+      console.error(e);
     }
   };
 
@@ -48,45 +40,31 @@ export const SocialPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
 
-    setUploading(true);
     try {
       const res = await fetch('/api/v1/media/upload', {
         method: 'POST',
         body: formData,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUploadedMediaId(data.id);
-        toast.success('Media uploaded successfully');
-      } else {
-        const err = await res.json();
-        toast.error(err.error?.message || 'Upload failed');
-      }
-    } catch {
-      toast.error('Upload failed');
+
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      setUploadedMediaId(data.data.id);
+      toast.success('Media uploaded successfully');
+    } catch (error) {
+      toast.error('Failed to upload media');
+      console.error(error);
     } finally {
       setUploading(false);
     }
   };
 
-  const handleCreateContent = async () => {
-    if (!draftText || !selectedAccountId) {
-      toast.error('Please enter text and select an account');
-      return;
-    }
-    const acc = accounts.find((a) => a.id === selectedAccountId);
-    if (!acc) return;
-
-    if (acc.platform === 'youtube' && !draftTitle) {
-      toast.error('YouTube requires a title');
-      return;
-    }
-
-    if (acc.platform === 'youtube' && !uploadedMediaId) {
-      toast.error('YouTube requires uploaded media');
+  const handleCreateCampaign = async () => {
+    if (!draftText || selectedAccounts.length === 0) {
+      toast.error('Please enter text and select at least one account');
       return;
     }
 
@@ -109,140 +87,159 @@ export const SocialPage: React.FC = () => {
       if (!contentRes.ok) throw new Error('Failed to create content');
       const content = await contentRes.json();
 
-      // 2. Create platform variant
-      const variantRes = await fetch(`/api/v1/content/${content.id}/variants/${acc.platform}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: draftTitle,
-          description: draftText,
-          hashtags: draftTags
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
-          privacyStatus: draftPrivacy,
-        }),
-      });
+      // 2. Create platform variants for all selected platforms
+      const selectedPlatforms = new Set(
+        selectedAccounts.map((id) => accounts.find((a) => a.id === id)?.platform).filter(Boolean)
+      );
 
-      if (!variantRes.ok) throw new Error('Failed to create variant');
-
-      // 3. To maintain backward compatibility with SocialPage's publish loop,
-      // create a publish request mapped to this content.
-      // Wait, let's just use the legacy /social/publish endpoint for now, but pass media Asset
-      const res = await fetch('/api/v1/social/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          platform: acc.platform,
-          accountId: acc.id,
-          title: draftTitle,
-          text: draftText,
-          hashtags: draftTags
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
-          mediaAssetIds: uploadedMediaId ? [uploadedMediaId] : [], // Use the ID!
-          metadata: { privacyStatus: draftPrivacy, contentId: content.id },
-        }),
-      });
-
-      if (res.ok) {
-        toast.success('Draft created');
-        setDraftText('');
-        setDraftTitle('');
-        setDraftTags('');
-        setUploadedMediaId(null);
-        fetchDrafts();
-      } else {
-        throw new Error('Failed to create publish request');
+      for (const platform of selectedPlatforms) {
+        await fetch(`/api/v1/content/${content.id}/variants/${platform}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: draftTitle,
+            description: draftText,
+            hashtags: draftTags
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean),
+            privacyStatus: draftPrivacy,
+          }),
+        });
       }
-    } catch (err: unknown) {
-      toast.error((err as Error).message || 'Failed to create content');
+
+      // 3. Create Campaign
+      const campRes = await fetch('/api/v1/social/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contentItemId: content.id,
+          accountIds: selectedAccounts,
+        }),
+      });
+
+      if (!campRes.ok) throw new Error('Failed to create campaign');
+
+      toast.success('Campaign created successfully');
+      setDraftTitle('');
+      setDraftText('');
+      setDraftTags('');
+      setSelectedAccounts([]);
+      setUploadedMediaId(null);
+      fetchCampaigns();
+    } catch (error) {
+      toast.error('Failed to create campaign');
+      console.error(error);
     }
   };
 
-  const handlePublish = async (id: string) => {
+  const handleCancelCampaign = async (id: string) => {
     try {
-      const res = await fetch('/api/v1/social/publish/' + id + '/publish', {
-        method: 'POST',
-      });
-      if (res.ok) {
-        toast.success('Publishing initiated');
-        fetchDrafts();
-      }
+      await fetch(`/api/v1/social/campaigns/${id}/cancel`, { method: 'POST' });
+      toast.success('Campaign cancelled');
+      fetchCampaigns();
     } catch {
-      toast.error('Failed to initiate publish');
+      toast.error('Failed to cancel campaign');
+    }
+  };
+
+  const handleReconcileCampaign = async (id: string) => {
+    try {
+      await fetch(`/api/v1/social/campaigns/${id}/reconcile`, { method: 'POST' });
+      toast.success('Campaign reconciled');
+      fetchCampaigns();
+    } catch {
+      toast.error('Failed to reconcile campaign');
+    }
+  };
+
+  const toggleAccount = (id: string) => {
+    if (selectedAccounts.includes(id)) {
+      setSelectedAccounts(selectedAccounts.filter((a) => a !== id));
+    } else {
+      setSelectedAccounts([...selectedAccounts, id]);
     }
   };
 
   return (
-    <PageContainer title="Social & Mission Control">
+    <PageContainer title="Social Publishing">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <Card title="Connected Accounts">
             <div className="space-y-4">
-              {accounts.map((acc) => (
-                <div
-                  key={acc.id}
-                  className="p-4 rounded-lg border border-border bg-bg-secondary flex items-center justify-between"
-                >
-                  <div>
-                    <p className="font-medium text-text-primary">{acc.accountName}</p>
-                    <p className="text-xs text-text-tertiary capitalize">{acc.platform}</p>
-                  </div>
-                  <span
-                    className={`px-2 py-1 text-xs rounded-full ${
-                      acc.status === 'active'
-                        ? 'bg-success/10 text-success'
-                        : 'bg-error/10 text-error'
-                    }`}
+              {accounts.length > 0 ? (
+                accounts.map((acc) => (
+                  <div
+                    key={acc.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border bg-bg-secondary"
                   >
-                    {acc.status}
-                  </span>
-                </div>
-              ))}
-              {accounts.length === 0 && (
-                <p className="text-sm text-text-tertiary">No accounts connected yet.</p>
+                    <div>
+                      <p className="font-medium text-text-primary">{acc.accountName}</p>
+                      <p className="text-xs text-text-tertiary capitalize">{acc.platform}</p>
+                    </div>
+                    <span className="text-xs px-2 py-1 bg-success/10 text-success rounded-full">
+                      Active
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-text-tertiary text-center py-4">
+                  No accounts connected yet.
+                </p>
               )}
 
-              <div className="pt-4 border-t border-border">
+              <div className="pt-4 border-t border-border grid grid-cols-2 gap-2">
                 <a
                   href="/api/v1/social/youtube/connect"
-                  className="w-full inline-block text-center py-2 bg-red-600/10 text-red-500 rounded-lg hover:bg-red-600/20 transition-colors text-sm font-medium"
+                  className="text-center py-2 bg-red-600/10 text-red-500 rounded-lg text-xs font-medium"
                 >
-                  Connect YouTube
+                  YouTube
                 </a>
-
-
+                <a
+                  href="/api/v1/social/instagram/connect"
+                  className="text-center py-2 bg-pink-600/10 text-pink-500 rounded-lg text-xs font-medium"
+                >
+                  Instagram
+                </a>
+                <a
+                  href="/api/v1/social/facebook/connect"
+                  className="text-center py-2 bg-blue-600/10 text-blue-500 rounded-lg text-xs font-medium"
+                >
+                  Facebook
+                </a>
                 <a
                   href="/api/v1/social/tiktok/connect"
-                  className="w-full inline-block text-center py-2 bg-black/10 text-black dark:text-white dark:bg-white/10 rounded-lg hover:bg-black/20 transition-colors text-sm font-medium mt-2"
+                  className="text-center py-2 bg-black/10 text-black dark:text-white dark:bg-white/10 rounded-lg text-xs font-medium"
                 >
-                  Connect TikTok
+                  TikTok
                 </a>
-
               </div>
             </div>
           </Card>
 
-          <Card title="Compose">
+          <Card title="New Campaign">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Account
+                  Target Accounts
                 </label>
-                <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
-                >
-                  <option value="">Select an account...</option>
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-border rounded-lg p-2">
                   {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.accountName} ({acc.platform})
-                    </option>
+                    <label
+                      key={acc.id}
+                      className="flex items-center space-x-2 p-2 hover:bg-bg-secondary rounded cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAccounts.includes(acc.id)}
+                        onChange={() => toggleAccount(acc.id)}
+                      />
+                      <span className="text-sm">
+                        {acc.accountName} ({acc.platform})
+                      </span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
 
               <div>
@@ -254,7 +251,7 @@ export const SocialPage: React.FC = () => {
                   onChange={handleFileUpload}
                   disabled={uploading}
                   accept="video/*,image/*"
-                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3 text-sm text-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent/10 file:text-accent hover:file:bg-accent/20 cursor-pointer disabled:opacity-50"
+                  className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent/10 file:text-accent hover:file:bg-accent/20 cursor-pointer disabled:opacity-50"
                 />
                 {uploadedMediaId && (
                   <p className="text-xs text-success mt-2">Media ready: {uploadedMediaId}</p>
@@ -268,13 +265,13 @@ export const SocialPage: React.FC = () => {
                   value={draftTitle}
                   onChange={(e) => setDraftTitle(e.target.value)}
                   className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
-                  placeholder="Required for YouTube"
+                  placeholder="Optional"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Content / Description
+                  Content / Caption
                 </label>
                 <textarea
                   value={draftText}
@@ -293,100 +290,60 @@ export const SocialPage: React.FC = () => {
                   value={draftTags}
                   onChange={(e) => setDraftTags(e.target.value)}
                   className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
-                  placeholder="e.g. vlog, gaming, tech"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Privacy Status
-                </label>
-                <select
-                  value={draftPrivacy}
-                  onChange={(e) => setDraftPrivacy(e.target.value)}
-                  className="w-full bg-bg-tertiary border border-border rounded-lg p-3"
-                >
-                  <option value="private">Private</option>
-                  <option value="unlisted">Unlisted</option>
-                  <option value="public">Public</option>
-                </select>
-              </div>
-
               <button
-                onClick={handleCreateContent}
+                onClick={handleCreateCampaign}
                 className="w-full py-3 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium"
               >
-                Save as Draft
+                Create Campaign
               </button>
             </div>
           </Card>
         </div>
 
         <div className="lg:col-span-2 space-y-6">
-          <Card title="Drafts & Pending">
+          <Card title="Publishing Campaigns">
             <div className="space-y-4">
-              {drafts
-                .filter(
-                  (d) =>
-                    d.status === 'pending' ||
-                    d.status === 'failed' ||
-                    d.status === 'publishing' ||
-                    d.status === 'unknown'
-                )
-                .map((d) => (
-                  <div key={d.id} className="p-4 rounded-lg border border-border bg-bg-secondary">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="font-medium text-text-primary capitalize">{d.platform}</p>
-                        <p className="text-xs text-text-tertiary">
-                          Created: {new Date(d.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          d.status === 'publishing'
-                            ? 'bg-warning/10 text-warning'
-                            : d.status === 'failed'
-                              ? 'bg-error/10 text-error'
-                              : 'bg-bg-tertiary text-text-secondary'
-                        }`}
-                      >
-                        {d.status}
-                      </span>
+              {campaigns.map((camp) => (
+                <div key={camp.id} className="p-4 rounded-lg border border-border bg-bg-secondary">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <p className="font-medium text-text-primary">Campaign: {camp.id}</p>
+                      <p className="text-xs text-text-tertiary">
+                        Created: {new Date(camp.createdAt).toLocaleString()}
+                      </p>
                     </div>
-                    {/* Access postId to fetch SocialPost details, though legacy UI didn't do this easily. We can just display minimal details */}
-                    <div className="flex gap-2 mt-4">
-                      {d.status === 'unknown' && (
-                        <button
-                          onClick={async () => {
-                            await fetch(`/api/v1/social/publish/${d.id}/reconcile`, {
-                              method: 'POST',
-                            });
-                            fetchDrafts();
-                          }}
-                          className="text-xs px-3 py-1 bg-yellow-500/10 text-yellow-500 rounded hover:bg-yellow-500/20"
-                        >
-                          Reconcile
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handlePublish(d.id)}
-                        className="text-xs px-3 py-1 bg-accent/10 text-accent rounded hover:bg-accent/20"
-                      >
-                        Publish Now
-                      </button>
-                    </div>
+                    <span
+                      className={`px-2 py-1 text-xs rounded-full bg-bg-tertiary text-text-secondary`}
+                    >
+                      {camp.status}
+                    </span>
                   </div>
-                ))}
-              {drafts.filter(
-                (d) =>
-                  d.status === 'pending' ||
-                  d.status === 'failed' ||
-                  d.status === 'publishing' ||
-                  d.status === 'unknown'
-              ).length === 0 && (
+                  <div className="flex gap-2 mb-2">
+                    {camp.status !== 'CANCELLED' && camp.status !== 'PUBLISHED' && (
+                      <button
+                        onClick={() => handleCancelCampaign(camp.id)}
+                        className="text-xs px-3 py-1 bg-error/10 text-error rounded hover:bg-error/20"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    {(camp.status === 'NEEDS_RECONCILIATION' || camp.status === 'UNKNOWN') && (
+                      <button
+                        onClick={() => handleReconcileCampaign(camp.id)}
+                        className="text-xs px-3 py-1 bg-warning/10 text-warning rounded hover:bg-warning/20"
+                      >
+                        Reconcile
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {campaigns.length === 0 && (
                 <p className="text-sm text-text-tertiary text-center py-8">
-                  No drafts available. Create one to get started.
+                  No campaigns available.
                 </p>
               )}
             </div>
@@ -396,4 +353,3 @@ export const SocialPage: React.FC = () => {
     </PageContainer>
   );
 };
-

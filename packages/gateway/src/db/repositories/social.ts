@@ -1,5 +1,11 @@
-import { BaseRepository } from './base.js';
-import type { SocialAccount, SocialPost, PublishRequest } from '@ownpilot/core/social';
+﻿import { BaseRepository } from './base.js';
+import type {
+  SocialAccount,
+  SocialPost,
+  PublishRequest,
+  PublishingCampaign,
+  CampaignTarget,
+} from '@ownpilot/core/social';
 
 export class SocialRepository extends BaseRepository {
   constructor(
@@ -155,5 +161,163 @@ export class SocialRepository extends BaseRepository {
       `SELECT id, user_id AS "userId", workspace_id AS "workspaceId", account_id AS "accountId", platform, title, text, hashtags, media, metadata, scheduled_for AS "scheduledFor", created_at AS "createdAt", updated_at AS "updatedAt" FROM social_posts WHERE id=$1`,
       [id]
     );
+  }
+  // --- Campaigns ---
+  async createCampaign(campaign: PublishingCampaign): Promise<void> {
+    await this.run(
+      `INSERT INTO social_campaigns (id, user_id, workspace_id, content_item_id, execution_task_id, status, scheduled_for, version, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        campaign.id,
+        this.userId,
+        this.workspaceId,
+        campaign.contentItemId,
+        campaign.executionTaskId || null,
+        campaign.status,
+        campaign.scheduledFor ? new Date(campaign.scheduledFor) : null,
+        campaign.version,
+        new Date(campaign.createdAt),
+        new Date(campaign.updatedAt),
+      ]
+    );
+  }
+
+  async getCampaign(id: string): Promise<PublishingCampaign | null> {
+    const res = await this.query(
+      `SELECT * FROM social_campaigns WHERE id = $1 AND user_id = $2 AND workspace_id = $3`,
+      [id, this.userId, this.workspaceId]
+    );
+    if (!res.rows[0]) return null;
+    return this.mapCampaign(res.rows[0]);
+  }
+
+  async updateCampaign(id: string, updates: Partial<PublishingCampaign>): Promise<void> {
+    const keys = Object.keys(updates);
+    if (keys.length === 0) return;
+
+    const setClauses = [];
+    const values: unknown[] = [];
+    let i = 1;
+
+    for (const key of keys) {
+      if (key === 'status') {
+        setClauses.push(`status = ${i++}`);
+        values.push(updates.status);
+      }
+      if (key === 'executionTaskId') {
+        setClauses.push(`execution_task_id = ${i++}`);
+        values.push(updates.executionTaskId);
+      }
+      if (key === 'scheduledFor') {
+        setClauses.push(`scheduled_for = ${i++}`);
+        values.push(updates.scheduledFor ? new Date(updates.scheduledFor) : null);
+      }
+      if (key === 'version') {
+        setClauses.push(`version = ${i++}`);
+        values.push(updates.version);
+      }
+    }
+
+    if (setClauses.length === 0) return;
+    setClauses.push(`updated_at = ${i++}`);
+    values.push(new Date());
+
+    values.push(id, this.userId, this.workspaceId);
+    await this.run(
+      `UPDATE social_campaigns SET ${setClauses.join(', ')} WHERE id = ${i - 2} AND user_id = ${i - 1} AND workspace_id = ${i}`,
+      values
+    );
+  }
+
+  async listCampaigns(): Promise<PublishingCampaign[]> {
+    const res = await this.query(
+      `SELECT * FROM social_campaigns WHERE user_id = $1 AND workspace_id = $2 ORDER BY created_at DESC`,
+      [this.userId, this.workspaceId]
+    );
+    return res.rows.map((r) => this.mapCampaign(r));
+  }
+
+  async createCampaignTarget(target: CampaignTarget): Promise<void> {
+    await this.run(
+      `INSERT INTO social_campaign_targets (id, campaign_id, user_id, workspace_id, account_id, platform, publish_request_id, status, error, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        target.id,
+        target.campaignId,
+        this.userId,
+        this.workspaceId,
+        target.accountId,
+        target.platform,
+        target.publishRequestId,
+        target.status,
+        target.error ? JSON.stringify(target.error) : null,
+        new Date(target.createdAt),
+        new Date(target.updatedAt),
+      ]
+    );
+  }
+
+  async getCampaignTargets(campaignId: string): Promise<CampaignTarget[]> {
+    const res = await this.query(
+      `SELECT * FROM social_campaign_targets WHERE campaign_id = $1 AND user_id = $2 AND workspace_id = $3`,
+      [campaignId, this.userId, this.workspaceId]
+    );
+    return res.rows.map((r) => this.mapTarget(r));
+  }
+
+  async updateCampaignTarget(id: string, updates: Partial<CampaignTarget>): Promise<void> {
+    const setClauses = [];
+    const values: unknown[] = [];
+    let i = 1;
+
+    if (updates.status !== undefined) {
+      setClauses.push(`status = ${i++}`);
+      values.push(updates.status);
+    }
+    if (updates.error !== undefined) {
+      setClauses.push(`error = ${i++}`);
+      values.push(updates.error ? JSON.stringify(updates.error) : null);
+    }
+
+    if (setClauses.length === 0) return;
+    setClauses.push(`updated_at = ${i++}`);
+    values.push(new Date());
+
+    values.push(id, this.userId, this.workspaceId);
+    await this.run(
+      `UPDATE social_campaign_targets SET ${setClauses.join(', ')} WHERE id = ${i - 2} AND user_id = ${i - 1} AND workspace_id = ${i}`,
+      values
+    );
+  }
+
+  private mapCampaign(row: unknown): PublishingCampaign {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      workspaceId: row.workspace_id,
+      contentItemId: row.content_item_id,
+      executionTaskId: row.execution_task_id || undefined,
+      status: row.status,
+      scheduledFor: row.scheduled_for?.toISOString(),
+      version: row.version,
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
+    };
+  }
+
+  private mapTarget(row: unknown): CampaignTarget {
+    return {
+      id: row.id,
+      campaignId: row.campaign_id,
+      userId: row.user_id,
+      workspaceId: row.workspace_id,
+      accountId: row.account_id,
+      platform: row.platform,
+      publishRequestId: row.publish_request_id,
+      status: row.status,
+      error: row.error || undefined,
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
+    };
   }
 }
