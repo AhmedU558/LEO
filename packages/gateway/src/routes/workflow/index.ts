@@ -867,6 +867,8 @@ workflowRoutes.post('/approvals/:id/approve', async (c) => {
 
   const repo = createWorkflowApprovalsRepository(userId);
   const approval = await repo.decide(id, 'approved', workspaceId);
+  if (approval?.context.executionTaskId)
+    return apiError(c, 'Use the execution task approval endpoint', 409);
   if (!approval || approval.status !== 'approved') {
     return apiError(
       c,
@@ -906,6 +908,8 @@ workflowRoutes.post('/approvals/:id/reject', async (c) => {
 
   const repo = createWorkflowApprovalsRepository(userId);
   const approval = await repo.decide(id, 'rejected', workspaceId);
+  if (approval?.context.executionTaskId)
+    return apiError(c, 'Use the execution task approval endpoint', 409);
   if (!approval || approval.status !== 'rejected') {
     return apiError(
       c,

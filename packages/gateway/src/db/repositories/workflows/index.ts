@@ -377,7 +377,8 @@ export class WorkflowsRepository extends BaseRepository {
 
     values.push(logId);
     await this.execute(
-      `UPDATE workflow_logs SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+      `UPDATE workflow_logs SET ${updates.join(', ')} WHERE id = $${paramIndex}
+       AND NOT EXISTS (SELECT 1 FROM execution_tasks et WHERE et.workflow_run_id=workflow_logs.id AND et.state IN ('CANCELLED','FAILED','EXPIRED','COMPLETED'))`,
       values
     );
   }
@@ -443,7 +444,7 @@ export class WorkflowsRepository extends BaseRepository {
       `SELECT wl.id, w.user_id
        FROM workflow_logs wl
        JOIN workflows w ON wl.workflow_id = w.id
-       WHERE wl.status = 'running'`
+       WHERE wl.status = 'running' AND NOT EXISTS (SELECT 1 FROM execution_tasks et WHERE et.workflow_run_id=wl.id)`
     );
     return rows.map((r) => ({ id: r.id, userId: r.user_id }));
   }
@@ -480,6 +481,7 @@ export class WorkflowsRepository extends BaseRepository {
        FROM workflow_logs wl
        JOIN workflows w ON wl.workflow_id = w.id
        WHERE wl.status = 'running'
+         AND NOT EXISTS (SELECT 1 FROM execution_tasks et WHERE et.workflow_run_id=wl.id)
          AND wl.completed_at IS NULL
          AND EXTRACT(EPOCH FROM (NOW() - wl.started_at)) * 1000 > $1`,
       [thresholdMs]

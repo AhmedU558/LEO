@@ -39,6 +39,11 @@ import {
   type DispatchCallbacks,
 } from './workflow-dispatch.js';
 import { WorkflowExecutionLocks } from './execution-locks.js';
+import {
+  executionTaskContext,
+  bindExecutionTaskRun,
+  assertExecutionTaskActive,
+} from '../execution-task-context.js';
 
 interface WorkflowServiceOptions {
   /** Poll interval for the jobified-level wait loop (ms). */
@@ -142,6 +147,7 @@ export class WorkflowService implements IWorkflowService {
     let wfLog: WorkflowLog;
     try {
       wfLog = await repo.createLog(workflowId, workflow.name);
+      await bindExecutionTaskRun(workflowId, wfLog.id);
       // Emit started event so consumers (e.g. API endpoint) can capture the logId
       onProgress?.({ type: 'started', logId: wfLog.id });
     } catch (setupError) {
@@ -204,6 +210,7 @@ export class WorkflowService implements IWorkflowService {
           if (!node) throw new Error(`Node ${nodeId} not found`);
           if (
             this.inlineExecution ||
+            executionTaskContext.getStore() !== undefined ||
             nodeOutputs[nodeId]?.status === 'skipped' ||
             forEachBodyNodeSet.has(nodeId) ||
             SYNC_ONLY_TYPES.has(node.type)
@@ -561,6 +568,11 @@ export class WorkflowService implements IWorkflowService {
     const approval = await approvalRepo.get(approvalId);
 
     if (!approval) throw new Error('Approval not found');
+    if (
+      approval.context.executionTaskId &&
+      approval.context.executionTaskId !== executionTaskContext.getStore()?.taskId
+    )
+      throw new Error('Managed approval requires its execution task worker');
     if (approval.status === 'rejected') throw new Error('Approval was rejected');
     if (approval.status === 'pending') throw new Error('Approval is still pending');
     if (approval.expiresAt && approval.expiresAt.getTime() < Date.now()) {
@@ -988,6 +1000,7 @@ export class WorkflowService implements IWorkflowService {
    */
   /** Dispatch node to its executor — delegates to workflow-dispatch.ts. */
   private async dispatchNode(ctx: Parameters<typeof dispatchNodeImpl>[0]): Promise<NodeResult> {
+    await assertExecutionTaskActive();
     return dispatchNodeImpl(ctx, this.dispatchCallbacks);
   }
 

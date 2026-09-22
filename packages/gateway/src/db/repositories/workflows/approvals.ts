@@ -6,6 +6,8 @@
 
 import { BaseRepository, parseJsonField } from '../base.js';
 import { generateId } from '@ownpilot/core/services';
+import { executionTaskContext } from '../../../services/execution-task-context.js';
+import { ExecutionTasksRepository } from '../execution-tasks.js';
 
 // ============================================================================
 // Types
@@ -95,6 +97,23 @@ export class WorkflowApprovalsRepository extends BaseRepository {
   }
 
   async create(input: CreateApprovalInput): Promise<WorkflowApproval> {
+    const task = executionTaskContext.getStore();
+    if (task) {
+      if (this.userId !== task.userId || input.workspaceId !== task.workspaceId)
+        throw new Error('Approval identity mismatch');
+      return new ExecutionTasksRepository(task.userId, task.workspaceId).whileRunning(
+        task.taskId,
+        () =>
+          this.insertApproval({
+            ...input,
+            context: { ...input.context, executionTaskId: task.taskId },
+          })
+      );
+    }
+    return this.insertApproval(input);
+  }
+
+  private async insertApproval(input: CreateApprovalInput): Promise<WorkflowApproval> {
     const id = generateId('wfappr');
     const now = new Date().toISOString();
 
@@ -156,7 +175,7 @@ export class WorkflowApprovalsRepository extends BaseRepository {
       ? [status, now, id, this.userId, workspaceId]
       : [status, now, id, this.userId];
 
-    await this.execute(query, params);
+    await this.execute(`${query} AND NOT jsonb_exists(context, 'executionTaskId')`, params);
     return this.get(id, workspaceId);
   }
 

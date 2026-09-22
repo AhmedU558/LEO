@@ -535,6 +535,10 @@ async function main() {
   // 18.1. Workflow Node Job Worker (gap 24.1 Phase 2 — persistent job queue for nodes)
   log.info('Starting Workflow Node Job Worker...');
   let stopWorkflowWorker: (() => void) | null = null;
+  const { registerExecutionTaskWorker, reconcileExecutionTasks } =
+    await import('./services/execution-task-service.js');
+  await reconcileExecutionTasks();
+  const stopExecutionTaskWorker = registerExecutionTaskWorker();
   try {
     const { registerWorkflowNodeWorker, resumeWorkflowFromRecovery } =
       await import('./services/workflow/workflow-node-job-handler.js');
@@ -863,6 +867,7 @@ async function main() {
     // 5.2.2. Stop Workflow Node Job Worker
     try {
       if (stopWorkflowWorker) stopWorkflowWorker();
+      stopExecutionTaskWorker();
     } catch (e) {
       log.warn('Workflow Node Job Worker stop error', { error: String(e) });
     }

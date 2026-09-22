@@ -120,6 +120,7 @@ export interface WorkspaceInfo {
  * Gateway events (server to client)
  */
 export interface ServerEvents {
+  'execution-task:updated': { id: string; workspaceId: string; state: string; version: number };
   // Connection events
   'connection:ready': { sessionId: string };
   'connection:error': { code: string; message: string };

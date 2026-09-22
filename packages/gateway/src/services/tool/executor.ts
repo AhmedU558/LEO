@@ -34,6 +34,7 @@ import {
 } from '../custom/tool-registry.js';
 import { getErrorMessage, stableStringify } from '../../utils/common.js';
 import { getLog } from '../log.js';
+import { assertExecutionTaskActive, executionTaskContext } from '../execution-task-context.js';
 import { registerImageOverrides } from '../../tools/overrides/image.js';
 import { registerEmailOverrides } from '../../tools/overrides/email.js';
 import { registerAudioOverrides } from '../../tools/overrides/audio.js';
@@ -605,6 +606,10 @@ export async function executeTool(
   executionPermissions?: ExecutionPermissions,
   execContext?: ToolExecContext
 ): Promise<ToolExecutionResult> {
+  await assertExecutionTaskActive();
+  const taskContext = executionTaskContext.getStore();
+  if (taskContext && taskContext.userId !== userId)
+    throw new Error('Execution task tool identity mismatch');
   if (!execContext) {
     if (process.env.NODE_ENV !== 'test') {
       return { success: false, error: 'PolicyEngine DENY: Missing execution context (QA-006)' };

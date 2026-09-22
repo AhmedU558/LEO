@@ -31,6 +31,7 @@ import { resolveTemplates } from './template-resolver.js';
 import { WORKFLOW_NODE_TYPES } from './node-types.js';
 import type { WorkflowProgressEvent } from './types.js';
 import { nodeDataField, nodeDataRecord } from './node-data.js';
+import { executionTaskContext, assertExecutionTaskActive } from '../execution-task-context.js';
 import {
   executeNode,
   executeLlmNode,
@@ -176,7 +177,9 @@ export async function dispatchNode(
   cb: DispatchCallbacks
 ): Promise<NodeResult> {
   const { node, userId, dryRun, workflowId } = ctx;
-  const identity = { userId, workspaceId: 'default', roles: [] };
+  const taskContext = executionTaskContext.getStore();
+  await assertExecutionTaskActive();
+  const identity = { userId, workspaceId: taskContext?.workspaceId ?? 'default', roles: [] };
 
   // Map Node to Capability.
   //
@@ -242,6 +245,10 @@ export async function dispatchNode(
         },
         message: policyResult.reason ?? `Approval required for ${actionName}`,
       });
+      await ctx.repo.updateLog(ctx.logId, {
+        status: 'awaiting_approval',
+        nodeResults: ctx.nodeOutputs,
+      });
       throw new ApprovalPauseError(approval.id);
     }
   }
@@ -256,7 +263,8 @@ export async function dispatchNode(
       action: actionName,
       resource: 'workflow_node',
       resourceType: node.type,
-      taskId: workflowId,
+      taskId: taskContext?.taskId ?? workflowId,
+      runId: ctx.logId,
       capability,
       policyDecision: policyResult.decision,
       riskLevel: risk,
@@ -270,6 +278,7 @@ export async function dispatchNode(
   let result: NodeResult;
   try {
     result = await _dispatchNodeImpl(ctx, cb);
+    await assertExecutionTaskActive();
   } catch (err) {
     if (ledgerEntryId) {
       await ActionLedger.updateResult(
@@ -632,7 +641,7 @@ async function _dispatchNodeImpl(
       workflowLogId: logId,
       workflowId,
       nodeId,
-      workspaceId: 'default',
+      workspaceId: executionTaskContext.getStore()?.workspaceId ?? 'default',
       action: 'workflow.approve',
       capability: 'workflow.execute',
       context: {
