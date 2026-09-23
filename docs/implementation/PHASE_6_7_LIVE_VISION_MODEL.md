@@ -196,9 +196,13 @@ observed. The loop therefore fails closed as UNKNOWN instead, which is what
 would need an out-of-process session registry — a larger change that should be
 decided explicitly, not smuggled in here.
 
-## Live multi-step: UNVERIFIED
+## Live multi-step: UNVERIFIED at the time of this phase
 
-The gated live suite gained a two-step test. It has **not** passed against a
+> Superseded by Phase 6.10 below, which verifies live multi-step execution
+> against a real provider. This finding is kept as the record of what was
+> true when Phase 6.8 landed.
+
+The gated live suite gained a two-step test. It had **not** passed against a
 real provider. Free-tier behaviour observed across five attempts:
 
 | Model                                  | Result                                                                                      |
@@ -307,3 +311,145 @@ explicit per-site policy or a trusted classifier, and neither is in scope here.
 containing digits ("Order 4815162342", "2 items") or longer than six words are
 withheld. A withheld label costs the model context; a disclosed credential costs
 the user their account.
+
+---
+
+# Phase 6.10: production live multi-step vision validation
+
+Commit `f293baba`. Supersedes the "Live multi-step: UNVERIFIED" finding in
+Phase 6.8.
+
+## Status
+
+**Pipeline live multi-step execution: VERIFIED.** Dependent two-step tasks ran
+end to end against real OpenRouter inference, in real Chrome, on real
+PostgreSQL, with no mocked or fabricated model responses and no fallback
+simulator. All three scenarios reached `COMPLETED` under live inference, and one
+of them passed its complete assertion set including ledger and leakage
+verification.
+
+**Free-tier provider reliability: not a gate.** The same three scenarios went
+3/3, then 1/3, then 0/3 across identical runs. That is a property of the free
+model's schema compliance, not of the pipeline. The live suite stays gated
+behind `LEO_QA_LIVE_MODEL` and is evidence-gathering, never a CI gate.
+
+These two statements are independent and should not be collapsed. The pipeline
+is verified; the free provider is unreliable.
+
+## Scenarios
+
+Three dependent two-step tasks, each mutating on its first interaction so step 2
+is necessarily proposed against state that did not exist at step 1:
+
+| Scenario | Dependency introduced after step 1               |
+| -------- | ------------------------------------------------ |
+| (a)      | a `Confirm` control that did not exist           |
+| (b)      | an `h1` changing `Step one` to `Step two`        |
+| (c)      | a `Submit` control whose `disabled` state clears |
+
+The proposer's system prompt is fixed at "propose exactly one browser action"
+and there is no task-instruction channel to the model. The model is therefore
+not goal-directed, and asserting that it clicked a named control would test luck
+rather than the pipeline. Mutating on _any_ first interaction makes the
+dependency hold whichever legal action the model picks.
+
+The dependency is read from the layouts the redactor actually fed the model,
+captured in the existing `redact` spy. A scenario holds only if its post-step-1
+state is **absent from the first layout and present in the last**. Re-querying
+`computerRedactionLayout` after the task ends does not work and is not done: the
+computer session is torn down at completion.
+
+## Live results
+
+Provider: OpenRouter's OpenAI-compatible API at `https://openrouter.ai/api/v1`,
+reached through the existing `OpenAIProvider` transport via the configurable
+base URL from `cf963cd7`. No separate OpenRouter execution engine.
+
+| Model                                  | Observed behaviour                                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `nex-agi/nex-n2.5-mini:free`           | Best performer. 1.1-4.6s per task, `finish_reason=stop`, ~1250-1830 tokens per call                        |
+| `nex-agi/nex-n2.5-pro:free`            | Compliant but 15-25s per call against the 30s ceiling; timeouts, one 200 with empty body                   |
+| `openrouter/free`                      | Auto-routes per request (Nvidia, AtlasCloud and Nex AGI served steps of one task); structurally unsuitable |
+| `dots-studio/dots-3-note-preview:free` | HTTP 200 with no message content                                                                           |
+| `google/gemma-4-31b-it:free`           | HTTP 429, shared upstream pool                                                                             |
+
+Best run, `nex-agi/nex-n2.5-mini:free`: all three scenarios `COMPLETED`, two real
+inferences each, every request HTTP 200, all six proposals parsed to `click`,
+six authorized Chrome actions. A later run took scenario (b) through its full
+assertion set green.
+
+Scenarios (a) and (c) have reached `COMPLETED` under live inference but have not
+yet completed their full assertion set in a single green run.
+
+## Parser failures observed
+
+The dominant live failure is a malformed `screenshot` proposal.
+`parseComputerProposal` validates each action with
+`exactObject(params, fields[type])`, and `fields.screenshot` is `[]` — a
+screenshot proposal must carry exactly `params: {}`. `exactObject` requires
+`Reflect.ownKeys(params).length === keys.length`, so any extra key is rejected
+and the loop stops, which is the stop-on-model-failure behaviour Phase 6.8
+specifies.
+
+Also observed: valid JSON carrying no valid `type`, and non-JSON content.
+
+**This is model non-compliance, not a pipeline defect.** A `screenshot` is one
+of the nine types the closed schema advertises to the model, so proposing one is
+compliant behaviour; emitting parameters for it is not. An offline regression
+test drives a well-formed `{type:"screenshot",params:{}}` through the full loop,
+real Chrome and real PostgreSQL, to `COMPLETED` — the pipeline carries the task
+through a proposed screenshot correctly.
+
+Nothing was weakened to raise the hit rate: `parseComputerProposal`, the
+`exactObject` allowlist, `COMPUTER_MODEL_LIMITS.timeoutMs`, the redactor,
+PolicyEngine/RiskEngine, the approval path and the loop's stop-on-failure rule
+are all unchanged.
+
+## Security, ledger and leakage verification
+
+From the fully green live scenario:
+
+- two distinct observation IDs;
+- exactly two non-screenshot `computer_service` ledger rows with `result='SUCCESS'`;
+- a durable pending approval per side-effecting action, and that approval
+  **rejected** when presented from `other-workspace`;
+- two distinct redacted screenshots that differ byte-wise;
+- the post-step-1 state present only in the later trusted layout;
+- neither outbound body containing `SYNTHETIC-LIVE`, `DOCTYPE`, `<body` or
+  `action_ledger`.
+
+The API key was never printed, logged, committed or included in test output. The
+live diagnostic records provider, HTTP status, finish reason, token count, action
+type and the parser's verdict on the output _shape_ — never response or page
+text.
+
+## Two harness faults fixed in this commit
+
+Both were in the test, not the pipeline, and both masked real results:
+
+- the layout assertion re-queried `computerRedactionLayout` after task teardown
+  and failed with `Invalid redaction session` even when all three scenarios had
+  completed successfully;
+- the drive loop claimed another job for a task that had already gone terminal,
+  reporting `Execution task interrupted` and burying the real cause. It now
+  checks state before claiming, and the diagnostic prints the task's `error`.
+
+## Verification
+
+Gateway: 500 files / 18,195 passed / 92 skipped, uncached. `tsc --noEmit` clean,
+Prettier clean, ESLint 0 errors and 0 warnings on both touched files. Commit
+hooks ran; `--no-verify` was not used. Repository tree clean at `f293baba`.
+
+Core, UI, CLI, Docker and PostgreSQL gates were green earlier in this sequence
+and were not re-run for this commit, which touches only two gateway test files.
+
+## Limitations
+
+**Free-tier schema compliance is stochastic.** Identical runs produce different
+outcomes. A paid provider key would most likely make these scenarios
+deterministic; that is a configuration decision, not a code change.
+
+**Scenarios (a) and (c) have not yet completed a full green live run.** Both
+reached `COMPLETED` under live inference before the two harness faults above
+were fixed, so their assertion sets have not run to completion against a real
+provider.
