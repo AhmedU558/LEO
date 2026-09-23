@@ -294,6 +294,31 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
       expect(ids.size).toBe(2);
     });
 
+    it('treats a proposed screenshot as a legal action rather than a loop failure', async () => {
+      // `screenshot` is one of the nine actions the closed proposal schema
+      // allows, so a model that proposes one has not misbehaved. Observed live:
+      // a real provider proposes it regularly, and the task must survive it.
+      fixture.model.mockReset();
+      fixture.model
+        .mockResolvedValueOnce({
+          type: 'screenshot',
+          params: {},
+          viewport: COMPUTER_VIEWPORT,
+        })
+        .mockResolvedValueOnce({
+          type: 'click',
+          params: { x: 20, y: 20 },
+          viewport: COMPUTER_VIEWPORT,
+        });
+
+      const task = await start(2);
+      await drive(task.id, async () => (await service().repo.get(task.id))?.state === 'COMPLETED');
+
+      expect((await service().repo.get(task.id))?.state).toBe('COMPLETED');
+      expect(fixture.model).toHaveBeenCalledTimes(2);
+      expect(clicked).toBe(true);
+    });
+
     it('stops at a mid-task model failure and keeps the completed step durable', async () => {
       fixture.model.mockReset();
       fixture.model

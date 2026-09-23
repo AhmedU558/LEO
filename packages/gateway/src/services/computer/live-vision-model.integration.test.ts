@@ -40,6 +40,7 @@ import { PostgresAdapter } from '../../db/adapters/postgres-adapter.js';
 import { initializeSchema } from '../../db/schema/index.js';
 import { EXECUTION_TASKS_SQL } from '../../db/schema/execution-tasks.js';
 import { ActionLedger, PolicyEngine } from '@ownpilot/core/security';
+import type { ComputerRedactionControl } from '@ownpilot/core/computer';
 import { ActionLedgerRepository } from '../../db/repositories/action-ledger.js';
 import { JobsRepository } from '../../db/repositories/jobs.js';
 import {
@@ -52,6 +53,7 @@ import { PuppeteerComputerUseProvider } from './computer-use-provider.js';
 import { getBrowserService } from '../browser-service.js';
 import { StructuralScreenshotRedactor } from './screenshot-redactor.js';
 import { setToolService, type IToolService } from '@ownpilot/core/services';
+import { EXECUTION_TASK_TERMINAL } from '@ownpilot/core/services';
 
 // ---------------------------------------------------------------------------
 // Live configuration — resolved at module scope so the gate can see the switch,
@@ -193,12 +195,29 @@ describe.skipIf(!LIVE)('LIVE external vision model through the Phase 6.6 pipelin
   const workspaceId = 'default';
   let admin: pg.Pool;
   let restoreFetch: () => void = () => {};
+  /**
+   * The page each task starts from. Phase 6.10 scenarios swap this before
+   * starting a task; the default carries the synthetic secrets the redaction
+   * assertions depend on.
+   */
+  const DEFAULT_PAGE =
+    '<body style="background:#00c3ff">' +
+    '<button style="position:absolute;left:40px;top:40px;width:220px;height:70px" ' +
+    `onclick="this.textContent='Clicked'">Continue</button>` +
+    '<input type="password" value="SYNTHETIC-LIVE-PASSWORD">' +
+    '<input name="api_token" value="SYNTHETIC-LIVE-TOKEN">' +
+    '<p>SYNTHETIC-LIVE-FREE-TEXT-SECRET</p>' +
+    '</body>';
+  let pageContent = DEFAULT_PAGE;
+
   const outbound: OutboundRequest[] = [];
   const tasks = new Set<string>();
   const service = () => new ExecutionTaskService(userId, workspaceId);
   /** Every action the real provider was asked to perform against Chrome. */
   const actuated: { method: string; args: unknown[] }[] = [];
   let redactedScreenshots: string[] = [];
+  /** The trusted layout that fed each redaction, in order. */
+  let redactedLayouts: ComputerRedactionControl[][] = [];
   let policySpy: ReturnType<typeof vi.spyOn>;
   const sessionIds = new Set<string>();
 
@@ -276,15 +295,7 @@ describe.skipIf(!LIVE)('LIVE external vision model through the Phase 6.6 pipelin
           binding.sessionId,
           binding.userId
         );
-        await page.setContent(
-          '<body style="background:#00c3ff">' +
-            '<button style="position:absolute;left:40px;top:40px;width:220px;height:70px" ' +
-            'onclick="this.textContent=\'Clicked\'">Continue</button>' +
-            '<input type="password" value="SYNTHETIC-LIVE-PASSWORD">' +
-            '<input name="api_token" value="SYNTHETIC-LIVE-TOKEN">' +
-            '<p>SYNTHETIC-LIVE-FREE-TEXT-SECRET</p>' +
-            '</body>'
-        );
+        await page.setContent(pageContent);
         seeded.add(this);
       }
     );
@@ -318,12 +329,14 @@ describe.skipIf(!LIVE)('LIVE external vision model through the Phase 6.6 pipelin
     // can be compared byte-for-byte against it.
     const redact = StructuralScreenshotRedactor.prototype.redact;
     redactedScreenshots = [];
+    redactedLayouts = [];
     vi.spyOn(StructuralScreenshotRedactor.prototype, 'redact').mockImplementation(async function (
       this: StructuralScreenshotRedactor,
       input
     ) {
       const result = await redact.call(this, input);
       redactedScreenshots.push(result.observation.screenshot);
+      redactedLayouts.push(input.image.layout.controls);
       return result;
     });
 
@@ -591,6 +604,181 @@ describe.skipIf(!LIVE)('LIVE external vision model through the Phase 6.6 pipelin
     expect(new Set(acted.map((r) => JSON.parse(r.resource).iteration)).size).toBe(2);
     expect(new Set(rows.map((r) => JSON.parse(r.resource).observationId)).size).toBe(2);
   }, 300_000);
+
+  // ---------------------------------------------------------------------------
+  // Phase 6.10: dependent multi-step tasks against a real model.
+  //
+  // The proposer's system prompt is fixed at "propose exactly one browser
+  // action" — there is NO task-instruction channel to the model, and adding one
+  // would change what reaches the provider. The model is therefore not
+  // goal-directed, and a scenario asserting that it clicked a particular button
+  // would be testing luck rather than the pipeline.
+  //
+  // Instead each page mutates on the FIRST interaction of any kind. Whichever
+  // allowed action the model picks, step 1 changes the page, so step 2's
+  // observation describes state that did not exist when step 1 was proposed.
+  // That dependency is what this phase validates.
+  // ---------------------------------------------------------------------------
+
+  const reveal = (mutation: string) =>
+    '<script>' +
+    "for (const type of ['mousemove','mousedown','mouseup','click','keydown','wheel']) {" +
+    '  document.addEventListener(type, function once() {' +
+    "    for (const t of ['mousemove','mousedown','mouseup','click','keydown','wheel'])" +
+    '      document.removeEventListener(t, once);' +
+    '    ' +
+    mutation +
+    '  });' +
+    '}' +
+    '</script>';
+
+  const SCENARIOS = [
+    {
+      name: 'a control that does not exist until after step 1',
+      page:
+        '<body style="background:#00c3ff">' +
+        '<button style="position:absolute;left:40px;top:40px;width:220px;height:70px">Continue</button>' +
+        reveal(
+          "const b=document.createElement('button');b.textContent='Confirm';" +
+            "b.style.cssText='position:absolute;left:40px;top:300px;width:240px;height:80px';" +
+            'document.body.appendChild(b);'
+        ) +
+        '</body>',
+      /** True of the trusted layout only AFTER the first action. */
+      after: (c: ComputerRedactionControl) => c.text === 'Confirm',
+    },
+    {
+      name: 'a non-control text change after step 1',
+      page:
+        '<body style="background:#00c3ff">' +
+        '<h1 style="position:absolute;left:40px;top:40px">Step one</h1>' +
+        '<button style="position:absolute;left:40px;top:140px;width:220px;height:70px">Continue</button>' +
+        reveal("document.querySelector('h1').textContent='Step two';") +
+        '</body>',
+      after: (c: ComputerRedactionControl) => c.text === 'Step two',
+    },
+    {
+      name: 'a control whose state changes after step 1',
+      page:
+        '<body style="background:#00c3ff">' +
+        '<button disabled style="position:absolute;left:40px;top:40px;width:220px;height:70px">Submit</button>' +
+        '<button style="position:absolute;left:40px;top:160px;width:220px;height:70px">Continue</button>' +
+        reveal("document.querySelector('button').removeAttribute('disabled');") +
+        '</body>',
+      after: (c: ComputerRedactionControl) => c.text === 'Submit' && !c.state,
+    },
+  ] as const;
+
+  it.each(SCENARIOS.map((scenario) => [scenario.name, scenario] as const))(
+    'completes a dependent two-step task through %s',
+    async (_name, scenario) => {
+      const requestsBefore = outbound.length;
+      const shotsBefore = redactedScreenshots.length;
+      pageContent = scenario.page;
+      let task: Awaited<ReturnType<typeof start>> | undefined;
+      try {
+        // Budget above the two required actions: `screenshot` is a legal
+        // proposal, and a model that spends a turn on one has not failed. The
+        // assertions below still require two real, authorized actions.
+        task = await start(4);
+        for (let i = 0; i < 10; i++) {
+          await next();
+          const detail = await service().repo.detail(task.id);
+          if (EXECUTION_TASK_TERMINAL.includes(detail.task.state)) break;
+          if (detail.task.state !== 'WAITING_APPROVAL') break;
+          const approval = detail.approvals.find((a) => a.status === 'pending');
+          expect(approval).toBeDefined();
+          // Every side-effecting action takes a durable approval, and that
+          // approval is not forgeable from another workspace.
+          await expect(
+            new ExecutionTaskService(userId, 'other-workspace').approve(
+              task.id,
+              String(approval!.id)
+            )
+          ).rejects.toThrow();
+          await service().approve(task.id, String(approval!.id));
+        }
+      } finally {
+        // Metadata only: provider, status, finish reason, token count, the
+        // action type chosen and the final state. No page content is recorded.
+        const calls = outbound.slice(requestsBefore);
+        // The parser's own verdict on the model's output shape. This is what
+        // distinguishes model non-compliance from a pipeline defect, and it
+        // reports the rejected SHAPE, never the page or the response text.
+        const { parseComputerProposal } = await import('@ownpilot/core/computer');
+        const verdict = (content: string) => {
+          try {
+            parseComputerProposal(content);
+            return 'PARSE_OK';
+          } catch (e) {
+            return `PARSE_FAIL(${e instanceof Error ? e.message : 'unknown'})`;
+          }
+        };
+        const meta = calls.map((call) => {
+          try {
+            const parsed = JSON.parse(call.responseText) as {
+              provider?: string;
+              usage?: { total_tokens?: number };
+              choices?: { finish_reason?: string; message?: { content?: string } }[];
+            };
+            const content = parsed.choices?.[0]?.message?.content ?? '';
+            let action = 'unparseable';
+            try {
+              action = (JSON.parse(content) as { type?: string }).type ?? 'unknown';
+            } catch {
+              /* left as unparseable */
+            }
+            return (
+              `${call.status}/${parsed.provider ?? '?'}/${parsed.choices?.[0]?.finish_reason ?? '?'}` +
+              `/${parsed.usage?.total_tokens ?? '?'}tok/${action}/${verdict(content)}`
+            );
+          } catch {
+            return `${call.status}/<no body>`;
+          }
+        });
+        const record = task ? await service().repo.get(task.id) : undefined;
+        console.log(
+          `[live-6.10] ${scenario.name} | model=${liveConfig.model} | requests=${calls.length} | ` +
+            `${meta.join(' ')} | finalState=${record?.state ?? 'not started'}` +
+            `${record?.error ? ` | error=${record.error}` : ''}`
+        );
+        pageContent = DEFAULT_PAGE;
+      }
+
+      expect((await service().repo.get(task!.id))?.state).toBe('COMPLETED');
+
+      // Two real inferences, each against its own freshly redacted observation.
+      const calls = outbound.slice(requestsBefore);
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      for (const call of calls) expect(call.status).toBe(200);
+      const shots = redactedScreenshots.slice(shotsBefore);
+      expect(shots.length).toBeGreaterThanOrEqual(2);
+      expect(shots[1]).not.toEqual(shots[0]);
+
+      // Step 2 was proposed against state that did not exist at step 1. These
+      // are the layouts the redactor actually fed the model, not a re-query:
+      // the dependency holds only if the state is absent from the first and
+      // present in the last.
+      const layouts = redactedLayouts.slice(shotsBefore);
+      expect(layouts.length).toBeGreaterThanOrEqual(2);
+      expect(layouts[0]!.some(scenario.after)).toBe(false);
+      expect(layouts[layouts.length - 1]!.some(scenario.after)).toBe(true);
+
+      // Two distinct observations and two real actions in the ledger.
+      const rows = await fixture.adapter.query<{ resource: string; action: string }>(
+        "SELECT resource,action FROM action_ledger WHERE execution_task_id=$1 AND tool=$2 AND result='SUCCESS'",
+        [task!.id, 'computer_service']
+      );
+      expect(new Set(rows.map((r) => JSON.parse(r.resource).observationId)).size).toBe(2);
+      expect(rows.filter((r) => r.action !== 'computer.screenshot')).toHaveLength(2);
+
+      // No page data rode out with either request.
+      for (const call of calls)
+        for (const forbidden of ['SYNTHETIC-LIVE', 'DOCTYPE', '<body', 'action_ledger'])
+          expect(call.body).not.toContain(forbidden);
+    },
+    300_000
+  );
 
   it('cancels a live task without leaving the external request unbounded', async () => {
     const before = outbound.length;
