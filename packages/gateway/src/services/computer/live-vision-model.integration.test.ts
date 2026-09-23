@@ -35,6 +35,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { AGGREGATOR_PROVIDERS } from '@ownpilot/core';
 import { PostgresAdapter } from '../../db/adapters/postgres-adapter.js';
 import { initializeSchema } from '../../db/schema/index.js';
 import { EXECUTION_TASKS_SQL } from '../../db/schema/execution-tasks.js';
@@ -92,10 +93,19 @@ function assertLiveConfig(): void {
 // keeps the real production code path intact — the test database has no
 // settings row, and seeding a real API key into a database is worse than
 // handing it to the same accessor production uses.
+// The provider id is derived from the configured base URL rather than set
+// independently, so LEO_QA_LIVE_MODEL_BASE_URL stays the single knob and the
+// executor resolves the same apiBase production would for that provider.
+const liveProviderId =
+  Object.values(AGGREGATOR_PROVIDERS).find((p) => p.apiBase === liveConfig.baseUrl)?.id ?? 'openai';
+
 vi.mock('../app-settings.js', async (original) => ({
   ...(await original<typeof import('../app-settings.js')>()),
   getApiKey: async () => liveConfig.apiKey,
-  resolveDefaultProviderAndModel: async () => ({ provider: 'openai', model: liveConfig.model }),
+  resolveDefaultProviderAndModel: async () => ({
+    provider: liveProviderId,
+    model: liveConfig.model,
+  }),
 }));
 
 const fixture = vi.hoisted(() => ({ adapter: null as unknown as PostgresAdapter }));

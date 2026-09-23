@@ -118,6 +118,25 @@ No control was weakened. Verified against source during this phase:
 - UNKNOWN outcomes finish the durable operation as `unknown` and cancel the task;
   they are never automatically replayed.
 
+## Pointing the same transport at another OpenAI-compatible endpoint
+
+`OpenAIComputerActionProposer` constructed `OpenAIProvider` without a
+`baseUrl`, so it always resolved to `https://api.openai.com/v1`. Running the
+live test against OpenRouter needed the smallest possible configuration change,
+not a second execution path:
+
+- The proposer now accepts an optional `baseUrl` (and `provider` label) and
+  forwards it to the same `OpenAIProvider`. The URL must be `https`. It is
+  server-side configuration; the model never sees it and cannot influence it.
+- `workflow/executors/browser.ts` now uses the provider that
+  `resolveDefaultProviderAndModel` returns, reads that provider's key, and takes
+  its `apiBase` from the existing `AGGREGATOR_PROVIDERS` registry, where
+  OpenRouter is already declared as `openai_compatible` with
+  `https://openrouter.ai/api/v1`.
+
+No transport, prompt, parser, redactor, capability mapping, policy, risk,
+approval or ledger behaviour changed. There is no OpenRouter-specific code path.
+
 ## Pre-existing breakage repaired alongside this phase
 
 The Phase 6.7 report flagged three failures that predate this phase and were not

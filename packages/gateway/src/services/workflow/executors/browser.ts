@@ -2,6 +2,7 @@ import type { WorkflowNode, NodeResult } from '../../../db/repositories/workflow
 import { ComputerService } from '../../computer/service.js';
 import type { ComputerAction } from '@ownpilot/core/computer';
 import { OpenAIComputerActionProposer } from '@ownpilot/core/computer';
+import { getAggregatorProvider } from '@ownpilot/core';
 import { runComputerVisionLoop } from '../../computer/vision-loop.js';
 import { StructuralScreenshotRedactor } from '../../computer/screenshot-redactor.js';
 import { getApiKey, resolveDefaultProviderAndModel } from '../../app-settings.js';
@@ -31,15 +32,18 @@ export async function executeBrowserNode(
   const aliases: Record<string, string> = { back: 'navigate_back', forward: 'navigate_forward' };
   const type = aliases[String(action)] ?? String(action);
   if (type === 'vision_loop') {
-    const apiKey = await getApiKey('openai');
-    const { model } = await resolveDefaultProviderAndModel(
-      'openai',
+    const { provider, model } = await resolveDefaultProviderAndModel(
+      typeof params.provider === 'string' ? params.provider : 'openai',
       typeof params.model === 'string' ? params.model : 'default'
     );
-    if (!apiKey || !model) throw new Error('Computer vision model is not configured');
+    const apiKey = provider ? await getApiKey(provider) : undefined;
+    if (!apiKey || !model || !provider) throw new Error('Computer vision model is not configured');
+    // Any OpenAI-compatible endpoint may serve the vision model; the transport
+    // is unchanged. `apiBase` is server-side configuration only.
+    const baseUrl = getAggregatorProvider(provider)?.apiBase;
     const result = await runComputerVisionLoop({
       iterations: typeof params.iterations === 'number' ? params.iterations : 1,
-      proposer: new OpenAIComputerActionProposer({ apiKey, model }),
+      proposer: new OpenAIComputerActionProposer({ apiKey, model, baseUrl, provider }),
       redactor: new StructuralScreenshotRedactor(),
     });
     if (result.outcome === 'WAITING_APPROVAL' && result.approvalId) {

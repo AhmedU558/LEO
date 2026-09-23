@@ -127,14 +127,20 @@ export function parseComputerProposal(raw: string): ComputerActionProposal {
 export class OpenAIComputerActionProposer implements ComputerActionProposer {
   readonly metadata;
   private readonly provider: OpenAIProvider;
-  constructor(config: { apiKey: string; model: string }) {
+  constructor(config: { apiKey: string; model: string; baseUrl?: string; provider?: string }) {
     if (!config.model || config.model.length > 128)
       throw new Error('Computer model is not configured');
-    this.metadata = Object.freeze({ provider: 'openai', model: config.model });
+    // `baseUrl` selects which OpenAI-compatible endpoint the SAME transport
+    // talks to (OpenAI, OpenRouter, or a local gateway). It is server-side
+    // configuration: the model never sees it and cannot influence it.
+    if (config.baseUrl && !/^https:\/\/[^\s]+$/.test(config.baseUrl))
+      throw new Error('Computer model base URL must be https');
+    this.metadata = Object.freeze({ provider: config.provider ?? 'openai', model: config.model });
     this.provider = new OpenAIProvider({
       provider: 'openai',
       apiKey: config.apiKey,
       timeout: COMPUTER_MODEL_LIMITS.timeoutMs,
+      ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
     });
   }
   async propose(request: ComputerModelRequest): Promise<ComputerActionProposal> {
