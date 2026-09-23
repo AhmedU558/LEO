@@ -462,6 +462,8 @@ export interface ProviderConfig {
  * Completion request
  */
 export interface CompletionRequest {
+  /** Sensitive, single-attempt OpenAI requests: no payload logging, bounded body and cancellation. */
+  readonly transient?: { readonly signal: AbortSignal; readonly maxResponseBytes: number };
   /** Messages to send */
   readonly messages: readonly Message[];
   /** Model configuration */

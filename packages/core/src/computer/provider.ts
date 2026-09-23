@@ -48,12 +48,49 @@ export interface ComputerSessionBinding {
 
 /** Model output is a proposal, never an authorization or an actuator handle. */
 export interface ComputerActionProposer {
-  propose(observation: {
-    screenshot: string;
-    viewport: { width: number; height: number };
-    untrusted: true;
-  }): Promise<ComputerAction>;
+  readonly metadata: { readonly provider: string; readonly model: string };
+  propose(request: ComputerModelRequest): Promise<ComputerActionProposal>;
 }
+
+export interface ComputerModelObservation {
+  readonly screenshot: string;
+  readonly viewport: { readonly width: number; readonly height: number };
+  readonly untrusted: true;
+  /** Attestation by the trusted observation redactor, never by the model. */
+  readonly disclosure: 'redacted';
+}
+
+export interface ComputerModelRequest {
+  readonly observation: ComputerModelObservation;
+  readonly signal: AbortSignal;
+}
+
+export type ComputerModelFailure =
+  'CANCELLED' | 'TIMEOUT' | 'UNAVAILABLE' | 'INVALID_OBSERVATION' | 'INVALID_RESPONSE';
+
+export class ComputerModelError extends Error {
+  constructor(readonly code: ComputerModelFailure) {
+    super(`Computer model unavailable or invalid response (${code})`);
+    this.name = 'ComputerModelError';
+  }
+}
+
+export interface ComputerActionProposal extends ComputerAction {
+  readonly type: ComputerModelActionType;
+  readonly viewport: { readonly width: number; readonly height: number };
+}
+
+export type ComputerModelActionType =
+  | 'screenshot'
+  | 'mouseMove'
+  | 'click'
+  | 'doubleClick'
+  | 'mouseDown'
+  | 'mouseUp'
+  | 'scroll'
+  | 'keyPress'
+  | 'typeText'
+  | 'hotkey';
 
 export const COMPUTER_VIEWPORT = { width: 1280, height: 800 } as const;
 export const COMPUTER_MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024;

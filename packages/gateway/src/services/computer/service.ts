@@ -5,6 +5,9 @@ import type {
   ComputerSessionBinding,
   ComputerUseProvider,
   BrowserProvider,
+  ComputerActionProposer,
+  ComputerActionProposal,
+  ComputerModelObservation,
 } from '@ownpilot/core/computer';
 import {
   COMPUTER_VIEWPORT,
@@ -12,6 +15,9 @@ import {
   COMPUTER_KEYS,
   COMPUTER_HOTKEYS,
   validateComputerPoint,
+  parseComputerProposal,
+  validateComputerObservation,
+  COMPUTER_MODEL_LIMITS,
 } from '@ownpilot/core/computer';
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
 import type { Capability } from '@ownpilot/core/security';
@@ -52,6 +58,12 @@ interface Session {
   busy: boolean;
   buttonDown: boolean;
   timer: ReturnType<typeof setTimeout>;
+}
+
+export interface BoundComputerProposal {
+  readonly binding: Readonly<ComputerSessionBinding>;
+  readonly action: ComputerActionProposal;
+  readonly observationActionId: string;
 }
 
 function hash(value: unknown): string {
@@ -142,12 +154,175 @@ function validate(action: ComputerAction) {
 
 export class ComputerService {
   private static sessions = new Map<string, Session>();
+  private static observations = new WeakMap<
+    ComputerActionResult,
+    {
+      binding: ComputerSessionBinding;
+      screenshot: string;
+      actionId: string;
+      version: number;
+    }
+  >();
+  private static proposals = new WeakMap<
+    BoundComputerProposal,
+    {
+      runId: string;
+      nodeId: string;
+      effectIndex: number;
+      state: 'pending' | 'running' | 'waiting' | 'done';
+      approvalId?: string;
+    }
+  >();
   constructor(
     private factory: (ctx: ExecutionTaskContext, binding: ComputerSessionBinding) => Provider = (
       ctx,
       binding
     ) => new PuppeteerComputerUseProvider(ctx, binding)
   ) {}
+
+  private async assertModelScope(binding: ComputerSessionBinding): Promise<Session> {
+    const ctx = executionTaskContext.getStore();
+    const step = computerStepContext.getStore();
+    if (
+      !ctx ||
+      !step ||
+      !ctx.jobId ||
+      !ctx.leaseToken ||
+      ctx.userId !== binding.userId ||
+      ctx.workspaceId !== binding.workspaceId ||
+      ctx.taskId !== binding.executionTaskId
+    )
+      throw new Error('Invalid model execution scope');
+    await assertExecutionTaskActive();
+    await new ExecutionTasksRepository(ctx.userId, ctx.workspaceId).assertComputerWorker(
+      ctx.taskId,
+      ctx.jobId,
+      ctx.leaseToken,
+      step.runId
+    );
+    const session = ComputerService.sessions.get(
+      JSON.stringify([ctx.userId, ctx.workspaceId, ctx.taskId])
+    );
+    if (
+      !session ||
+      session.closed ||
+      session.busy ||
+      session.binding.sessionId !== binding.sessionId
+    )
+      throw new Error('Stale model session');
+    return session;
+  }
+
+  /** One proposal only. A trusted redactor must explicitly approve the transient screenshot disclosure. */
+  async proposeAction(
+    observation: ComputerActionResult,
+    proposer: ComputerActionProposer,
+    redact: (
+      image: { screenshot: string; viewport: typeof COMPUTER_VIEWPORT },
+      signal: AbortSignal
+    ) => Promise<ComputerModelObservation>
+  ): Promise<
+    { outcome: 'PROPOSED'; proposal: BoundComputerProposal } | { outcome: 'DENIED'; error: string }
+  > {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    let signal: AbortSignal | undefined;
+    try {
+      const captured = ComputerService.observations.get(observation);
+      if (!captured) throw new Error('Unverified model observation');
+      ComputerService.observations.delete(observation);
+      if ((await this.assertModelScope(captured.binding)).count !== captured.version)
+        throw new Error('Stale model observation');
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), COMPUTER_MODEL_LIMITS.timeoutMs);
+      signal = AbortSignal.any([executionTaskContext.getStore()!.signal, controller.signal]);
+      const stopped = new Promise<never>((_, reject) => {
+        onAbort = () => reject(new Error('Model request stopped'));
+        signal!.addEventListener('abort', onAbort, { once: true });
+      });
+      signal.throwIfAborted();
+      const proposal = await Promise.race([
+        (async () => {
+          const prepared = await redact(
+            { screenshot: captured.screenshot, viewport: { ...COMPUTER_VIEWPORT } },
+            signal!
+          );
+          signal!.throwIfAborted();
+          validateComputerObservation(prepared);
+          if ((await this.assertModelScope(captured.binding)).count !== captured.version)
+            throw new Error('Stale model observation');
+          // Construct a fresh allowlisted request: never forward the caller's context or extra fields.
+          const response = await proposer.propose({
+            observation: {
+              screenshot: prepared.screenshot,
+              viewport: { ...COMPUTER_VIEWPORT },
+              untrusted: true,
+              disclosure: 'redacted',
+            },
+            signal: signal!,
+          });
+          signal!.throwIfAborted();
+          return parseComputerProposal(JSON.stringify(response));
+        })(),
+        stopped,
+      ]);
+      if ((await this.assertModelScope(captured.binding)).count !== captured.version)
+        throw new Error('Stale model observation');
+      const bound = Object.freeze({
+        binding: Object.freeze({ ...captured.binding }),
+        action: proposal,
+        observationActionId: captured.actionId,
+      });
+      const step = computerStepContext.getStore()!;
+      ComputerService.proposals.set(bound, {
+        runId: step.runId,
+        nodeId: step.nodeId,
+        effectIndex: step.effectIndex++,
+        state: 'pending',
+      });
+      return { outcome: 'PROPOSED', proposal: bound };
+    } catch {
+      return { outcome: 'DENIED', error: 'Computer model proposal denied or unavailable' };
+    } finally {
+      clearTimeout(timer);
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  async executeProposal(proposal: BoundComputerProposal): Promise<ComputerActionResult> {
+    try {
+      const record = ComputerService.proposals.get(proposal);
+      if (!record) throw new Error('Unverified proposal');
+      await this.assertModelScope(proposal.binding);
+      const step = computerStepContext.getStore()!;
+      if (
+        record.runId !== step.runId ||
+        record.nodeId !== step.nodeId ||
+        (record.state !== 'pending' && record.state !== 'waiting')
+      )
+        throw new Error('Proposal already dispatched');
+      if (
+        record.state === 'waiting' &&
+        executionTaskContext.getStore()!.approvalId !== record.approvalId
+      )
+        throw new Error('Proposal requires its original approval');
+      const action = parseComputerProposal(JSON.stringify(proposal.action));
+      record.state = 'running';
+      try {
+        const result = await computerStepContext.run(
+          { ...step, effectIndex: record.effectIndex },
+          () => this.executeAction({ type: action.type, params: action.params })
+        );
+        record.state = result.outcome === 'WAITING_APPROVAL' ? 'waiting' : 'done';
+        record.approvalId = result.approvalId;
+        return result;
+      } finally {
+        if (record.state === 'running') record.state = 'done';
+      }
+    } catch {
+      return { success: false, outcome: 'DENIED', error: 'Invalid computer proposal context' };
+    }
+  }
 
   static async closeTask(userId: string, workspaceId: string, taskId: string) {
     const key = JSON.stringify([userId, workspaceId, taskId]);
@@ -404,13 +579,21 @@ export class ComputerService {
           });
           await ActionLedger.updateResult(ledgerId!, { result: 'SUCCESS' }, Date.now() - started);
         });
-        return {
+        const result: ComputerActionResult = {
           success: true,
           outcome: 'SUCCESS',
           data,
           actionId: ledgerId,
           sessionId: current.binding.sessionId,
         };
+        if (action.type === 'screenshot')
+          ComputerService.observations.set(result, {
+            binding: { ...current.binding },
+            screenshot: (data as { screenshot: string }).screenshot,
+            actionId: ledgerId!,
+            version: current.count,
+          });
+        return result;
       } finally {
         clearTimeout(timeout);
         ctx.signal.removeEventListener('abort', rejectAbort);

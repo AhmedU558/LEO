@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComputerService, COMPUTER_LIMITS } from './service.js';
 import type { ComputerAction, ComputerUseProvider, BrowserProvider } from '@ownpilot/core/computer';
 import { COMPUTER_VIEWPORT, COMPUTER_MAX_SCREENSHOT_BYTES } from '@ownpilot/core/computer';
+import {
+  parseComputerProposal,
+  type ComputerActionProposer,
+  type ComputerModelObservation,
+  type ComputerActionProposal,
+} from '@ownpilot/core/computer';
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
 import { executionTaskContext, computerStepContext } from '../execution-task-context.js';
 
@@ -49,8 +55,11 @@ describe('durable ComputerService security boundary', () => {
     type: ComputerAction['type'],
     params: Record<string, unknown> = {}
   ): ComputerAction => ({ type, params });
-  function run(
-    input: ComputerAction,
+  function run(input: ComputerAction, options: Parameters<typeof within>[1] = {}) {
+    return within(() => service.executeAction(input), options);
+  }
+  function within<T>(
+    operation: () => Promise<T>,
     options: {
       userId?: string;
       workspaceId?: string;
@@ -82,7 +91,7 @@ describe('durable ComputerService security boundary', () => {
       },
       () =>
         computerStepContext.run({ nodeId, runId: 'run', effectIndex: 0, capabilities }, () =>
-          service.executeAction(input)
+          operation()
         )
     );
   }
@@ -389,6 +398,232 @@ describe('durable ComputerService security boundary', () => {
     vi.mocked(ActionLedger.record).mockRejectedValue(new Error('database unavailable'));
     expect((await run(action('click', { x: 1, y: 2 }))).success).toBe(false);
     expect(provider.initialize).not.toHaveBeenCalled();
+  });
+
+  describe('model proposals through the existing authority', () => {
+    const model = (
+      type = 'click',
+      params: Record<string, unknown> = { x: 10, y: 20 }
+    ): ComputerActionProposer => ({
+      metadata: { provider: 'deterministic-test', model: 'fixture' },
+      propose: vi
+        .fn()
+        .mockResolvedValue(
+          parseComputerProposal(JSON.stringify({ type, params, viewport: COMPUTER_VIEWPORT }))
+        ),
+    });
+    const redact = async (image: {
+      screenshot: string;
+      viewport: typeof COMPUTER_VIEWPORT;
+    }): Promise<ComputerModelObservation> => ({
+      ...image,
+      untrusted: true,
+      disclosure: 'redacted',
+    });
+    async function propose(proposer = model()) {
+      const shot = await service.executeAction(action('screenshot'));
+      return service.proposeAction(shot, proposer, redact);
+    }
+    it('consumes an authorized observation once even for concurrent model requests', async () => {
+      await within(async () => {
+        const shot = await service.executeAction(action('screenshot'));
+        const proposer = model();
+        const results = await Promise.all([
+          service.proposeAction(shot, proposer, redact),
+          service.proposeAction(shot, proposer, redact),
+        ]);
+        expect(results.map((r) => r.outcome).sort()).toEqual(['DENIED', 'PROPOSED']);
+        expect(proposer.propose).toHaveBeenCalledTimes(1);
+      });
+    });
+    it('rejects a screenshot after another action changes the session', async () => {
+      await within(async () => {
+        const shot = await service.executeAction(action('screenshot'));
+        await service.executeAction(action('mouseMove', { x: 1, y: 1 }));
+        const proposer = model();
+        expect((await service.proposeAction(shot, proposer, redact)).outcome).toBe('DENIED');
+        expect(proposer.propose).not.toHaveBeenCalled();
+      });
+    });
+    it('fails closed when the trusted redactor refuses disclosure', async () => {
+      await within(async () => {
+        const shot = await service.executeAction(action('screenshot'));
+        const proposer = model();
+        expect(
+          (
+            await service.proposeAction(shot, proposer, async () => {
+              throw new Error('Sensitive pixels');
+            })
+          ).outcome
+        ).toBe('DENIED');
+        expect(proposer.propose).not.toHaveBeenCalled();
+      });
+    });
+    it('keeps scope and audit references outside the model and maps capability in ComputerService', async () => {
+      await within(async () => {
+        const proposer = model();
+        const result = await propose(proposer);
+        expect(result.outcome).toBe('PROPOSED');
+        if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+        const request = vi.mocked(proposer.propose).mock.calls[0]![0];
+        expect(Object.keys(request).sort()).toEqual(['observation', 'signal']);
+        expect(JSON.stringify(request)).not.toContain('lease');
+        expect(result.proposal.observationActionId).toBe('audit');
+        expect(result.proposal.binding).toMatchObject({
+          userId: 'u',
+          workspaceId: 'w',
+          executionTaskId: 't',
+        });
+        expect((await service.executeProposal(result.proposal)).success).toBe(true);
+        expect(provider.click).toHaveBeenCalledWith(10, 20);
+        expect(ActionLedger.record).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            capability: 'computer.mouse',
+            riskLevel: 'HIGH',
+            sessionId: result.proposal.binding.sessionId,
+          })
+        );
+      });
+    });
+    it.each(['click', 'typeText', 'screenshot', 'scroll'] as const)(
+      'maps %s without accepting a model-supplied capability',
+      async (type) => {
+        await within(async () => {
+          const params =
+            type === 'click'
+              ? { x: 1, y: 2 }
+              : type === 'typeText'
+                ? { text: 'hello' }
+                : type === 'scroll'
+                  ? { deltaX: 0, deltaY: 2 }
+                  : {};
+          const result = await propose(model(type, params));
+          if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+          await service.executeProposal(result.proposal);
+          expect(ActionLedger.record).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+              capability:
+                type === 'screenshot'
+                  ? 'computer.read'
+                  : type === 'typeText'
+                    ? 'computer.keyboard'
+                    : 'computer.mouse',
+            })
+          );
+        });
+      }
+    );
+    it('honors policy denial after a valid model response', async () => {
+      await within(async () => {
+        const result = await propose();
+        if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+        vi.mocked(PolicyEngine.prototype.evaluate).mockReturnValue({ decision: 'DENY' });
+        expect((await service.executeProposal(result.proposal)).outcome).toBe('DENIED');
+        expect(provider.click).not.toHaveBeenCalled();
+      });
+    });
+    it('requires an exact-action approval and never queries the model to resume', async () => {
+      await within(async () => {
+        const proposer = model();
+        const result = await propose(proposer);
+        if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+        vi.mocked(PolicyEngine.prototype.evaluate).mockReturnValue({
+          decision: 'REQUIRE_APPROVAL',
+        });
+        expect((await service.executeProposal(result.proposal)).outcome).toBe('WAITING_APPROVAL');
+        expect(provider.click).not.toHaveBeenCalled();
+        const requestHash = mocks.create.mock.calls.at(-1)![0].context.requestHash;
+        expect((await service.executeProposal(result.proposal)).outcome).toBe('DENIED');
+        expect(mocks.create).toHaveBeenCalledTimes(1);
+        executionTaskContext.getStore()!.approvalId = 'approval';
+        computerStepContext.getStore()!.effectIndex = 1;
+        expect((await service.executeProposal(result.proposal)).outcome).toBe('SUCCESS');
+        expect(mocks.consume).toHaveBeenCalledWith(
+          'approval',
+          'w',
+          'run',
+          'n',
+          't',
+          result.proposal.binding.sessionId,
+          requestHash,
+          'computer.mouse'
+        );
+        expect(proposer.propose).toHaveBeenCalledTimes(1);
+      });
+    });
+    it.each(['workspaceId', 'taskId', 'userId'])(
+      'rejects wrong %s before execution',
+      async (field) => {
+        await within(async () => {
+          const result = await propose();
+          if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+          await executionTaskContext.run(
+            { ...executionTaskContext.getStore()!, [field]: 'other' },
+            async () => {
+              expect((await service.executeProposal(result.proposal)).outcome).toBe('DENIED');
+            }
+          );
+          expect(provider.click).not.toHaveBeenCalled();
+        });
+      }
+    );
+    it('rejects fabricated observation and modified session/proposal envelopes', async () => {
+      await within(async () => {
+        expect(
+          (await service.proposeAction({ success: true, sessionId: 'fake' }, model(), redact))
+            .outcome
+        ).toBe('DENIED');
+        const result = await propose();
+        if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+        expect(
+          (
+            await service.executeProposal({
+              ...result.proposal,
+              binding: { ...result.proposal.binding, sessionId: 'other' },
+            })
+          ).outcome
+        ).toBe('DENIED');
+        await ComputerService.closeTask('u', 'w', 't');
+        expect((await service.executeProposal(result.proposal)).outcome).toBe('DENIED');
+      });
+    });
+    it.each(['error', 'malformed', 'cancel', 'timeout'])(
+      'denies %s without executing input',
+      async (mode) => {
+        await within(async () => {
+          const proposer = model();
+          if (mode === 'error') vi.mocked(proposer.propose).mockRejectedValue(new Error('secret'));
+          if (mode === 'malformed')
+            vi.mocked(proposer.propose).mockResolvedValue({
+              type: 'execute_shell',
+              params: {},
+              viewport: COMPUTER_VIEWPORT,
+            } as unknown as ComputerActionProposal);
+          if (mode === 'cancel' || mode === 'timeout') {
+            vi.useFakeTimers();
+            vi.mocked(proposer.propose).mockImplementation(async () => new Promise(() => {}));
+          }
+          const pending = propose(proposer);
+          if (mode === 'cancel' || mode === 'timeout') {
+            await vi.advanceTimersByTimeAsync(1);
+            if (mode === 'cancel') controller.abort();
+            else await vi.advanceTimersByTimeAsync(30000);
+          }
+          expect((await pending).outcome).toBe('DENIED');
+          expect(provider.click).not.toHaveBeenCalled();
+        });
+      }
+    );
+    it('preserves UNKNOWN and forbids replay after an uncertain side effect', async () => {
+      await within(async () => {
+        const result = await propose();
+        if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+        vi.mocked(provider.click).mockRejectedValue(new Error('uncertain'));
+        expect((await service.executeProposal(result.proposal)).outcome).toBe('UNKNOWN');
+        expect((await service.executeProposal(result.proposal)).outcome).toBe('DENIED');
+        expect(provider.click).toHaveBeenCalledTimes(1);
+      });
+    });
   });
   it.each(['execute_shell', 'read_file', 'write_file'] as const)(
     'rejects host operation %s',
