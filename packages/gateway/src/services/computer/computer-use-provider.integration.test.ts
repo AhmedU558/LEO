@@ -31,6 +31,7 @@ describe.skipIf(process.env.LEO_QA_BROWSER !== '1')('real isolated computer prov
     await provider.close();
     await browser.shutdown();
   });
+
   it('executes coordinate mouse and keyboard primitives inside the page', async () => {
     await provider.mouseMove(40, 40);
     await provider.click(40, 40);
@@ -144,6 +145,69 @@ describe.skipIf(process.env.LEO_QA_BROWSER !== '1')('real isolated computer prov
       );
     }
   });
+  // ---------------------------------------------------------------------------
+  // Phase 6.9: what a real page actually discloses.
+  // ---------------------------------------------------------------------------
+  it('discloses safe labels and headings from a real page but never sensitive values', async () => {
+    const page = await browser['getOrCreatePage'](binding.sessionId, binding.userId);
+    await page.setContent(
+      '<body>' +
+        '<h1>Order summary</h1>' +
+        '<p>Choose a delivery option</p>' +
+        '<button style="position:absolute;left:0;top:200px;width:120px;height:40px">Continue</button>' +
+        '<a href="#" style="position:absolute;left:0;top:260px">Back to cart</a>' +
+        '<input type="password" value="QA-REAL-PASSWORD" style="position:absolute;left:0;top:320px;width:200px;height:30px">' +
+        '<input name="api_token" value="QA-REAL-TOKEN" style="position:absolute;left:0;top:360px;width:200px;height:30px">' +
+        '<input autocomplete="one-time-code" value="998877" style="position:absolute;left:0;top:400px;width:200px;height:30px">' +
+        '<p>QA-REAL-FREE-TEXT-SECRET</p>' +
+        '<p>Reference 4815162342</p>' +
+        '</body>'
+    );
+    const layout = await browser.computerRedactionLayout(binding);
+    const serialized = JSON.stringify(layout);
+    const texts = layout.controls.flatMap((c) => (c.text ? [c.text] : []));
+
+    // Useful, non-sensitive semantics reach the model.
+    expect(texts).toContain('Continue');
+    expect(texts).toContain('Back to cart');
+    expect(texts).toContain('Order summary');
+    expect(texts).toContain('Choose a delivery option');
+    expect(layout.controls.some((c) => c.kind === 'Heading' && c.text === 'Order summary')).toBe(
+      true
+    );
+
+    // Sensitive values never appear, including as a control's own label. Input
+    // values live in attributes and are never read, and the free-text secret and
+    // the long digit run are withheld by the classifier.
+    expect(serialized).not.toContain('QA-REAL-PASSWORD');
+    expect(serialized).not.toContain('QA-REAL-TOKEN');
+    expect(serialized).not.toContain('998877');
+    expect(serialized).not.toContain('QA-REAL-FREE-TEXT-SECRET');
+    expect(serialized).not.toContain('4815162342');
+    for (const control of layout.controls)
+      if (['Password', 'Secret', 'Authentication'].includes(control.kind))
+        expect(control.text).toBeUndefined();
+
+    // No page source, DOM internals or session identity rides along.
+    expect(serialized).not.toContain('<body');
+    expect(serialized).not.toContain('api_token');
+    expect(serialized).not.toContain(binding.sessionId);
+  });
+
+  it('changes the layout revision when non-control content changes', async () => {
+    const page = await browser['getOrCreatePage'](binding.sessionId, binding.userId);
+    await page.setContent('<body><h1>Step one</h1></body>');
+    const before = await browser.computerRedactionLayout(binding);
+    await page.setContent('<body><h1>Step two</h1></body>');
+    const after = await browser.computerRedactionLayout(binding);
+
+    // A heading change is now both observable and freshness-relevant, which is
+    // what makes a dependent step able to notice it.
+    expect(before.revision).not.toEqual(after.revision);
+    expect(before.controls.some((c) => c.text === 'Step one')).toBe(true);
+    expect(after.controls.some((c) => c.text === 'Step two')).toBe(true);
+  });
+
   it('cancellation destroys the context and rejects stale reuse', async () => {
     const page = await browser['getOrCreatePage'](binding.sessionId, binding.userId);
     await page.close();

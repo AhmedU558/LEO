@@ -212,3 +212,98 @@ phase). Two sequential inferences inside one bounded task double the exposure to
 free-tier latency, and `COMPUTER_MODEL_LIMITS.timeoutMs` was **not** raised and
 the parser was **not** relaxed to make the test pass. A paid provider key would
 most likely close this; that is a configuration decision, not a code change.
+
+---
+
+# Phase 6.9: trusted rich visual observation and perception
+
+## The problem this solves
+
+Phase 6.8 established that the model could only perceive a previous action when
+it changed the layout of a native control. The redactor painted a white canvas
+and drew boxes for `Button`, `Link`, `Field`, `Password`, `Secret`,
+`Authentication` and `Select` and nothing else, so a heading change, a status
+message, or a relabelled fixed-size button was literally invisible. Dependent
+multi-step work was bounded by that.
+
+## Design: disclosure is drawn into the mask
+
+The disclosure is rendered **into the redacted image as pixels**. Nothing is
+added to the model request, the proposal schema or any JSON leaving the process.
+
+That choice carries the security properties for free:
+
+- the request shape is unchanged, so the parser, capability mapping, policy,
+  risk, approval and ledger paths are untouched;
+- no page-derived string is ever added to the outbound body, so the Phase 6.7
+  assertion that page strings never appear in the JSON remains true and unaltered;
+- there is no new channel to audit.
+
+## What is disclosed
+
+`disclosableText` in `packages/core/src/computer/provider.ts` is the single
+decision point, applied twice: once in the capture and again in the redactor,
+which re-derives the verdict rather than trusting its input. A string is
+disclosed only when **all** of the following hold:
+
+- at most 40 characters and at most 6 words — a label, not prose;
+- drawn from a restricted printable character set;
+- free of credential words (password, secret, token, api key, otp, auth,
+  session, mnemonic, pin, cvv, iban, ssn, ...);
+- free of secret-looking runs: 4+ digit sequences, 16+ character opaque tokens,
+  base64-ish blobs, email addresses, IP addresses.
+
+Everything else is masked and the region shows its role alone. Absence of a
+label is the fail-closed default, never an error.
+
+Two non-control roles were added, `Text` and `Heading`, so page content that
+touches no control is still observable. Controls may also carry a
+server-constant `state` (`disabled`, `checked`, `selected`); an unrecognized
+state is rejected outright.
+
+## What is still impossible
+
+- **Input values are never read.** The capture reads rendered text nodes only.
+  An `<input value="...">` has no text node, so a field's contents cannot become
+  a label by any path.
+- **Sensitive kinds never carry text**, whatever the capture supplies. The
+  redactor drops the label on `Password`, `Secret` and `Authentication` even if
+  a compromised or buggy capture attached one. This is tested directly.
+- **Page-derived text is XML-escaped** before entering the SVG mask, so a label
+  cannot build mask geometry.
+- No page source, attribute names, DOM internals, session identity or internal
+  ids appear in the layout. Asserted against a real page.
+- Shadow DOM, multi-document (iframe) and oversized snapshots still throw, and
+  no page script is evaluated — the capture remains fixed CDP
+  `DOMSnapshot.captureSnapshot`.
+- Text-region overflow past the 200-region cap is dropped, not raised: less
+  disclosure is always the safe outcome.
+
+## Tests
+
+| Requirement                           | Where                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------ |
+| safe visible text/labels exposed      | redactor unit + real Chrome capture                                      |
+| password/token/OTP content removed    | redactor unit (label forced onto a sensitive kind) + real Chrome capture |
+| non-control UI changes observable     | `Heading` region changes the rendered pixels; layout revision changes    |
+| ambiguous/unclassified content masked | OTP, token, credential word, prose and address cases                     |
+| stale observation rejection           | Phase 6.8 suite, still green                                             |
+| real Chrome observation behaviour     | `computer-use-provider.integration.test.ts`                              |
+
+The redactor metadata version moved to `opaque-structural-v2` and now reports
+`disclosedLabels` alongside `sensitiveControls`.
+
+## Limitations
+
+**A secret rendered as ordinary prose can still be disclosed if it looks like a
+label.** The classifier is shape- and keyword-based, not semantic. A short,
+word-shaped, innocuous-looking string containing confidential information —
+a person's name, an order total, a room number — will pass. This phase narrows
+disclosure to plausible UI labels; it does not and cannot decide what is
+confidential in a customer's application. Anything stronger needs either an
+explicit per-site policy or a trusted classifier, and neither is in scope here.
+
+**The classifier is deliberately over-eager to mask.** Legitimate labels
+containing digits ("Order 4815162342", "2 items") or longer than six words are
+withheld. A withheld label costs the model context; a disclosed credential costs
+the user their account.

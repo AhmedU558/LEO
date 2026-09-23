@@ -14,7 +14,13 @@ import { hasPII, detectPII } from '@ownpilot/core/privacy';
 import { getLog, getConfigCenter } from '@ownpilot/core/services';
 import { isBlockedUrl, isPrivateUrlAsync } from '../utils/ssrf.js';
 import { PolicyEngine } from '@ownpilot/core/security';
-import type { ComputerSessionBinding, ComputerRedactionLayout } from '@ownpilot/core/computer';
+import type {
+  ComputerSessionBinding,
+  ComputerRedactionLayout,
+  ComputerRedactionControl,
+  ComputerControlKind,
+} from '@ownpilot/core/computer';
+import { COMPUTER_SENSITIVE_KINDS, disclosableText } from '@ownpilot/core/computer';
 import {
   COMPUTER_VIEWPORT,
   COMPUTER_MAX_SCREENSHOT_BYTES,
@@ -716,37 +722,112 @@ export class BrowserService {
         (doc.nodes.shadowRootType?.index.length ?? 0) > 0
       )
         throw new Error('Unsupported redaction layout');
-      const controls: ComputerRedactionLayout['controls'][number][] = [];
+      const controls: ComputerRedactionControl[] = [];
       const strings = snapshot.strings;
-      for (let i = 0; i < doc.layout.nodeIndex.length; i++) {
-        const index = doc.layout.nodeIndex[i]!;
-        const tag = strings[names[index]!]!.toLowerCase();
-        if (!['input', 'textarea', 'select', 'button', 'a'].includes(tag)) continue;
+      const parents = doc.nodes.parentIndex ?? [];
+      const values = doc.nodes.nodeValue ?? [];
+      const tagOf = (index: number) => (strings[names[index]!] ?? '').toLowerCase();
+      const attributesOf = (index: number) =>
+        (doc.nodes.attributes?.[index] ?? []).map((n) => strings[n] ?? '').join(' ');
+      /** Server-side role assignment. Page strings are matched here, never emitted. */
+      const kindOf = (index: number): ComputerControlKind | undefined => {
+        const tag = tagOf(index);
+        if (!['input', 'textarea', 'select', 'button', 'a'].includes(tag)) return undefined;
+        const attributes = attributesOf(index);
+        if (/password/i.test(attributes)) return 'Password';
+        if (/secret|token|api[-_ ]?key|credential/i.test(attributes)) return 'Secret';
+        if (/auth|otp|one-time|username|email|login/i.test(attributes)) return 'Authentication';
+        if (tag === 'button') return 'Button';
+        if (tag === 'a') return 'Link';
+        if (tag === 'select') return 'Select';
+        return 'Field';
+      };
+      /**
+       * Nearest enclosing control. Depth-bounded so a malformed or cyclic parent
+       * chain cannot spin; returning undefined leaves the text unattached rather
+       * than guessing an owner.
+       */
+      const enclosing = (index: number) => {
+        let node = index;
+        for (let depth = 0; depth < 32; depth++) {
+          const parent = parents[node];
+          if (parent === undefined || parent < 0) return undefined;
+          const kind = kindOf(parent);
+          if (kind) return { index: parent, kind };
+          node = parent;
+        }
+        return undefined;
+      };
+      const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+      const headingAncestor = (index: number) => {
+        let node = index;
+        for (let depth = 0; depth < 8; depth++) {
+          const parent = parents[node];
+          if (parent === undefined || parent < 0) return false;
+          if (HEADINGS.includes(tagOf(parent))) return true;
+          node = parent;
+        }
+        return false;
+      };
+      const rect = (i: number) => {
         const bounds = doc.layout.bounds[i]!;
         const x = Math.max(0, bounds[0]! - (doc.scrollOffsetX ?? 0));
         const y = Math.max(0, bounds[1]! - (doc.scrollOffsetY ?? 0));
         const right = Math.min(1280, bounds[0]! - (doc.scrollOffsetX ?? 0) + bounds[2]!);
         const bottom = Math.min(800, bounds[1]! - (doc.scrollOffsetY ?? 0) + bounds[3]!);
-        if (right <= x || bottom <= y) continue;
-        const attributes = (doc.nodes.attributes?.[index] ?? [])
-          .map((n) => strings[n] ?? '')
-          .join(' ');
-        const kind = /password/i.test(attributes)
-          ? 'Password'
-          : /secret|token|api[-_ ]?key|credential/i.test(attributes)
-            ? 'Secret'
-            : /auth|otp|one-time|username|email|login/i.test(attributes)
-              ? 'Authentication'
-              : tag === 'button'
-                ? 'Button'
-                : tag === 'a'
-                  ? 'Link'
-                  : tag === 'select'
-                    ? 'Select'
-                    : 'Field';
-        controls.push({ x, y, width: right - x, height: bottom - y, kind });
+        if (right <= x || bottom <= y) return undefined;
+        return { x, y, width: right - x, height: bottom - y };
+      };
+
+      // Pass 1: controls, as before, plus a server-constant state word.
+      const byNode = new Map<number, ComputerRedactionControl>();
+      for (let i = 0; i < doc.layout.nodeIndex.length; i++) {
+        const index = doc.layout.nodeIndex[i]!;
+        const kind = kindOf(index);
+        if (!kind) continue;
+        const box = rect(i);
+        if (!box) continue;
+        const attributes = attributesOf(index);
+        const state = /(^|\s)disabled(\s|$)/i.test(attributes)
+          ? ('disabled' as const)
+          : /(^|\s)checked(\s|$)/i.test(attributes)
+            ? ('checked' as const)
+            : /(^|\s)selected(\s|$)/i.test(attributes)
+              ? ('selected' as const)
+              : undefined;
+        const control: ComputerRedactionControl = { ...box, kind, ...(state ? { state } : {}) };
+        controls.push(control);
+        byNode.set(index, control);
       }
       if (controls.length > 200) throw new Error('Redaction control limit');
+
+      // Pass 2: visible text. Only rendered text nodes are read, never an
+      // attribute, so an input's `value` can never become a label. Text inside a
+      // sensitive control is dropped outright; everything else must pass the
+      // shared disclosure classifier or it stays masked. Overflow past the cap is
+      // dropped rather than raised: less disclosure is always the safe outcome.
+      const regions: ComputerRedactionControl[] = [];
+      for (
+        let i = 0;
+        i < doc.layout.nodeIndex.length && controls.length + regions.length < 200;
+        i++
+      ) {
+        const index = doc.layout.nodeIndex[i]!;
+        if (tagOf(index) !== '#text') continue;
+        const owner = enclosing(index);
+        if (owner && COMPUTER_SENSITIVE_KINDS.includes(owner.kind)) continue;
+        const text = disclosableText(strings[values[index] ?? -1]);
+        if (!text) continue;
+        const existing = owner ? byNode.get(owner.index) : undefined;
+        if (existing) {
+          if (!existing.text) existing.text = text;
+          continue;
+        }
+        const box = rect(i);
+        if (!box) continue;
+        regions.push({ ...box, kind: headingAncestor(index) ? 'Heading' : 'Text', text });
+      }
+      controls.push(...regions);
       return {
         revision: createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'),
         controls,
