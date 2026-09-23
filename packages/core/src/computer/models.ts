@@ -1,4 +1,11 @@
 export type ComputerActionType =
+  | 'mouseMove'
+  | 'doubleClick'
+  | 'mouseDown'
+  | 'mouseUp'
+  | 'keyPress'
+  | 'typeText'
+  | 'hotkey'
   | 'navigate'
   | 'click'
   | 'type'
@@ -29,6 +36,9 @@ export interface ComputerAction {
 
 export interface ComputerActionResult {
   success: boolean;
+  outcome?: 'SUCCESS' | 'DENIED' | 'WAITING_APPROVAL' | 'UNKNOWN';
+  approvalId?: string;
+  sessionId?: string;
   actionId?: string;
   data?: unknown;
   screenshotBase64?: string;

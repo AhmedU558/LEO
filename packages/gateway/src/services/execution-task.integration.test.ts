@@ -23,6 +23,16 @@ import {
 import { executionTaskContext } from './execution-task-context.js';
 import { executionTaskRoutes } from '../routes/execution-tasks.js';
 import { JobQueueService } from './job-queue-service.js';
+import { ComputerService } from './computer/service.js';
+
+const computer = vi.hoisted(() => ({ click: vi.fn(), initialize: vi.fn(), cancel: vi.fn() }));
+vi.mock('./computer/computer-use-provider.js', () => ({
+  PuppeteerComputerUseProvider: class {
+    initialize = computer.initialize;
+    click = computer.click;
+    cancel = computer.cancel;
+  },
+}));
 
 const db = vi.hoisted(() => ({ adapter: null as unknown as PostgresAdapter }));
 vi.mock('../db/adapters/index.js', () => ({ getAdapter: async () => db.adapter }));
@@ -75,6 +85,9 @@ describe.skipIf(!url)('durable execution tasks with PostgreSQL and real workflow
     ActionLedger.setProvider(new ActionLedgerRepository());
   });
   beforeEach(async () => {
+    computer.click.mockReset().mockResolvedValue(undefined);
+    computer.initialize.mockReset().mockResolvedValue(undefined);
+    computer.cancel.mockReset().mockResolvedValue(undefined);
     await db.adapter.exec(
       'TRUNCATE execution_tasks,workflow_approvals,workflow_logs,workflow_versions,workflows,jobs,job_history,idempotency_keys,action_ledger,tasks CASCADE'
     );
@@ -301,5 +314,108 @@ describe.skipIf(!url)('durable execution tasks with PostgreSQL and real workflow
     await start();
     expect((await todos.get(todo.id))?.status).toBe('pending');
     expect(await service().repo.get(todo.id)).toBeNull();
+  });
+  const startComputer = async () => {
+    const wf = await createWorkflowsRepository(user).create({
+      name: 'Computer fixture',
+      nodes: [
+        {
+          id: 'click',
+          type: 'browserNode',
+          position: { x: 0, y: 0 },
+          data: { action: 'click', x: 10, y: 20, computerCapabilities: ['computer.mouse'] },
+        } as WorkflowNode,
+      ],
+      edges: [],
+    });
+    const task = await service().start({ workflowId: wf.id, requestKey: randomUUID() });
+    await runNext();
+    const detail = await service().repo.detail(task.id);
+    expect(detail.task.state).toBe('WAITING_APPROVAL');
+    expect(computer.click).not.toHaveBeenCalled();
+    return { task, approvalId: String(detail.approvals[0]!.id) };
+  };
+  it('computer action resumes exact approval through PostgreSQL and records correlated audit', async () => {
+    const { task, approvalId } = await startComputer();
+    await expect(
+      new ExecutionTaskService(user, 'other').approve(task.id, approvalId)
+    ).rejects.toThrow();
+    await service().approve(task.id, approvalId);
+    await runNext();
+    expect((await service().repo.get(task.id))?.state).toBe('COMPLETED');
+    expect(computer.click).toHaveBeenCalledExactlyOnceWith(10, 20);
+    const entries = await db.adapter.query<{ session_id: string; result: string }>(
+      'SELECT session_id,result FROM action_ledger WHERE execution_task_id=$1 AND capability=$2',
+      [task.id, 'computer.mouse']
+    );
+    expect(entries.some((e) => e.result === 'SUCCESS' && e.session_id)).toBe(true);
+    await expect(service().approve(task.id, approvalId)).rejects.toThrow();
+    expect(
+      (await createWorkflowApprovalsRepository(user).get(approvalId, 'default'))?.context.consumed
+    ).toBe(true);
+  });
+  it('computer cancellation invalidates pending approvals and releases the provider', async () => {
+    const { task, approvalId } = await startComputer();
+    await service().cancel(task.id);
+    await expect(service().approve(task.id, approvalId)).rejects.toThrow();
+    expect((await createWorkflowApprovalsRepository(user).get(approvalId, 'default'))?.status).toBe(
+      'rejected'
+    );
+    expect(computer.cancel).toHaveBeenCalled();
+    expect(computer.click).not.toHaveBeenCalled();
+  });
+  it('computer rejects expired or altered approval bindings', async () => {
+    const { task, approvalId } = await startComputer();
+    await db.adapter.execute(
+      "UPDATE workflow_approvals SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1",
+      [approvalId]
+    );
+    await expect(service().approve(task.id, approvalId)).rejects.toThrow();
+    await db.adapter.execute(
+      'UPDATE workflow_approvals SET expires_at=NOW()+INTERVAL \'1 minute\',context=context || \'{"requestHash":"tampered"}\'::jsonb WHERE id=$1',
+      [approvalId]
+    );
+    await service().approve(task.id, approvalId);
+    await expect(runNext()).rejects.toThrow();
+    expect(computer.click).not.toHaveBeenCalled();
+  });
+  it('computer lost session after restart cannot resume an approved action on a fresh page', async () => {
+    const { task, approvalId } = await startComputer();
+    await ComputerService.closeTask(user, 'default', task.id);
+    await service().approve(task.id, approvalId);
+    await expect(runNext()).rejects.toThrow();
+    expect(computer.initialize).not.toHaveBeenCalled();
+    expect(computer.click).not.toHaveBeenCalled();
+  });
+  it('computer provider uncertainty persists UNKNOWN and cannot replay the effect', async () => {
+    const { task, approvalId } = await startComputer();
+    computer.click.mockRejectedValue(new Error('provider disconnected'));
+    await service().approve(task.id, approvalId);
+    await expect(runNext()).rejects.toThrow();
+    expect((await service().repo.get(task.id))?.outcome).toBe('UNKNOWN');
+    const effects = await db.adapter.query<{ result: { state: string } }>(
+      "SELECT result FROM idempotency_keys WHERE result->>'state'='unknown'"
+    );
+    expect(effects).toHaveLength(1);
+    expect(computer.click).toHaveBeenCalledTimes(1);
+    await expect(service().approve(task.id, approvalId)).rejects.toThrow();
+  });
+  it('computer cancellation wins against late provider completion', async () => {
+    const { task, approvalId } = await startComputer();
+    let finish!: () => void;
+    computer.click.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    await service().approve(task.id, approvalId);
+    const running = runNext();
+    const rejected = expect(running).rejects.toThrow();
+    await vi.waitFor(() => expect(computer.click).toHaveBeenCalled());
+    await service().cancel(task.id);
+    finish();
+    await rejected;
+    expect((await service().repo.get(task.id))?.state).toBe('CANCELLED');
   });
 });

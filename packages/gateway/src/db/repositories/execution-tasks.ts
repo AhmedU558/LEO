@@ -182,6 +182,22 @@ export class ExecutionTasksRepository extends BaseRepository {
     });
   }
 
+  async assertComputerWorker(
+    id: string,
+    jobId: string,
+    leaseToken: string,
+    runId: string
+  ): Promise<void> {
+    const row = await this.queryOne(
+      `SELECT t.id FROM execution_tasks t JOIN jobs j ON j.id=t.job_id
+       WHERE t.id=$1 AND t.user_id=$2 AND t.workspace_id=$3 AND t.state='RUNNING'
+       AND t.workflow_run_id=$4 AND j.id=$5 AND j.status='active' AND j.lease_token=$6
+       AND j.lease_expires_at>NOW()`,
+      [id, this.userId, this.workspaceId, runId, jobId, leaseToken]
+    );
+    if (!row) throw new Error('Stale computer execution context');
+  }
+
   async cancel(
     id: string,
     error = 'Cancelled by user',

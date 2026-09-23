@@ -4,8 +4,14 @@ export class RiskEngine {
   /**
    * Deterministically classify risk based on capability and action.
    */
-  public classify(capability: Capability, _action: string): LeoRiskLevel {
+  public classify(capability: Capability, action: string): LeoRiskLevel {
     switch (capability) {
+      case 'computer.mouse':
+        return ['computer.mouseMove', 'computer.scroll'].includes(action) ? 'MEDIUM' : 'HIGH';
+      case 'computer.keyboard':
+        return 'HIGH';
+      case 'computer.clipboard':
+        return 'CRITICAL';
       // LOW
       case 'memory.read':
       case 'agent.execute':

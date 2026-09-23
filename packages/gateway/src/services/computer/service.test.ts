@@ -1,156 +1,400 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ComputerService } from './service.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ComputerService, COMPUTER_LIMITS } from './service.js';
+import type { ComputerAction, ComputerUseProvider, BrowserProvider } from '@ownpilot/core/computer';
+import { COMPUTER_VIEWPORT, COMPUTER_MAX_SCREENSHOT_BYTES } from '@ownpilot/core/computer';
+import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
+import { executionTaskContext, computerStepContext } from '../execution-task-context.js';
 
-// Mock ActionLedger so we don't hit DB
-const mockEvaluate = vi.fn().mockReturnValue({ decision: 'ALLOW' });
-vi.mock('@ownpilot/core/security', async (importOriginal) => {
-  const actual = await importOriginal<any>();
-  return {
-    ...actual,
-    ActionLedger: {
-      record: vi.fn().mockResolvedValue({ actionId: 'test-action-id' }),
-      updateResult: vi.fn(),
-    },
-    PolicyEngine: vi.fn().mockImplementation(function () {
-      return {
-        evaluate: mockEvaluate,
-      };
-    }),
-    RiskEngine: vi.fn().mockImplementation(function () {
-      return { classify: vi.fn().mockReturnValue('LOW') };
-    }),
-  };
-});
+const mocks = vi.hoisted(() => ({
+  active: vi.fn(),
+  worker: vi.fn(),
+  claim: vi.fn(),
+  finish: vi.fn(),
+  create: vi.fn(),
+  consume: vi.fn(),
+  get: vi.fn(),
+}));
+vi.mock('../execution-task-context.js', async (original) => ({
+  ...(await original<typeof import('../execution-task-context.js')>()),
+  assertExecutionTaskActive: () => mocks.active(),
+}));
+vi.mock('../../db/repositories/execution-tasks.js', () => ({
+  ExecutionTasksRepository: class {
+    assertComputerWorker = mocks.worker;
+    whileRunning = async (_id: string, fn: () => Promise<unknown>) => fn();
+  },
+}));
+vi.mock('../../db/repositories/idempotency-keys.js', () => ({
+  getIdempotencyKeysRepository: () => ({
+    claimOperation: mocks.claim,
+    finishOperation: mocks.finish,
+  }),
+}));
+vi.mock('../../db/repositories/workflows/approvals.js', () => ({
+  createWorkflowApprovalsRepository: () => ({
+    create: mocks.create,
+    consumeComputerApproval: mocks.consume,
+    get: mocks.get,
+  }),
+}));
 
-// Mock PuppeteerBrowserProvider
-const mockNavigate = vi
-  .fn()
-  .mockResolvedValue({ success: true, data: { url: 'http://example.com' } });
-const mockExecuteAction = vi.fn().mockResolvedValue({ success: true, data: { status: 'done' } });
-vi.mock('./puppeteer-provider.js', () => {
-  return {
-    PuppeteerBrowserProvider: vi.fn().mockImplementation(function () {
-      return {
-        navigate: mockNavigate,
-        executeAction: mockExecuteAction,
-      };
-    }),
-  };
-});
-
-import { ActionLedger } from '@ownpilot/core/security';
-import { executionTaskContext } from '../execution-task-context.js';
-
-describe('ComputerService', () => {
+describe('durable ComputerService security boundary', () => {
+  let provider: ComputerUseProvider & BrowserProvider;
+  let service: ComputerService;
+  const scopes = new Set<string>();
+  let records: Map<string, { requestHash: string; state: string }>;
+  let controller: AbortController;
+  const grants = ['computer.read', 'computer.mouse', 'computer.keyboard'];
+  const action = (
+    type: ComputerAction['type'],
+    params: Record<string, unknown> = {}
+  ): ComputerAction => ({ type, params });
+  function run(
+    input: ComputerAction,
+    options: {
+      userId?: string;
+      workspaceId?: string;
+      taskId?: string;
+      nodeId?: string;
+      approvalId?: string;
+      capabilities?: string[];
+    } = {}
+  ) {
+    const {
+      userId = 'u',
+      workspaceId = 'w',
+      taskId = 't',
+      nodeId = 'n',
+      approvalId,
+      capabilities = grants,
+    } = options;
+    scopes.add(JSON.stringify([userId, workspaceId, taskId]));
+    return executionTaskContext.run(
+      {
+        userId,
+        workspaceId,
+        taskId,
+        workflowId: 'wf',
+        signal: controller.signal,
+        jobId: 'job',
+        leaseToken: 'lease',
+        approvalId,
+      },
+      () =>
+        computerStepContext.run({ nodeId, runId: 'run', effectIndex: 0, capabilities }, () =>
+          service.executeAction(input)
+        )
+    );
+  }
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
-    mockEvaluate.mockReturnValue({ decision: 'ALLOW' });
+    controller = new AbortController();
+    records = new Map();
+    mocks.active.mockImplementation(async () => {
+      executionTaskContext.getStore()?.signal.throwIfAborted();
+    });
+    mocks.worker.mockResolvedValue(undefined);
+    mocks.claim.mockImplementation(async (_user, key, requestHash) => {
+      const prior = records.get(key);
+      if (prior) return { claimed: false, ...prior };
+      records.set(key, { requestHash, state: 'pending' });
+      return { claimed: true, requestHash, state: 'pending' };
+    });
+    mocks.finish.mockResolvedValue(undefined);
+    mocks.create.mockResolvedValue({ id: 'approval' });
+    mocks.get.mockResolvedValue({ nodeId: 'n', workflowLogId: 'run' });
+    mocks.consume.mockResolvedValue(true);
+    vi.spyOn(PolicyEngine.prototype, 'evaluate').mockReturnValue({ decision: 'ALLOW' });
+    vi.spyOn(ActionLedger, 'record').mockResolvedValue({ actionId: 'audit' } as Awaited<
+      ReturnType<typeof ActionLedger.record>
+    >);
+    vi.spyOn(ActionLedger, 'updateResult').mockResolvedValue(undefined);
+    const png = Buffer.alloc(24);
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png);
+    png.writeUInt32BE(1280, 16);
+    png.writeUInt32BE(800, 20);
+    provider = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      screenshot: vi
+        .fn()
+        .mockResolvedValue({ screenshot: png.toString('base64'), ...COMPUTER_VIEWPORT }),
+      mouseMove: vi.fn().mockResolvedValue(undefined),
+      click: vi.fn().mockResolvedValue(undefined),
+      doubleClick: vi.fn().mockResolvedValue(undefined),
+      mouseDown: vi.fn().mockResolvedValue(undefined),
+      mouseUp: vi.fn().mockResolvedValue(undefined),
+      scroll: vi.fn().mockResolvedValue(undefined),
+      keyPress: vi.fn().mockResolvedValue(undefined),
+      typeText: vi.fn().mockResolvedValue(undefined),
+      hotkey: vi.fn().mockResolvedValue(undefined),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+      navigate: vi.fn().mockResolvedValue({ success: true }),
+      executeAction: vi.fn().mockResolvedValue({ success: true }),
+      getState: vi.fn(),
+    };
+    service = new ComputerService(() => provider);
   });
-
-  it('fails closed when missing execution context', async () => {
-    const service = new ComputerService();
-    const result = await service.executeAction({
-      type: 'navigate',
-      params: { url: 'https://example.com' },
-    } as any);
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Missing execution context');
+  afterEach(async () => {
+    for (const scope of scopes) {
+      const [u, w, t] = JSON.parse(scope);
+      await ComputerService.closeTask(u, w, t);
+    }
+    scopes.clear();
+    vi.useRealTimers();
   });
-
-  it('fails closed when execution task is cancelled', async () => {
-    const service = new ComputerService();
-    const abortCtrl = new AbortController();
-    abortCtrl.abort();
-    const result = await executionTaskContext.run(
-      {
-        taskId: 'task-1',
-        userId: 'user',
-        workspaceId: 'workspace',
-        workflowId: 'wf',
-        signal: abortCtrl.signal,
-      },
-      () =>
-        service.executeAction({ type: 'navigate', params: { url: 'https://example.com' } } as any)
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Execution task cancelled');
+  it('rejects missing durable context', async () => {
+    expect((await service.executeAction(action('screenshot'))).outcome).toBe('DENIED');
+    expect(provider.initialize).not.toHaveBeenCalled();
   });
-
-  it('evaluates policy and fails if denied', async () => {
-    mockEvaluate.mockReturnValue({ decision: 'DENY', reason: 'Blocked domain' });
-    const service = new ComputerService();
-    const result = await executionTaskContext.run(
-      {
-        taskId: 'task-1',
-        userId: 'user',
-        workspaceId: 'workspace',
-        workflowId: 'wf',
-        signal: new AbortController().signal,
-      },
-      () => service.executeAction({ type: 'navigate', params: { url: 'https://evil.com' } } as any)
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('denied by policy');
-    expect(ActionLedger.updateResult).toHaveBeenCalledWith(
-      'test-action-id',
-      expect.objectContaining({ error: expect.any(String) }),
-      expect.any(Number)
-    );
+  it('rejects stale or wrong worker context before provider execution', async () => {
+    mocks.worker.mockRejectedValue(new Error('wrong scope'));
+    expect((await run(action('screenshot'))).outcome).toBe('DENIED');
+    expect(provider.initialize).not.toHaveBeenCalled();
   });
-
-  it('evaluates policy and fails if requires approval', async () => {
-    mockEvaluate.mockReturnValue({ decision: 'REQUIRE_APPROVAL' });
-    const service = new ComputerService();
-    const result = await executionTaskContext.run(
-      {
-        taskId: 'task-1',
-        userId: 'user',
-        workspaceId: 'workspace',
-        workflowId: 'wf',
-        signal: new AbortController().signal,
-      },
-      () => service.executeAction({ type: 'click', params: { selector: '.buy' } } as any)
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Approval required');
+  it('requires explicit granular capability grants', async () => {
+    expect(
+      (await run(action('click', { x: 1, y: 2 }), { capabilities: ['computer.read'] })).outcome
+    ).toBe('DENIED');
+    expect(provider.click).not.toHaveBeenCalled();
   });
-
-  it('delegates to PuppeteerBrowserProvider for browser actions', async () => {
-    const service = new ComputerService();
-    const result = await executionTaskContext.run(
-      {
-        taskId: 'task-1',
-        userId: 'user',
-        workspaceId: 'workspace',
-        workflowId: 'wf',
-        signal: new AbortController().signal,
-      },
-      () =>
-        service.executeAction({ type: 'navigate', params: { url: 'https://example.com' } } as any)
-    );
-    expect(result.success).toBe(true);
-    expect(mockNavigate).toHaveBeenCalledWith('https://example.com');
-    expect(ActionLedger.record).toHaveBeenCalledWith(
+  it('enforces DENY even when capability is granted', async () => {
+    vi.mocked(PolicyEngine.prototype.evaluate).mockReturnValue({ decision: 'DENY' });
+    expect((await run(action('screenshot'))).outcome).toBe('DENIED');
+    expect(provider.initialize).not.toHaveBeenCalled();
+  });
+  it('passes intrinsic risk and autonomous identity into policy', async () => {
+    const risk = vi.spyOn(RiskEngine.prototype, 'classify');
+    await run(action('click', { x: 1, y: 2 }));
+    expect(risk).toHaveReturnedWith('HIGH');
+    expect(PolicyEngine.prototype.evaluate).toHaveBeenCalledWith(
       expect.objectContaining({
-        tool: 'computer_service',
-        capability: 'browser.navigate',
+        capability: 'computer.mouse',
+        risk: 'HIGH',
+        autonomous: true,
+        identity: expect.objectContaining({ userId: 'u', workspaceId: 'w' }),
       })
     );
   });
-
-  it('does not fabricate success for production computer provider execution', async () => {
-    const service = new ComputerService();
-    const result = await executionTaskContext.run(
-      {
-        taskId: 'task-1',
-        userId: 'user',
-        workspaceId: 'workspace',
-        workflowId: 'wf',
-        signal: new AbortController().signal,
-      },
-      () => service.executeAction({ type: 'execute_shell', params: {} } as any)
+  it('persists exact-action approval and stops before initialization', async () => {
+    vi.mocked(PolicyEngine.prototype.evaluate).mockReturnValue({ decision: 'REQUIRE_APPROVAL' });
+    const result = await run(action('click', { x: 1, y: 2 }));
+    expect(result.outcome).toBe('WAITING_APPROVAL');
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capability: 'computer.mouse',
+        workflowLogId: 'run',
+        context: expect.objectContaining({
+          requestHash: expect.any(String),
+          sessionId: result.sessionId,
+        }),
+      })
     );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('No production computer execution provider configured');
+    expect(provider.initialize).not.toHaveBeenCalled();
   });
+  it('resumes the exact approved action once and rejects replay', async () => {
+    vi.mocked(PolicyEngine.prototype.evaluate).mockReturnValue({ decision: 'REQUIRE_APPROVAL' });
+    await run(action('click', { x: 1, y: 2 }));
+    expect((await run(action('click', { x: 1, y: 2 }), { approvalId: 'approval' })).success).toBe(
+      true
+    );
+    expect((await run(action('click', { x: 1, y: 2 }), { approvalId: 'approval' })).success).toBe(
+      false
+    );
+    expect(provider.click).toHaveBeenCalledTimes(1);
+  });
+  it('rejects expired, cancelled or mismatched approvals', async () => {
+    vi.mocked(PolicyEngine.prototype.evaluate).mockReturnValue({ decision: 'REQUIRE_APPROVAL' });
+    mocks.consume.mockResolvedValue(false);
+    expect((await run(action('screenshot'), { approvalId: 'expired' })).outcome).toBe('DENIED');
+    expect(provider.initialize).not.toHaveBeenCalled();
+  });
+  it.each(['mouseMove', 'click', 'doubleClick', 'mouseDown', 'mouseUp'] as const)(
+    'executes browser-scoped %s',
+    async (type) => {
+      expect((await run(action(type, { x: 10, y: 20 }))).success).toBe(true);
+      expect(provider[type]).toHaveBeenCalledWith(10, 20);
+    }
+  );
+  it.each([
+    { x: -1, y: 0 },
+    { x: 1280, y: 0 },
+    { x: 0, y: 800 },
+    { x: NaN, y: 0 },
+  ])('rejects invalid coordinates %j', async (params) => {
+    expect((await run(action('click', params))).outcome).toBe('DENIED');
+    expect(provider.click).not.toHaveBeenCalled();
+  });
+  it('supports bounded scrolling', async () => {
+    expect((await run(action('scroll', { deltaX: 0, deltaY: 100 }))).success).toBe(true);
+    expect(provider.scroll).toHaveBeenCalledWith(0, 100);
+  });
+  it.each([
+    action('keyPress', { key: 'Enter' }),
+    action('typeText', { text: 'secret-value' }),
+    action('hotkey', { keys: ['Control', 'A'] }),
+  ])('supports approved keyboard action $type', async (input) => {
+    expect((await run(input)).success).toBe(true);
+    expect(JSON.stringify(vi.mocked(ActionLedger.record).mock.calls)).not.toContain('secret-value');
+  });
+  it.each(['C', 'V', 'X', 'L', 'N', 'T'])(
+    'rejects clipboard/browser shortcut Control+%s',
+    async (key) => {
+      expect((await run(action('hotkey', { keys: ['Control', key] }))).outcome).toBe('DENIED');
+      expect(provider.hotkey).not.toHaveBeenCalled();
+    }
+  );
+  it('bounds screenshot dimensions and bytes', async () => {
+    vi.mocked(provider.screenshot).mockResolvedValue({
+      screenshot: Buffer.alloc(COMPUTER_MAX_SCREENSHOT_BYTES + 1).toString('base64'),
+      ...COMPUTER_VIEWPORT,
+    });
+    expect((await run(action('screenshot'))).outcome).toBe('UNKNOWN');
+    expect(provider.cancel).toHaveBeenCalled();
+  });
+  it('rejects provider viewport changes', async () => {
+    vi.mocked(provider.screenshot).mockResolvedValue({ screenshot: '', width: 9999, height: 800 });
+    expect((await run(action('screenshot'))).success).toBe(false);
+  });
+  it('never persists screenshot bytes in effects or audit', async () => {
+    expect((await run(action('screenshot'))).success).toBe(true);
+    expect(
+      JSON.stringify([...mocks.finish.mock.calls, ...vi.mocked(ActionLedger.record).mock.calls])
+    ).not.toContain('iVBORw0KGgo');
+  });
+  it('honors cancellation before execution', async () => {
+    controller.abort();
+    expect((await run(action('screenshot'))).success).toBe(false);
+    expect(provider.initialize).not.toHaveBeenCalled();
+  });
+  it('cancels in-flight action and never retries UNKNOWN', async () => {
+    vi.mocked(provider.click).mockImplementation(() => new Promise(() => {}));
+    const pending = run(action('click', { x: 1, y: 1 }));
+    await vi.waitFor(() => expect(provider.click).toHaveBeenCalled());
+    controller.abort();
+    expect((await pending).outcome).toBe('UNKNOWN');
+    expect(provider.cancel).toHaveBeenCalled();
+    expect((await run(action('click', { x: 1, y: 1 }))).success).toBe(false);
+  });
+  it('times out and closes uncertain provider work', async () => {
+    vi.mocked(provider.click).mockImplementation(() => new Promise(() => {}));
+    expect((await run({ ...action('click', { x: 1, y: 2 }), timeoutMs: 5 })).outcome).toBe(
+      'UNKNOWN'
+    );
+    expect(provider.cancel).toHaveBeenCalled();
+  });
+  it('does not execute an action after timed-out initialization finishes late', async () => {
+    let ready!: () => void;
+    vi.mocked(provider.initialize).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          ready = resolve;
+        })
+    );
+    expect((await run({ ...action('click', { x: 1, y: 2 }), timeoutMs: 5 })).outcome).toBe(
+      'UNKNOWN'
+    );
+    ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(provider.click).not.toHaveBeenCalled();
+  });
+  it('fails closed on provider errors without disclosing raw errors', async () => {
+    vi.mocked(provider.typeText).mockRejectedValue(new Error('password=secret'));
+    const res = await run(action('typeText', { text: 'secret' }));
+    expect(res.outcome).toBe('UNKNOWN');
+    expect(JSON.stringify([res, vi.mocked(ActionLedger.updateResult).mock.calls])).not.toContain(
+      'password='
+    );
+  });
+  it('prevents simultaneous commands on the same session', async () => {
+    vi.mocked(provider.click).mockImplementation(() => new Promise(() => {}));
+    const pending = run({ ...action('click', { x: 1, y: 2 }), timeoutMs: 20 });
+    await vi.waitFor(() => expect(provider.click).toHaveBeenCalled(), { interval: 1 });
+    expect((await run(action('screenshot'), { nodeId: 'other' })).success).toBe(false);
+    await pending;
+  });
+  it('binds separate user/workspace/task sessions to distinct provider instances', async () => {
+    const factory = vi.fn(() => provider);
+    service = new ComputerService(factory);
+    await run(action('screenshot'));
+    await run(action('screenshot'), { workspaceId: 'other' });
+    await run(action('screenshot'), { userId: 'other' });
+    await run(action('screenshot'), { taskId: 'other' });
+    expect(new Set(factory.mock.calls.map((call) => call[1]?.sessionId)).size).toBe(4);
+  });
+  it('enforces screenshot capture budget', async () => {
+    for (let i = 0; i < COMPUTER_LIMITS.captures; i++)
+      expect((await run(action('screenshot'), { nodeId: `n${i}` })).success).toBe(true);
+    expect((await run(action('screenshot'), { nodeId: 'excess' })).success).toBe(false);
+  });
+  it('enforces action/iteration budget', async () => {
+    for (let i = 0; i < COMPUTER_LIMITS.actions; i++)
+      expect((await run(action('mouseMove', { x: 1, y: 2 }), { nodeId: `n${i}` })).success).toBe(
+        true
+      );
+    expect((await run(action('mouseMove', { x: 1, y: 2 }), { nodeId: 'excess' })).success).toBe(
+      false
+    );
+  });
+  it('records scope, session, capability, coordinates and outcome', async () => {
+    const res = await run(action('click', { x: 10, y: 20 }));
+    expect(ActionLedger.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u',
+        workspaceId: 'w',
+        executionTaskId: 't',
+        sessionId: res.sessionId,
+        capability: 'computer.mouse',
+        resource: expect.stringContaining('"x":10'),
+      })
+    );
+    expect(ActionLedger.updateResult).toHaveBeenCalledWith(
+      'audit',
+      { result: 'SUCCESS' },
+      expect.any(Number)
+    );
+  });
+  it('expires sessions and rejects stale actions', async () => {
+    vi.useFakeTimers();
+    await run(action('screenshot'));
+    await vi.advanceTimersByTimeAsync(COMPUTER_LIMITS.lifetimeMs);
+    expect((await run(action('mouseMove', { x: 1, y: 2 }), { nodeId: 'later' })).success).toBe(
+      false
+    );
+    expect(provider.cancel).toHaveBeenCalled();
+  });
+  it('bounds concurrent sessions per user', async () => {
+    for (let i = 0; i < COMPUTER_LIMITS.sessions; i++)
+      expect((await run(action('screenshot'), { taskId: `t${i}` })).success).toBe(true);
+    expect((await run(action('screenshot'), { taskId: 'overflow' })).success).toBe(false);
+  });
+  it('classifies pointer motion with a held button as a side effect', async () => {
+    await run(action('mouseDown', { x: 1, y: 2 }));
+    await run(action('mouseMove', { x: 3, y: 4 }), { nodeId: 'drag' });
+    expect(PolicyEngine.prototype.evaluate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ action: 'computer.mouseMove', risk: 'HIGH' })
+    );
+  });
+  it('does not recreate lost browser state after a restart', async () => {
+    await run(action('screenshot'));
+    await ComputerService.closeTask('u', 'w', 't');
+    expect((await run(action('mouseMove', { x: 1, y: 2 }), { nodeId: 'later' })).success).toBe(
+      false
+    );
+    expect(provider.initialize).toHaveBeenCalledTimes(1);
+  });
+  it('fails closed when the audit write fails', async () => {
+    vi.mocked(ActionLedger.record).mockRejectedValue(new Error('database unavailable'));
+    expect((await run(action('click', { x: 1, y: 2 }))).success).toBe(false);
+    expect(provider.initialize).not.toHaveBeenCalled();
+  });
+  it.each(['execute_shell', 'read_file', 'write_file'] as const)(
+    'rejects host operation %s',
+    async (type) => {
+      expect((await run(action(type))).success).toBe(false);
+      expect(provider.initialize).not.toHaveBeenCalled();
+    }
+  );
 });

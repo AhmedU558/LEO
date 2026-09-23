@@ -336,8 +336,7 @@ export async function executeNodeInline(
         node,
         nodeOutputs,
         workflowSnapshot.variables,
-        userId,
-        execContextJob
+        userId
       );
 
     // errorHandlerNode / stickyNoteNode / approvalNode / parallelNode /

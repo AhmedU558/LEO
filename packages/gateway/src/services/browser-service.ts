@@ -13,6 +13,14 @@ import { hasPII, detectPII } from '@ownpilot/core/privacy';
 import { getLog, getConfigCenter } from '@ownpilot/core/services';
 import { isBlockedUrl, isPrivateUrlAsync } from '../utils/ssrf.js';
 import { PolicyEngine } from '@ownpilot/core/security';
+import type { ComputerSessionBinding } from '@ownpilot/core/computer';
+import {
+  COMPUTER_VIEWPORT,
+  COMPUTER_MAX_SCREENSHOT_BYTES,
+  COMPUTER_KEYS,
+  COMPUTER_HOTKEYS,
+  validateComputerPoint,
+} from '@ownpilot/core/computer';
 
 const log = getLog('BrowserService');
 
@@ -660,15 +668,178 @@ export class BrowserService {
     }
   }
 
+  private computerBindings = new Map<string, ComputerSessionBinding>();
+
+  private computerScope(binding: ComputerSessionBinding): string {
+    return JSON.stringify([
+      binding.userId,
+      binding.workspaceId,
+      binding.executionTaskId,
+      binding.sessionId,
+    ]);
+  }
+
+  hasComputerSession(binding: ComputerSessionBinding): boolean {
+    const stored = this.computerBindings.get(binding.sessionId);
+    return (
+      !!stored &&
+      this.computerScope(stored) === this.computerScope(binding) &&
+      !!this.getPageInfo(binding.sessionId)?.active
+    );
+  }
+
+  async closeComputerSession(binding: ComputerSessionBinding): Promise<void> {
+    const stored = this.computerBindings.get(binding.sessionId);
+    if (stored && this.computerScope(stored) === this.computerScope(binding))
+      await this.closePage(binding.sessionId);
+  }
+
+  async initializeComputerSession(binding: ComputerSessionBinding): Promise<void> {
+    const { sessionId, userId } = binding;
+    if (!sessionId || !userId || !binding.workspaceId || !binding.executionTaskId)
+      throw new Error('Missing computer session scope');
+    const scope = this.computerScope(binding);
+    const bound = this.computerBindings.get(sessionId);
+    if (bound && this.computerScope(bound) !== scope)
+      throw new Error('Computer session scope mismatch');
+    const existing = this.sessions.get(sessionId);
+    if (existing && (!bound || existing.userId !== userId))
+      throw new Error('Computer session owner mismatch');
+    this.computerBindings.set(sessionId, Object.freeze({ ...binding }));
+    try {
+      const page = await this.getOrCreatePage(sessionId, userId);
+      await page.setViewport(COMPUTER_VIEWPORT);
+      const guard = await page.browser().target().createCDPSession();
+      page.once('close', () => {
+        void guard.detach().catch(() => log.warn('Browser target guard cleanup failed'));
+      });
+      guard.on('Target.attachedToTarget', ({ targetInfo, sessionId: attachedId }) => {
+        if (targetInfo.openerId) {
+          // Deny requests before resuming: closing a paused popup can deadlock its opener's input.
+          const popup = guard.connection()?.session(attachedId);
+          void (async () => {
+            if (popup) {
+              popup.on('Fetch.requestPaused', ({ requestId }) => {
+                void popup
+                  .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' })
+                  .catch(() => log.warn('Popup request cleanup failed'));
+              });
+              await popup.send('Fetch.enable', {
+                patterns: [{ urlPattern: '*', requestStage: 'Request' }],
+              });
+              await popup.send('Runtime.runIfWaitingForDebugger');
+            }
+            await guard.send('Target.closeTarget', { targetId: targetInfo.targetId });
+          })().catch(() => log.warn('Popup target cleanup failed'));
+        } else {
+          void guard
+            .connection()
+            ?.session(attachedId)
+            ?.send('Runtime.runIfWaitingForDebugger')
+            .catch(() => log.warn('Browser target activation failed'));
+        }
+      });
+      await guard.send('Target.setAutoAttach', {
+        autoAttach: true,
+        waitForDebuggerOnStart: true,
+        flatten: true,
+        filter: [{ type: 'page', exclude: false }, { exclude: true }],
+      });
+      // New windows are never adopted as another computer session.
+      page.on('popup', (popup) => {
+        void popup?.close().catch(() => log.warn('Browser resource cleanup failed'));
+      });
+    } catch (error) {
+      await this.closePage(sessionId);
+      throw error;
+    }
+  }
+
+  /** Fixed browser primitives only: no scripts, host input or clipboard permissions. */
+  async computerInput(
+    binding: ComputerSessionBinding,
+    type: string,
+    params: Record<string, unknown>
+  ): Promise<unknown> {
+    const { sessionId, userId } = binding;
+    if (!this.hasComputerSession(binding)) throw new Error('Computer session scope mismatch');
+    const session = this.sessions.get(sessionId);
+    if (!session || session.userId !== userId || session.page.isClosed())
+      throw new Error('Closed or stale computer session');
+    const page = session.page;
+    const viewport = page.viewport();
+    if (
+      !viewport ||
+      viewport.width !== COMPUTER_VIEWPORT.width ||
+      viewport.height !== COMPUTER_VIEWPORT.height
+    )
+      throw new Error('Computer viewport changed');
+    session.lastActivity = Date.now();
+    if (['mouseMove', 'click', 'doubleClick', 'mouseDown', 'mouseUp'].includes(type)) {
+      validateComputerPoint(params.x, params.y);
+      const x = params.x,
+        y = params.y as number;
+      await page.mouse.move(x, y);
+      if (type === 'click' || type === 'doubleClick')
+        await page.mouse.click(x, y, { count: type === 'doubleClick' ? 2 : 1 });
+      if (type === 'mouseDown') await page.mouse.down();
+      if (type === 'mouseUp') await page.mouse.up();
+    } else if (type === 'scroll') {
+      const { deltaX, deltaY } = params;
+      if (
+        typeof deltaX !== 'number' ||
+        typeof deltaY !== 'number' ||
+        !Number.isFinite(deltaX) ||
+        !Number.isFinite(deltaY) ||
+        Math.abs(deltaX) > 1280 ||
+        Math.abs(deltaY) > 800
+      )
+        throw new Error('Invalid computer scroll');
+      await page.mouse.wheel({ deltaX, deltaY });
+    } else if (type === 'keyPress') {
+      if (!COMPUTER_KEYS.some((key) => key === params.key))
+        throw new Error('Unsupported computer key');
+      await page.keyboard.press(params.key as (typeof COMPUTER_KEYS)[number]);
+    } else if (type === 'typeText') {
+      if (typeof params.text !== 'string' || params.text.length > MAX_TEXT_LENGTH)
+        throw new Error('Invalid computer text');
+      await page.keyboard.type(params.text);
+    } else if (type === 'hotkey') {
+      if (
+        !Array.isArray(params.keys) ||
+        !COMPUTER_HOTKEYS.some((key) => key === (params.keys as unknown[]).join('+'))
+      )
+        throw new Error('Unsupported computer hotkey');
+      const keys = params.keys as Parameters<typeof page.keyboard.down>[0][];
+      try {
+        for (const key of keys) await page.keyboard.down(key);
+      } finally {
+        for (const key of [...keys].reverse()) await page.keyboard.up(key);
+      }
+    } else if (type === 'screenshot') {
+      const bytes = await page.screenshot({
+        type: 'png',
+        fullPage: false,
+        captureBeyondViewport: false,
+      });
+      if (bytes.byteLength > COMPUTER_MAX_SCREENSHOT_BYTES)
+        throw new Error('Computer screenshot exceeds byte limit');
+      return { screenshot: Buffer.from(bytes).toString('base64'), ...COMPUTER_VIEWPORT };
+    } else throw new Error('Unsupported computer input');
+    return undefined;
+  }
+
   async closePage(sessionId: string): Promise<boolean> {
+    this.computerBindings.delete(sessionId);
     const session = this.sessions.get(sessionId);
     if (!session) return false;
 
     try {
       await session.page.close();
-      await session.context.close();
     } catch {
       // Page may already be closed
+    } finally {
+      await session.context.close().catch(() => log.warn('Browser resource cleanup failed'));
     }
     this.sessions.delete(sessionId);
     return true;
@@ -677,7 +848,7 @@ export class BrowserService {
   getPageInfo(sessionId: string): { url: string; active: boolean } | null {
     const session = this.sessions.get(sessionId);
     if (!session) return null;
-    return { url: session.page.url(), active: true };
+    return { url: session.page.url(), active: !session.page.isClosed() };
   }
 
   async shutdown(): Promise<void> {
@@ -695,6 +866,7 @@ export class BrowserService {
       }
     }
     this.sessions.clear();
+    this.computerBindings.clear();
 
     if (this.browser) {
       try {
@@ -724,49 +896,51 @@ export class BrowserService {
     }
 
     const browser = await this.ensureBrowser();
-    const context = await browser.createBrowserContext();
-    const page = await context.newPage();
+    const context = await browser.createBrowserContext({ downloadBehavior: { policy: 'deny' } });
+    try {
+      const page = await context.newPage();
 
-    // Set reasonable viewport
-    await page.setViewport({ width: 1280, height: 800 });
+      // Set reasonable viewport
+      await page.setViewport({ width: 1280, height: 800 });
 
-    // Block unnecessary resource types and SSRF targets
-    await page.setRequestInterception(true);
-    page.on('request', async (req) => {
-      const type = req.resourceType();
-      if (type === 'media' || type === 'font') {
-        req.abort();
-        return;
-      }
+      // Block unnecessary resource types and SSRF targets
+      await page.setRequestInterception(true);
+      page.on('request', async (req) => {
+        const type = req.resourceType();
+        if (type === 'media' || type === 'font') {
+          req.abort();
+          return;
+        }
 
-      // SSRF protection and domain allowlist for all subresources and redirects
-      const url = req.url();
-      if (url.startsWith('data:') || url.startsWith('blob:')) {
-        req.continue();
-        return;
-      }
-      try {
-        await this.validateUrl(url, sessionId);
-        req.continue();
-      } catch (e: unknown) {
-        log.warn('Aborting browser request due to policy/SSRF', {
-          url,
-          error: (e as Error).message,
-        });
-        req.abort();
-      }
-    });
+        // SSRF protection and domain allowlist for all subresources and redirects
+        const url = req.url();
+        if (url.startsWith('data:') || url.startsWith('blob:')) {
+          req.continue();
+          return;
+        }
+        try {
+          await this.validateUrl(url, sessionId);
+          req.continue();
+        } catch {
+          log.warn('Aborting browser request due to policy/SSRF');
+          req.abort();
+        }
+      });
 
-    const session: PageSession = {
-      page,
-      context,
-      userId,
-      createdAt: Date.now(),
-      lastActivity: Date.now(),
-    };
-    this.sessions.set(sessionId, session);
+      const session: PageSession = {
+        page,
+        context,
+        userId,
+        createdAt: Date.now(),
+        lastActivity: Date.now(),
+      };
+      this.sessions.set(sessionId, session);
 
-    return page;
+      return page;
+    } catch (error) {
+      await context.close().catch(() => log.warn('Browser resource cleanup failed'));
+      throw error;
+    }
   }
 
   private async getExistingPage(sessionId: string): Promise<Page> {
@@ -826,6 +1000,7 @@ export class BrowserService {
       log.info('Browser disconnected');
       this.browser = null;
       this.sessions.clear();
+      this.computerBindings.clear();
     });
 
     log.info('Browser launched', { executablePath: execPath });
@@ -906,6 +1081,13 @@ export class BrowserService {
   }
 
   private parseSessionId(sessionId: string) {
+    const binding = this.computerBindings.get(sessionId);
+    if (binding)
+      return {
+        userId: binding.userId,
+        workspaceId: binding.workspaceId,
+        executionId: binding.executionTaskId,
+      };
     const parts = sessionId.split(':');
     if (parts.length >= 3) {
       return { userId: parts[0], workspaceId: parts[1], executionId: parts[2] };

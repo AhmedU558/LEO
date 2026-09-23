@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ComputerService } from './computer/service.js';
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
 import { EXECUTION_TASK_TERMINAL, type ExecutionTask } from '@ownpilot/core/services';
 import {
@@ -99,6 +100,7 @@ export class ExecutionTaskService {
     if (EXECUTION_TASK_TERMINAL.includes(task.state)) return task;
     await this.audit(task, 'execution_task.cancel_requested');
     const cancelled = await this.repo.cancel(id);
+    await ComputerService.closeTask(this.userId, this.workspaceId, id);
     if (task.jobId) await JobQueueService.getInstance().cancel(task.jobId);
     this.notify(cancelled);
     return cancelled;
@@ -160,6 +162,10 @@ export class ExecutionTaskService {
             workspaceId: this.workspaceId,
             workflowId: task.workflowId,
             signal,
+            jobId: job.id,
+            leaseToken: job.leaseToken ?? undefined,
+            approvalId:
+              typeof job.payload.approvalId === 'string' ? job.payload.approvalId : undefined,
           },
           async () => {
             if (typeof job.payload.approvalId === 'string')
@@ -196,8 +202,11 @@ export class ExecutionTaskService {
         throw new Error(run.error ?? `Unverified workflow outcome: ${run.status}`);
       }
       this.notify(task);
+      if (task.state !== 'WAITING_APPROVAL')
+        await ComputerService.closeTask(this.userId, this.workspaceId, id);
       return { executionTaskId: id, state: task.state };
     } catch (error) {
+      await ComputerService.closeTask(this.userId, this.workspaceId, id);
       const current = await this.repo.get(id);
       if (current && !EXECUTION_TASK_TERMINAL.includes(current.state)) {
         const failed = await this.repo.cancel(

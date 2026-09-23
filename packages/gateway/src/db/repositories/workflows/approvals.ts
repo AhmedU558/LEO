@@ -96,6 +96,27 @@ export class WorkflowApprovalsRepository extends BaseRepository {
     this.userId = userId;
   }
 
+  async consumeComputerApproval(
+    id: string,
+    workspaceId: string,
+    runId: string,
+    nodeId: string,
+    taskId: string,
+    sessionId: string,
+    requestHash: string,
+    capability: string
+  ): Promise<boolean> {
+    const row = await this.queryOne(
+      `UPDATE workflow_approvals SET context=context || '{"consumed":true}'::jsonb
+       WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND workflow_log_id=$4 AND node_id=$5
+       AND context->>'executionTaskId'=$6 AND context->>'sessionId'=$7 AND context->>'requestHash'=$8
+       AND capability=$9 AND status='approved' AND expires_at>NOW()
+       AND COALESCE(context->>'consumed','false')='false' RETURNING id`,
+      [id, this.userId, workspaceId, runId, nodeId, taskId, sessionId, requestHash, capability]
+    );
+    return !!row;
+  }
+
   async create(input: CreateApprovalInput): Promise<WorkflowApproval> {
     const task = executionTaskContext.getStore();
     if (task) {

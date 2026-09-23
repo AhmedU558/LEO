@@ -7,10 +7,16 @@ import { getBrowserService } from '../browser-service.js';
 import type { ExecutionTaskContext } from '../execution-task-context.js';
 
 export class PuppeteerBrowserProvider implements BrowserProvider {
-  constructor(private ctx: ExecutionTaskContext) {}
+  constructor(
+    private ctx: ExecutionTaskContext,
+    private boundSessionId?: string
+  ) {}
 
   private get sessionId() {
-    return `${this.ctx.userId}:${this.ctx.workspaceId}:${this.ctx.taskId}`;
+    return (
+      this.boundSessionId ??
+      JSON.stringify([this.ctx.userId, this.ctx.workspaceId, this.ctx.taskId])
+    );
   }
 
   async navigate(url: string): Promise<ComputerActionResult> {

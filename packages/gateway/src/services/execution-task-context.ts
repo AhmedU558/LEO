@@ -7,8 +7,17 @@ export interface ExecutionTaskContext {
   workspaceId: string;
   workflowId: string;
   signal: AbortSignal;
+  jobId?: string;
+  leaseToken?: string;
+  approvalId?: string;
 }
 export const executionTaskContext = new AsyncLocalStorage<ExecutionTaskContext>();
+export const computerStepContext = new AsyncLocalStorage<{
+  nodeId: string;
+  runId: string;
+  capabilities: readonly string[];
+  effectIndex: number;
+}>();
 
 /** Recheck persisted cancellation before each step and before committing its result. */
 export async function assertExecutionTaskActive(): Promise<void> {

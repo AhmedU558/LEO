@@ -31,7 +31,11 @@ import { resolveTemplates } from './template-resolver.js';
 import { WORKFLOW_NODE_TYPES } from './node-types.js';
 import type { WorkflowProgressEvent } from './types.js';
 import { nodeDataField, nodeDataRecord } from './node-data.js';
-import { executionTaskContext, assertExecutionTaskActive } from '../execution-task-context.js';
+import {
+  executionTaskContext,
+  computerStepContext,
+  assertExecutionTaskActive,
+} from '../execution-task-context.js';
 import {
   executeNode,
   executeBrowserNode,
@@ -175,6 +179,24 @@ import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security'
 import type { Capability } from '@ownpilot/core/security';
 
 export async function dispatchNode(
+  ctx: DispatchNodeContext,
+  cb: DispatchCallbacks
+): Promise<NodeResult> {
+  const grants = nodeDataField(ctx.node, 'computerCapabilities');
+  return computerStepContext.run(
+    {
+      nodeId: ctx.nodeId,
+      runId: ctx.logId,
+      capabilities: Array.isArray(grants)
+        ? grants.filter((v): v is string => typeof v === 'string')
+        : [],
+      effectIndex: 0,
+    },
+    () => dispatchAuthorizedNode(ctx, cb)
+  );
+}
+
+async function dispatchAuthorizedNode(
   ctx: DispatchNodeContext,
   cb: DispatchCallbacks
 ): Promise<NodeResult> {
@@ -849,12 +871,8 @@ async function _dispatchNodeImpl(
       );
       return dryRunResult(node, args);
     }
-    return await cb.retryFn(
-      node,
-      () => executeBrowserNode(node, nodeOutputs, workflow.variables, userId),
-      abortSignal,
-      onProgress
-    );
+    // ComputerService owns bounded actions and durable effect claims. Never blindly retry UI effects.
+    return executeBrowserNode(node, nodeOutputs, workflow.variables, userId);
   }
 
   // ── Unknown node type guard ──

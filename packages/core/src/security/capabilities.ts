@@ -9,6 +9,9 @@ export type Capability =
   | 'browser.read'
   | 'browser.navigate'
   | 'computer.read'
+  | 'computer.mouse'
+  | 'computer.keyboard'
+  | 'computer.clipboard'
   | 'computer.control'
   | 'filesystem.read'
   | 'filesystem.write'
@@ -50,6 +53,9 @@ export const CAPABILITY_RISKS: Record<Capability, LeoRiskLevel> = {
   'browser.read': 'LOW',
   'browser.navigate': 'LOW',
   'computer.read': 'HIGH',
+  'computer.mouse': 'MEDIUM',
+  'computer.keyboard': 'HIGH',
+  'computer.clipboard': 'CRITICAL',
   'computer.control': 'CRITICAL',
   'filesystem.read': 'LOW',
   'filesystem.write': 'HIGH',
