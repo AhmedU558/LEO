@@ -2,6 +2,7 @@ import type {
   ComputerUseProvider,
   ComputerSessionBinding,
   ComputerAction,
+  ComputerScreenshot,
 } from '@ownpilot/core/computer';
 import { getBrowserService } from '../browser-service.js';
 import { PuppeteerBrowserProvider } from './puppeteer-provider.js';
@@ -67,11 +68,15 @@ export class PuppeteerComputerUseProvider
     return getBrowserService().computerInput(this.binding, type, params);
   }
   async screenshot() {
-    return (await this.input('screenshot')) as {
-      screenshot: string;
-      width: number;
-      height: number;
-    };
+    const before = await this.inspectForRedaction();
+    const shot = (await this.input('screenshot')) as ComputerScreenshot;
+    const after = await this.inspectForRedaction();
+    if (before.revision !== after.revision) throw new Error('Page changed during capture');
+    return { ...shot, layout: after };
+  }
+  async inspectForRedaction() {
+    this.assertOpen();
+    return getBrowserService().computerRedactionLayout(this.binding);
   }
   async mouseMove(x: number, y: number) {
     await this.input('mouseMove', { x, y });

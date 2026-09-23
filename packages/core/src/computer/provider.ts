@@ -25,7 +25,8 @@ export interface BrowserProvider {
 export interface ComputerUseProvider {
   /** Browser-scoped actuator. Only ComputerService may dispatch authorized actions. */
   initialize(signal: AbortSignal): Promise<void>;
-  screenshot(): Promise<{ screenshot: string; width: number; height: number }>;
+  screenshot(): Promise<ComputerScreenshot>;
+  inspectForRedaction?(): Promise<ComputerRedactionLayout>;
   mouseMove(x: number, y: number): Promise<void>;
   click(x: number, y: number): Promise<void>;
   doubleClick(x: number, y: number): Promise<void>;
@@ -37,6 +38,55 @@ export interface ComputerUseProvider {
   hotkey(keys: readonly string[]): Promise<void>;
   cancel(): Promise<void>;
   close(): Promise<void>;
+}
+
+export interface ComputerRedactionLayout {
+  readonly revision: string;
+  readonly controls: readonly {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    kind: 'Button' | 'Link' | 'Field' | 'Password' | 'Secret' | 'Authentication' | 'Select';
+  }[];
+}
+
+export interface ComputerScreenshot {
+  screenshot: string;
+  width: number;
+  height: number;
+  layout?: ComputerRedactionLayout;
+}
+
+export interface ScreenshotRedactor {
+  redact(input: {
+    readonly image: ComputerScreenshot;
+    readonly binding: Readonly<ComputerSessionBinding>;
+    readonly observationId: string;
+    readonly signal: AbortSignal;
+  }): Promise<{
+    observation: ComputerModelObservation;
+    metadata: { method: string; maskedRegions: number; sensitiveControls: number };
+  }>;
+}
+
+export type ComputerVisionOutcome =
+  | 'COMPLETED'
+  | 'WAITING_APPROVAL'
+  | 'CANCELLED'
+  | 'TIMEOUT'
+  | 'FAILED'
+  | 'UNKNOWN'
+  | 'LIMIT_REACHED';
+export interface ComputerVisionResult {
+  outcome: ComputerVisionOutcome;
+  iterations: number;
+  screenshots: number;
+  modelRequests: number;
+  actions: number;
+  approvalId?: string;
+  sessionId?: string;
+  observationId?: string;
 }
 
 export interface ComputerSessionBinding {

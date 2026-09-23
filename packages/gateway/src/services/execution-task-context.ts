@@ -17,6 +17,9 @@ export const computerStepContext = new AsyncLocalStorage<{
   runId: string;
   capabilities: readonly string[];
   effectIndex: number;
+  observationId?: string;
+  iteration?: number;
+  expectedRevision?: string;
 }>();
 
 /** Recheck persisted cancellation before each step and before committing its result. */

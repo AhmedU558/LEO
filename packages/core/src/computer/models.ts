@@ -35,6 +35,7 @@ export interface ComputerAction {
 }
 
 export interface ComputerActionResult {
+  observationId?: string;
   success: boolean;
   outcome?: 'SUCCESS' | 'DENIED' | 'WAITING_APPROVAL' | 'UNKNOWN';
   approvalId?: string;

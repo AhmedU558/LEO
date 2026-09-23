@@ -8,6 +8,8 @@ import type {
   ComputerActionProposer,
   ComputerActionProposal,
   ComputerModelObservation,
+  ComputerScreenshot,
+  ScreenshotRedactor,
 } from '@ownpilot/core/computer';
 import {
   COMPUTER_VIEWPORT,
@@ -31,6 +33,7 @@ import { ExecutionTasksRepository } from '../../db/repositories/execution-tasks.
 import { getIdempotencyKeysRepository } from '../../db/repositories/idempotency-keys.js';
 import { createWorkflowApprovalsRepository } from '../../db/repositories/workflows/approvals.js';
 import { PuppeteerComputerUseProvider } from './computer-use-provider.js';
+import { closeComputerVisionLoops } from './vision-loop.js';
 import { getLog } from '../log.js';
 import {
   BROWSER_ACTION_TIMEOUT_MS,
@@ -56,6 +59,7 @@ interface Session {
   captures: number;
   closed: boolean;
   busy: boolean;
+  modelBusy: boolean;
   buttonDown: boolean;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -64,6 +68,7 @@ export interface BoundComputerProposal {
   readonly binding: Readonly<ComputerSessionBinding>;
   readonly action: ComputerActionProposal;
   readonly observationActionId: string;
+  readonly observationId: string;
 }
 
 function hash(value: unknown): string {
@@ -161,6 +166,8 @@ export class ComputerService {
       screenshot: string;
       actionId: string;
       version: number;
+      image: ComputerScreenshot;
+      observationId: string;
     }
   >();
   private static proposals = new WeakMap<
@@ -171,6 +178,8 @@ export class ComputerService {
       effectIndex: number;
       state: 'pending' | 'running' | 'waiting' | 'done';
       approvalId?: string;
+      version: number;
+      revision?: string;
     }
   >();
   constructor(
@@ -217,22 +226,28 @@ export class ComputerService {
   async proposeAction(
     observation: ComputerActionResult,
     proposer: ComputerActionProposer,
-    redact: (
-      image: { screenshot: string; viewport: typeof COMPUTER_VIEWPORT },
-      signal: AbortSignal
-    ) => Promise<ComputerModelObservation>
+    redact:
+      | ScreenshotRedactor
+      | ((
+          image: { screenshot: string; viewport: typeof COMPUTER_VIEWPORT },
+          signal: AbortSignal
+        ) => Promise<ComputerModelObservation>)
   ): Promise<
     { outcome: 'PROPOSED'; proposal: BoundComputerProposal } | { outcome: 'DENIED'; error: string }
   > {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let onAbort: (() => void) | undefined;
     let signal: AbortSignal | undefined;
+    let modelSession: Session | undefined;
     try {
       const captured = ComputerService.observations.get(observation);
       if (!captured) throw new Error('Unverified model observation');
       ComputerService.observations.delete(observation);
-      if ((await this.assertModelScope(captured.binding)).count !== captured.version)
+      const session = await this.assertModelScope(captured.binding);
+      if (session.count !== captured.version || session.modelBusy)
         throw new Error('Stale model observation');
+      session.modelBusy = true;
+      modelSession = session;
       const controller = new AbortController();
       timer = setTimeout(() => controller.abort(), COMPUTER_MODEL_LIMITS.timeoutMs);
       signal = AbortSignal.any([executionTaskContext.getStore()!.signal, controller.signal]);
@@ -243,14 +258,30 @@ export class ComputerService {
       signal.throwIfAborted();
       const proposal = await Promise.race([
         (async () => {
-          const prepared = await redact(
-            { screenshot: captured.screenshot, viewport: { ...COMPUTER_VIEWPORT } },
-            signal!
-          );
+          const prepared =
+            typeof redact === 'function'
+              ? await redact(
+                  { screenshot: captured.screenshot, viewport: { ...COMPUTER_VIEWPORT } },
+                  signal!
+                )
+              : (
+                  await redact.redact({
+                    image: captured.image,
+                    binding: captured.binding,
+                    observationId: captured.observationId,
+                    signal: signal!,
+                  })
+                ).observation;
           signal!.throwIfAborted();
           validateComputerObservation(prepared);
           if ((await this.assertModelScope(captured.binding)).count !== captured.version)
             throw new Error('Stale model observation');
+          if (
+            captured.image.layout &&
+            (await session.provider.inspectForRedaction?.())?.revision !==
+              captured.image.layout.revision
+          )
+            throw new Error('Browser changed before model disclosure');
           // Construct a fresh allowlisted request: never forward the caller's context or extra fields.
           const response = await proposer.propose({
             observation: {
@@ -268,10 +299,17 @@ export class ComputerService {
       ]);
       if ((await this.assertModelScope(captured.binding)).count !== captured.version)
         throw new Error('Stale model observation');
+      if (
+        captured.image.layout &&
+        (await session.provider.inspectForRedaction?.())?.revision !==
+          captured.image.layout.revision
+      )
+        throw new Error('Browser changed during inference');
       const bound = Object.freeze({
         binding: Object.freeze({ ...captured.binding }),
         action: proposal,
         observationActionId: captured.actionId,
+        observationId: captured.observationId,
       });
       const step = computerStepContext.getStore()!;
       ComputerService.proposals.set(bound, {
@@ -279,6 +317,8 @@ export class ComputerService {
         nodeId: step.nodeId,
         effectIndex: step.effectIndex++,
         state: 'pending',
+        version: captured.version,
+        revision: captured.image.layout?.revision,
       });
       return { outcome: 'PROPOSED', proposal: bound };
     } catch {
@@ -286,6 +326,7 @@ export class ComputerService {
     } finally {
       clearTimeout(timer);
       if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+      if (modelSession) modelSession.modelBusy = false;
     }
   }
 
@@ -293,7 +334,13 @@ export class ComputerService {
     try {
       const record = ComputerService.proposals.get(proposal);
       if (!record) throw new Error('Unverified proposal');
-      await this.assertModelScope(proposal.binding);
+      const session = await this.assertModelScope(proposal.binding);
+      if (session.modelBusy || session.count !== record.version) throw new Error('Stale proposal');
+      if (
+        record.revision &&
+        (await session.provider.inspectForRedaction?.())?.revision !== record.revision
+      )
+        throw new Error('Browser changed after proposal');
       const step = computerStepContext.getStore()!;
       if (
         record.runId !== step.runId ||
@@ -310,11 +357,17 @@ export class ComputerService {
       record.state = 'running';
       try {
         const result = await computerStepContext.run(
-          { ...step, effectIndex: record.effectIndex },
+          {
+            ...step,
+            effectIndex: record.effectIndex,
+            observationId: proposal.observationId,
+            expectedRevision: record.revision,
+          },
           () => this.executeAction({ type: action.type, params: action.params })
         );
         record.state = result.outcome === 'WAITING_APPROVAL' ? 'waiting' : 'done';
         record.approvalId = result.approvalId;
+        record.version = session.count;
         return result;
       } finally {
         if (record.state === 'running') record.state = 'done';
@@ -325,6 +378,7 @@ export class ComputerService {
   }
 
   static async closeTask(userId: string, workspaceId: string, taskId: string) {
+    closeComputerVisionLoops(userId, workspaceId, taskId);
     const key = JSON.stringify([userId, workspaceId, taskId]);
     const session = this.sessions.get(key);
     if (session) {
@@ -360,6 +414,7 @@ export class ComputerService {
       count: 0,
       captures: 0,
       busy: false,
+      modelBusy: false,
       buttonDown: false,
       closed: false,
       timer: setTimeout(() => {
@@ -410,7 +465,7 @@ export class ComputerService {
         !capability.startsWith('computer.') || step.capabilities.includes(capability);
       if (permitted) {
         session = this.session(ctx);
-        if (session.busy) throw new Error('Computer session is busy');
+        if (session.busy || session.modelBusy) throw new Error('Computer session is busy');
         session.busy = true;
         release = true;
       }
@@ -443,6 +498,8 @@ export class ComputerService {
           x: typeof action.params.x === 'number' ? action.params.x : undefined,
           y: typeof action.params.y === 'number' ? action.params.y : undefined,
           viewport: COMPUTER_VIEWPORT,
+          observationId: step.observationId,
+          iteration: step.iteration,
         }),
         resourceType: 'computer_session',
         capability,
@@ -585,6 +642,8 @@ export class ComputerService {
           data,
           actionId: ledgerId,
           sessionId: current.binding.sessionId,
+          observationId:
+            step.observationId ?? (action.type === 'screenshot' ? randomUUID() : undefined),
         };
         if (action.type === 'screenshot')
           ComputerService.observations.set(result, {
@@ -592,6 +651,8 @@ export class ComputerService {
             screenshot: (data as { screenshot: string }).screenshot,
             actionId: ledgerId!,
             version: current.count,
+            image: structuredClone(data as ComputerScreenshot),
+            observationId: result.observationId!,
           });
         return result;
       } finally {
@@ -636,6 +697,10 @@ export class ComputerService {
     signal: AbortSignal
   ): Promise<unknown> {
     await provider.initialize(signal);
+    signal.throwIfAborted();
+    const revision = computerStepContext.getStore()?.expectedRevision;
+    if (revision && (await provider.inspectForRedaction?.())?.revision !== revision)
+      throw new Error('Browser state changed before action');
     signal.throwIfAborted();
     const p = action.params;
     switch (action.type) {

@@ -44,6 +44,7 @@ describe.skipIf(process.env.LEO_QA_BROWSER !== '1')('real isolated computer prov
     await provider.mouseDown(40, 40);
     await provider.mouseUp(40, 40);
     await provider.scroll(0, 100);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(100);
   });
   it('captures only the fixed viewport even on tall pages', async () => {
     const shot = await provider.screenshot();

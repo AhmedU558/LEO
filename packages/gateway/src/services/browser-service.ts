@@ -8,12 +8,13 @@
  */
 
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import type { Browser, Page, SerializedAXNode, BrowserContext } from 'puppeteer-core';
 import { hasPII, detectPII } from '@ownpilot/core/privacy';
 import { getLog, getConfigCenter } from '@ownpilot/core/services';
 import { isBlockedUrl, isPrivateUrlAsync } from '../utils/ssrf.js';
 import { PolicyEngine } from '@ownpilot/core/security';
-import type { ComputerSessionBinding } from '@ownpilot/core/computer';
+import type { ComputerSessionBinding, ComputerRedactionLayout } from '@ownpilot/core/computer';
 import {
   COMPUTER_VIEWPORT,
   COMPUTER_MAX_SCREENSHOT_BYTES,
@@ -692,6 +693,67 @@ export class BrowserService {
     const stored = this.computerBindings.get(binding.sessionId);
     if (stored && this.computerScope(stored) === this.computerScope(binding))
       await this.closePage(binding.sessionId);
+  }
+
+  /** Fixed CDP inspection; page text/attributes are hashed locally and never sent to the model. */
+  async computerRedactionLayout(binding: ComputerSessionBinding): Promise<ComputerRedactionLayout> {
+    if (!this.hasComputerSession(binding)) throw new Error('Invalid redaction session');
+    const page = this.sessions.get(binding.sessionId)!.page;
+    const cdp = await page.createCDPSession();
+    try {
+      const snapshot = await cdp.send('DOMSnapshot.captureSnapshot', {
+        computedStyles: [],
+        includeDOMRects: true,
+        includePaintOrder: true,
+      });
+      const doc = snapshot.documents[0];
+      const names = doc?.nodes.nodeName;
+      if (
+        !doc ||
+        !names ||
+        snapshot.documents.length !== 1 ||
+        names.length > 5000 ||
+        (doc.nodes.shadowRootType?.index.length ?? 0) > 0
+      )
+        throw new Error('Unsupported redaction layout');
+      const controls: ComputerRedactionLayout['controls'][number][] = [];
+      const strings = snapshot.strings;
+      for (let i = 0; i < doc.layout.nodeIndex.length; i++) {
+        const index = doc.layout.nodeIndex[i]!;
+        const tag = strings[names[index]!]!.toLowerCase();
+        if (!['input', 'textarea', 'select', 'button', 'a'].includes(tag)) continue;
+        const bounds = doc.layout.bounds[i]!;
+        const x = Math.max(0, bounds[0]! - (doc.scrollOffsetX ?? 0));
+        const y = Math.max(0, bounds[1]! - (doc.scrollOffsetY ?? 0));
+        const right = Math.min(1280, bounds[0]! - (doc.scrollOffsetX ?? 0) + bounds[2]!);
+        const bottom = Math.min(800, bounds[1]! - (doc.scrollOffsetY ?? 0) + bounds[3]!);
+        if (right <= x || bottom <= y) continue;
+        const attributes = (doc.nodes.attributes?.[index] ?? [])
+          .map((n) => strings[n] ?? '')
+          .join(' ');
+        const kind = /password/i.test(attributes)
+          ? 'Password'
+          : /secret|token|api[-_ ]?key|credential/i.test(attributes)
+            ? 'Secret'
+            : /auth|otp|one-time|username|email|login/i.test(attributes)
+              ? 'Authentication'
+              : tag === 'button'
+                ? 'Button'
+                : tag === 'a'
+                  ? 'Link'
+                  : tag === 'select'
+                    ? 'Select'
+                    : 'Field';
+        controls.push({ x, y, width: right - x, height: bottom - y, kind });
+      }
+      if (controls.length > 200) throw new Error('Redaction control limit');
+      return {
+        revision: createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'),
+        controls,
+      };
+    } finally {
+      await cdp.detach();
+    }
   }
 
   async initializeComputerSession(binding: ComputerSessionBinding): Promise<void> {

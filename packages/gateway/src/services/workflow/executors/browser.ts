@@ -1,6 +1,10 @@
 import type { WorkflowNode, NodeResult } from '../../../db/repositories/workflows/index.js';
 import { ComputerService } from '../../computer/service.js';
 import type { ComputerAction } from '@ownpilot/core/computer';
+import { OpenAIComputerActionProposer } from '@ownpilot/core/computer';
+import { runComputerVisionLoop } from '../../computer/vision-loop.js';
+import { StructuralScreenshotRedactor } from '../../computer/screenshot-redactor.js';
+import { getApiKey, resolveDefaultProviderAndModel } from '../../app-settings.js';
 import { resolveTemplates } from '../template-resolver.js';
 import { executionTaskContext, assertExecutionTaskActive } from '../../execution-task-context.js';
 import { ApprovalPauseError } from '../workflow-dispatch.js';
@@ -26,6 +30,35 @@ export async function executeBrowserNode(
   } = resolveTemplates(data, nodeOutputs, variables);
   const aliases: Record<string, string> = { back: 'navigate_back', forward: 'navigate_forward' };
   const type = aliases[String(action)] ?? String(action);
+  if (type === 'vision_loop') {
+    const apiKey = await getApiKey('openai');
+    const { model } = await resolveDefaultProviderAndModel(
+      'openai',
+      typeof params.model === 'string' ? params.model : 'default'
+    );
+    if (!apiKey || !model) throw new Error('Computer vision model is not configured');
+    const result = await runComputerVisionLoop({
+      iterations: typeof params.iterations === 'number' ? params.iterations : 1,
+      proposer: new OpenAIComputerActionProposer({ apiKey, model }),
+      redactor: new StructuralScreenshotRedactor(),
+    });
+    if (result.outcome === 'WAITING_APPROVAL' && result.approvalId) {
+      await createWorkflowsRepository(userId).updateLog(computerStepContext.getStore()!.runId, {
+        status: 'awaiting_approval',
+        nodeResults: nodeOutputs,
+      });
+      throw new ApprovalPauseError(result.approvalId);
+    }
+    return {
+      nodeId: node.id,
+      status: result.outcome === 'COMPLETED' ? 'success' : 'error',
+      output: result,
+      error: result.outcome === 'COMPLETED' ? undefined : `Computer vision ${result.outcome}`,
+      durationMs: Date.now() - startTime,
+      startedAt: new Date(startTime).toISOString(),
+      completedAt: new Date().toISOString(),
+    };
+  }
   if (params.amount !== undefined && params.pixels === undefined) params.pixels = params.amount;
   const result = await new ComputerService().executeAction({
     type: type as ComputerAction['type'],

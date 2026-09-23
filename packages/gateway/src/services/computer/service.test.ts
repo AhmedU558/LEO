@@ -459,6 +459,86 @@ describe('durable ComputerService security boundary', () => {
         expect(proposer.propose).not.toHaveBeenCalled();
       });
     });
+    it.each(['inference', 'approval'] as const)(
+      'rejects DOM revision changes during %s',
+      async (phase) => {
+        let revision = 'original';
+        provider.inspectForRedaction = vi.fn(async () => ({ revision, controls: [] }));
+        const original = await provider.screenshot();
+        vi.mocked(provider.screenshot).mockResolvedValue({
+          ...original,
+          layout: { revision, controls: [] },
+        });
+        await within(async () => {
+          const proposer = model();
+          if (phase === 'inference')
+            vi.mocked(proposer.propose).mockImplementation(async () => {
+              revision = 'changed';
+              return parseComputerProposal(
+                JSON.stringify({
+                  type: 'click',
+                  params: { x: 10, y: 20 },
+                  viewport: COMPUTER_VIEWPORT,
+                })
+              );
+            });
+          const result = await propose(proposer);
+          if (phase === 'inference') expect(result.outcome).toBe('DENIED');
+          else {
+            if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+            vi.spyOn(PolicyEngine.prototype, 'evaluate').mockReturnValue({
+              decision: 'REQUIRE_APPROVAL',
+            });
+            expect((await service.executeProposal(result.proposal)).outcome).toBe(
+              'WAITING_APPROVAL'
+            );
+            revision = 'changed';
+            expect(
+              (
+                await within(() => service.executeProposal(result.proposal), {
+                  approvalId: 'approval',
+                })
+              ).outcome
+            ).toBe('DENIED');
+          }
+          expect(provider.click).not.toHaveBeenCalled();
+        });
+      }
+    );
+    it('blocks other actions while inference owns the session', async () => {
+      await within(async () => {
+        const proposer = model();
+        vi.mocked(proposer.propose).mockImplementation(async () => {
+          expect((await service.executeAction(action('mouseMove', { x: 1, y: 1 }))).success).toBe(
+            false
+          );
+          return parseComputerProposal(
+            JSON.stringify({ type: 'click', params: { x: 10, y: 20 }, viewport: COMPUTER_VIEWPORT })
+          );
+        });
+        expect((await propose(proposer)).outcome).toBe('PROPOSED');
+        expect(provider.mouseMove).not.toHaveBeenCalled();
+      });
+    });
+    it('checks cancellation again after the final asynchronous freshness check', async () => {
+      let checks = 0;
+      const layout = { revision: 'original', controls: [] };
+      provider.inspectForRedaction = vi.fn(async () => {
+        if (++checks === 4) controller.abort();
+        return layout;
+      });
+      vi.mocked(provider.screenshot).mockResolvedValue({
+        ...(await provider.screenshot()),
+        layout,
+      });
+      await within(async () => {
+        const result = await propose();
+        if (result.outcome !== 'PROPOSED') throw new Error('Missing proposal');
+        expect((await service.executeProposal(result.proposal)).success).toBe(false);
+        expect(checks).toBe(4);
+        expect(provider.click).not.toHaveBeenCalled();
+      });
+    });
     it('keeps scope and audit references outside the model and maps capability in ComputerService', async () => {
       await within(async () => {
         const proposer = model();
