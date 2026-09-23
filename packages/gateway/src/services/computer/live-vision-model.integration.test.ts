@@ -331,34 +331,17 @@ describe.skipIf(!LIVE)('LIVE external vision model through the Phase 6.6 pipelin
   it('drives one real inference through redaction, authorization, Chrome and the ledger', async () => {
     const task = await start(1);
 
-    // Advance the durable worker until the loop completes, approving each
-    // durable approval exactly as a human operator would.
-    let approvals = 0;
-    for (let i = 0; i < 6; i++) {
-      await next();
-      const detail = await service().repo.detail(task.id);
-      if (detail.task.state !== 'WAITING_APPROVAL') break;
-      const approval = detail.approvals.find((a) => a.status === 'pending');
-      expect(approval).toBeDefined();
-      // Approval authority is per-workspace and must not be forgeable.
-      await expect(
-        new ExecutionTaskService(userId, 'other-workspace').approve(task.id, String(approval!.id))
-      ).rejects.toThrow();
-      await service().approve(task.id, String(approval!.id));
-      approvals++;
-    }
-
-    const finalState = (await service().repo.get(task.id))?.state;
-
-    // ---------------------------------------------------------------------
-    // G. An actual external request occurred.
-    // ---------------------------------------------------------------------
-    // A real model is not guaranteed to emit a conforming proposal. When it
-    // does not, the loop correctly refuses it and this test correctly fails —
-    // "a real model can drive the pipeline" would be false. Surface the raw
-    // content so that failure is diagnosable as model non-compliance rather
-    // than looking like a pipeline defect.
-    if (outbound.length) {
+    // A refused proposal cancels the task, after which ExecutionTaskService
+    // throws 'Execution task interrupted'. That aborts the loop below before
+    // any assertion runs, which would hide whether inference happened at all.
+    // Report the evidence from a finally block so a mid-loop abort is still
+    // diagnosable as model non-compliance rather than a pipeline defect.
+    const diagnose = async () => {
+      const state = (await service().repo.get(task.id))?.state;
+      if (!outbound.length) {
+        console.log(`[live-model] NO outbound request reached the provider. finalState=${state}`);
+        return state;
+      }
       const first = outbound[0]!;
       const raw = (() => {
         try {
@@ -371,9 +354,37 @@ describe.skipIf(!LIVE)('LIVE external vision model through the Phase 6.6 pipelin
       })();
       console.log(
         `[live-model] provider=${liveConfig.baseUrl} model=${liveConfig.model} ` +
-          `status=${first.status} finalState=${finalState} proposal=${raw ?? '<unparseable>'}`
+          `status=${first.status} finalState=${state} proposal=${raw ?? '<unparseable>'}`
       );
+      console.log(`[live-model] rawResponse=${first.responseText.slice(0, 1500)}`);
+      return state;
+    };
+
+    // Advance the durable worker until the loop completes, approving each
+    // durable approval exactly as a human operator would.
+    let approvals = 0;
+    let finalState: string | undefined;
+    try {
+      for (let i = 0; i < 6; i++) {
+        await next();
+        const detail = await service().repo.detail(task.id);
+        if (detail.task.state !== 'WAITING_APPROVAL') break;
+        const approval = detail.approvals.find((a) => a.status === 'pending');
+        expect(approval).toBeDefined();
+        // Approval authority is per-workspace and must not be forgeable.
+        await expect(
+          new ExecutionTaskService(userId, 'other-workspace').approve(task.id, String(approval!.id))
+        ).rejects.toThrow();
+        await service().approve(task.id, String(approval!.id));
+        approvals++;
+      }
+    } finally {
+      finalState = await diagnose();
     }
+
+    // ---------------------------------------------------------------------
+    // G. An actual external request occurred.
+    // ---------------------------------------------------------------------
     expect(outbound.length).toBeGreaterThanOrEqual(1);
     const call = outbound[0]!;
     expect(call.url.startsWith('https://')).toBe(true);
