@@ -40,9 +40,14 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
     const database = `leo_vision_${randomUUID().replaceAll('-', '')}`;
     let admin: pg.Pool;
     let clicked = false;
+    // Captured so a test can change the browser under the model, exercising the
+    // real 'Browser changed after proposal' guard instead of simulating it.
+    let seededBinding: { sessionId: string; userId: string } | undefined;
+    const seededPage = () =>
+      getBrowserService()['getOrCreatePage'](seededBinding!.sessionId, seededBinding!.userId);
     const tasks = new Set<string>();
     const service = () => new ExecutionTaskService('vision-user', 'default');
-    const start = async () => {
+    const start = async (iterations = 2) => {
       const workflow = await createWorkflowsRepository('vision-user').create({
         name: 'Synthetic vision',
         nodes: [
@@ -53,7 +58,7 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
             data: {
               action: 'vision_loop',
               model: 'fixture',
-              iterations: 2,
+              iterations,
               computerCapabilities: ['computer.read', 'computer.mouse'],
             },
           } as WorkflowNode,
@@ -100,12 +105,18 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
           await initialize.call(this, signal);
           if (!seeded.has(this)) {
             const binding = this['binding'];
+            seededBinding = { sessionId: binding.sessionId, userId: binding.userId };
             const page = await getBrowserService()['getOrCreatePage'](
               binding.sessionId,
               binding.userId
             );
             await page.setContent(
-              '<body style="background:#ff00ff"><button style="position:absolute;left:0;top:0;width:100px;height:60px" onclick="this.textContent=\'Clicked\'">Go</button><input type="password" value="SYNTHETIC-PASSWORD"><input name="api_token" value="SYNTHETIC-TOKEN"><input autocomplete="one-time-code" value="123456"><p>SYNTHETIC-FREE-TEXT-SECRET</p></body>'
+              // The click adds a second BUTTON. The redactor paints a white
+              // canvas and draws boxes only for recognized control kinds, so a
+              // relabelled fixed-size button — or any non-control element —
+              // leaves the next observation byte-identical and no test could
+              // tell a fresh capture from a replayed one.
+              `<body style="background:#ff00ff"><button style="position:absolute;left:0;top:0;width:100px;height:60px" onclick="this.textContent='Clicked';document.body.appendChild(Object.assign(document.createElement('button'),{textContent:'Next',style:'position:absolute;left:300px;top:400px;width:200px;height:80px'}))">Go</button><input type="password" value="SYNTHETIC-PASSWORD"><input name="api_token" value="SYNTHETIC-TOKEN"><input autocomplete="one-time-code" value="123456"><p>SYNTHETIC-FREE-TEXT-SECRET</p></body>`
             );
             seeded.add(this);
           }
@@ -198,6 +209,176 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
       );
       expect(JSON.stringify(entries)).not.toContain('SYNTHETIC');
     });
+
+    // -----------------------------------------------------------------------
+    // Phase 6.8: bounded multi-step tasks.
+    //
+    // The loop in vision-loop.ts already re-captures, re-redacts, re-infers and
+    // re-authorizes on every step; the two-iteration test above covers the happy
+    // path. What was untested is what happens when a multi-step task goes wrong
+    // PART WAY THROUGH, which is where "never replay an uncertain action" and
+    // "stop immediately" actually have to hold.
+    // -----------------------------------------------------------------------
+
+    /**
+     * Advance the worker once. Returns false when no job is left to claim,
+     * which is how a cancelled task presents. A stopped task also makes
+     * execute() throw 'Execution task interrupted' — the pipeline refusing to
+     * continue, not a test failure.
+     */
+    const advance = async () => {
+      const repo = new JobsRepository();
+      const job = await repo.claimJob('execution_tasks');
+      if (!job) return false;
+      try {
+        const result = await service().execute(job, new AbortController().signal);
+        await repo.complete(job.id, result, job.leaseToken!);
+      } catch (e) {
+        if (!/interrupted|not found/i.test(String(e))) throw e;
+      }
+      return true;
+    };
+
+    /** Drive the task, approving everything, until `done` or the budget runs out. */
+    const drive = async (taskId: string, done: () => boolean | Promise<boolean>) => {
+      for (let i = 0; i < 8; i++) {
+        if (!(await advance())) return;
+        if (await done()) return;
+        const detail = await service()
+          .repo.detail(taskId)
+          .catch(() => undefined);
+        if (detail?.task.state !== 'WAITING_APPROVAL') return;
+        const approval = detail.approvals.find((a) => a.status === 'pending');
+        if (!approval) return;
+        await service().approve(taskId, String(approval.id));
+      }
+    };
+
+    const successes = async (taskId: string) =>
+      await fixture.adapter.query<{ resource: string; action: string }>(
+        "SELECT resource,action FROM action_ledger WHERE execution_task_id=$1 AND tool=$2 AND result='SUCCESS'",
+        [taskId, 'computer_service']
+      );
+
+    it('feeds each step a fresh observation that reflects the previous action', async () => {
+      // Step 1 clicks the button, which rewrites its label and therefore its
+      // layout; step 2 must therefore see a different redacted observation.
+      fixture.model.mockReset();
+      fixture.model
+        .mockResolvedValueOnce({
+          type: 'click',
+          params: { x: 20, y: 20 },
+          viewport: COMPUTER_VIEWPORT,
+        })
+        .mockResolvedValueOnce({
+          type: 'mouseMove',
+          params: { x: 40, y: 40 },
+          viewport: COMPUTER_VIEWPORT,
+        });
+
+      const task = await start(2);
+      await drive(task.id, async () => (await service().repo.get(task.id))?.state === 'COMPLETED');
+
+      expect((await service().repo.get(task.id))?.state).toBe('COMPLETED');
+      expect(clicked).toBe(true);
+      expect(fixture.model).toHaveBeenCalledTimes(2);
+
+      const [first, second] = fixture.model.mock.calls.map(
+        ([request]) => request.observation.screenshot as string
+      );
+      // A genuinely fresh capture, not a cached one replayed at the model.
+      expect(second).not.toEqual(first);
+      const ids = new Set(
+        (await successes(task.id)).map((e) => JSON.parse(e.resource).observationId)
+      );
+      expect(ids.size).toBe(2);
+    });
+
+    it('stops at a mid-task model failure and keeps the completed step durable', async () => {
+      fixture.model.mockReset();
+      fixture.model
+        .mockResolvedValueOnce({
+          type: 'click',
+          params: { x: 20, y: 20 },
+          viewport: COMPUTER_VIEWPORT,
+        })
+        .mockRejectedValueOnce(new Error('model unavailable'));
+
+      const task = await start(2);
+      await drive(task.id, async () => {
+        const state = (await service().repo.get(task.id))?.state;
+        return state === 'COMPLETED' || state === 'CANCELLED' || state === 'FAILED';
+      });
+
+      // The first step really happened and stays recorded; it is not rolled back.
+      expect(clicked).toBe(true);
+      const done = await successes(task.id);
+      expect(done.length).toBeGreaterThanOrEqual(2);
+      // Step 2's capture may legitimately have happened before the model was
+      // asked; what must not exist is a step-2 ACTION.
+      const acted = done.filter((e) => e.action !== 'computer.screenshot');
+      expect(new Set(acted.map((e) => JSON.parse(e.resource).iteration))).toEqual(new Set([1]));
+
+      // The task stopped rather than completing, and step 2 was never executed.
+      expect((await service().repo.get(task.id))?.state).not.toBe('COMPLETED');
+      expect(fixture.model).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops mid-task on cancellation without dispatching the next action', async () => {
+      fixture.model.mockReset();
+      fixture.model
+        .mockResolvedValueOnce({
+          type: 'click',
+          params: { x: 20, y: 20 },
+          viewport: COMPUTER_VIEWPORT,
+        })
+        .mockResolvedValueOnce({
+          type: 'mouseMove',
+          params: { x: 40, y: 40 },
+          viewport: COMPUTER_VIEWPORT,
+        });
+
+      const task = await start(2);
+      await drive(task.id, () => clicked);
+      expect(clicked).toBe(true);
+
+      await service().cancel(task.id);
+      const modelCalls = fixture.model.mock.calls.length;
+      await advance();
+
+      expect((await service().repo.get(task.id))?.state).toBe('CANCELLED');
+      // Cancellation stops the loop; it does not spend another inference.
+      expect(fixture.model).toHaveBeenCalledTimes(modelCalls);
+      const iterations = new Set(
+        (await successes(task.id)).map((e) => JSON.parse(e.resource).iteration)
+      );
+      expect(iterations.has(1)).toBe(true);
+      expect(iterations.has(2)).toBe(false);
+    });
+
+    it('refuses a proposal whose observation went stale while the model was thinking', async () => {
+      fixture.model.mockReset();
+      fixture.model.mockImplementationOnce(async () => {
+        // The browser moves on after the observation was taken. The proposal is
+        // well-formed but describes a page that no longer exists.
+        const page = await seededPage();
+        await page.setContent('<body style="background:#00ff00"><p>Moved on</p></body>');
+        return { type: 'click', params: { x: 20, y: 20 }, viewport: COMPUTER_VIEWPORT };
+      });
+
+      const task = await start(2);
+      await drive(task.id, async () => {
+        const state = (await service().repo.get(task.id))?.state;
+        return state === 'CANCELLED' || state === 'FAILED' || state === 'COMPLETED';
+      });
+
+      // The stale proposal was refused, so the click never reached Chrome.
+      expect(clicked).toBe(false);
+      expect((await service().repo.get(task.id))?.state).not.toBe('COMPLETED');
+      const acted = (await successes(task.id)).filter((e) => e.action !== 'computer.screenshot');
+      expect(acted).toHaveLength(0);
+    });
+
     it('cancels pending capture approval without invoking the model', async () => {
       const task = await start();
       await next();

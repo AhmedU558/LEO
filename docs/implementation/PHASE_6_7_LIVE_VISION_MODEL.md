@@ -115,3 +115,100 @@ inference happened at all. The three failure classes are distinguishable:
   configuration.
 - 200 with a non-conforming body — genuine model incompatibility. Report it and
   try another model. **Do not loosen the parser to make a model pass.**
+
+---
+
+# Phase 6.8: bounded multi-step visual task execution
+
+## What already existed
+
+Most of this phase was already built in 6.6 and did not need rewriting. No
+second execution engine was added and nothing bypasses `ComputerService`.
+`runComputerVisionLoop` already:
+
+- iterates up to `options.iterations`, running capture -> redact -> infer ->
+  validate -> authorize -> execute on every step;
+- mints a new `observationId` per capture, so each action invalidates the
+  previous observation;
+- takes a durable approval per side-effecting action and resumes only the
+  original action;
+- stops on UNKNOWN, cancellation, timeout, stale observation, denial or model
+  failure, and finishes the durable operation as `unknown` rather than
+  replaying it;
+- enforces `VISION_LIMITS` (iterations, screenshots, model requests, actions,
+  duration);
+- refuses re-entry through a `busy` guard, so one session cannot run two
+  inferences or two actions concurrently.
+
+A two-iteration Chrome integration test already covered the happy path.
+
+## What this phase adds
+
+The gap was not the mechanism but the **failure paths**: what a multi-step task
+does when it goes wrong part way through, which is where "stop immediately" and
+"never replay an uncertain action" actually have to hold. Four integration
+tests were added to the existing Chrome + PostgreSQL harness:
+
+| Test                        | Proves                                                                                                                                    |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| fresh dependent observation | step 2's redacted observation differs from step 1's, so it is a real re-capture rather than a replayed cache                              |
+| mid-task model failure      | step 1 stays durable in the ledger and **no step-2 action** is dispatched                                                                 |
+| mid-task cancellation       | the loop stops, spends no further inference, and step 2 never acts                                                                        |
+| stale observation           | a well-formed proposal describing a page that moved on is refused by the `Browser changed after proposal` guard, and never reaches Chrome |
+
+## Findings
+
+**The redacted view only carries recognized controls.** The redactor paints a
+white canvas and draws boxes solely for `Button`, `Link`, `Field`, `Password`,
+`Secret`, `Authentication` and `Select`. A first attempt at the dependent-step
+test clicked a fixed-width button whose _label_ changed; the next observation
+was byte-identical. A dependent step can only perceive a previous action when
+that action changed the layout of a recognized control. Text, colour and
+non-control elements are invisible to the model. This bounds what "dependent
+multi-step task" can mean under the current disclosure policy.
+
+**A failed step still leaves its capture in the ledger.** Step N+1's screenshot
+legitimately succeeds before step N+1's inference fails, so ledger progress must
+be read by filtering on the action column, not by iteration alone. Only the
+absence of a non-screenshot action proves the step did not act.
+
+**The evidence recorder understated outbound traffic.** The Phase 6.7 recorder
+pushed a record only after `fetch` resolved, so a request aborted at
+`COMPUTER_MODEL_LIMITS.timeoutMs` was reported as "no outbound request" when one
+had in fact been sent and abandoned. It now records failed attempts with
+`status: 0`. This mattered immediately: the first live multi-step failures were
+misattributed until it was fixed.
+
+## Task progress and recovery
+
+Progress is durable and queryable: `action_ledger` records every effect with its
+iteration and observation id, and `idempotency_keys` records a claim per effect.
+The mid-task failure test asserts that completed steps survive a later failure.
+
+Cross-process resumption is deliberately **not** supported, and this is a design
+position rather than an omission. The browser session is an in-process Chrome
+binding; `service.ts` already refuses to continue when it is gone
+(`Computer session lost after restart`), and effect claims are single-use
+(`Computer operation already claimed; replay prohibited`). Resuming a visual
+task in a fresh process would mean acting on a UI whose state was never
+observed. The loop therefore fails closed as UNKNOWN instead, which is what
+"never replay an uncertain action" requires. Making this genuinely resumable
+would need an out-of-process session registry — a larger change that should be
+decided explicitly, not smuggled in here.
+
+## Live multi-step: UNVERIFIED
+
+The gated live suite gained a two-step test. It has **not** passed against a
+real provider. Free-tier behaviour observed across five attempts:
+
+| Model                                  | Result                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `nex-agi/nex-n2.5-pro:free`            | schema-compliant content, but 15-25s per call; exceeded the 30s model limit on two attempts |
+| `dots-studio/dots-3-note-preview:free` | HTTP 200 with **no message content**, so nothing to parse                                   |
+| `google/gemma-4-31b-it:free`           | HTTP 429, shared upstream pool                                                              |
+
+Single-step live inference remains verified (Phase 6.7, re-confirmed this
+phase). Two sequential inferences inside one bounded task double the exposure to
+free-tier latency, and `COMPUTER_MODEL_LIMITS.timeoutMs` was **not** raised and
+the parser was **not** relaxed to make the test pass. A paid provider key would
+most likely close this; that is a configuration decision, not a code change.

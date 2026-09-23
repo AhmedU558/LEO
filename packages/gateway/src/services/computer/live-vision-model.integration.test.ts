@@ -139,16 +139,35 @@ function recordFetch(sink: OutboundRequest[]): () => void {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const isModelCall = url.includes('/chat/completions');
-    const response = await real(input as RequestInfo, init);
+    const auth = () => {
+      const headers = new Headers(init?.headers ?? {});
+      return headers.has('authorization') || headers.has('Authorization');
+    };
+    let response: Response;
+    try {
+      response = await real(input as RequestInfo, init);
+    } catch (e) {
+      // An aborted or failed request IS an attempt. Recording only completed
+      // responses made a timed-out inference look like no request at all,
+      // which is the opposite of what this recorder exists to show.
+      if (isModelCall)
+        sink.push({
+          url,
+          hadAuthorization: auth(),
+          body: typeof init?.body === 'string' ? init.body : '',
+          status: 0,
+          responseText: `<no response: ${e instanceof Error ? e.name : 'error'}>`,
+        });
+      throw e;
+    }
     if (!isModelCall) return response;
     // Buffer the body so it can be read twice: once for evidence, once by the
     // provider. Cloning keeps the provider's streaming read intact.
     const clone = response.clone();
     const responseText = await clone.text().catch(() => '');
-    const headers = new Headers(init?.headers ?? {});
     sink.push({
       url,
-      hadAuthorization: headers.has('authorization') || headers.has('Authorization'),
+      hadAuthorization: auth(),
       body: typeof init?.body === 'string' ? init.body : '',
       status: response.status,
       responseText,
@@ -488,6 +507,89 @@ describe.skipIf(!LIVE)('LIVE external vision model through the Phase 6.6 pipelin
     expect(successful.map((e) => e.capability)).toContain(expectedCapability);
     // The ledger must not have absorbed page secrets either.
     expect(JSON.stringify(entries)).not.toContain('SYNTHETIC');
+  }, 300_000);
+
+  it('drives a two-step live task with a fresh observation and inference per step', async () => {
+    // Phase 6.8: the same real model, asked twice, across two fresh
+    // observations. Each step re-captures, re-redacts, re-infers and
+    // re-authorizes; nothing is carried over from the previous step.
+    const requestsBefore = outbound.length;
+    const shotsBefore = redactedScreenshots.length;
+    const task = await start(2);
+
+    try {
+      for (let i = 0; i < 10; i++) {
+        await next();
+        const detail = await service().repo.detail(task.id);
+        if (detail.task.state !== 'WAITING_APPROVAL') break;
+        const approval = detail.approvals.find((a) => a.status === 'pending');
+        expect(approval).toBeDefined();
+        await service().approve(task.id, String(approval!.id));
+      }
+    } finally {
+      const calls = outbound.slice(requestsBefore);
+      console.log(
+        `[live-model] multi-step requests=${calls.length} ` +
+          `statuses=${calls.map((c) => c.status).join(',')} ` +
+          `finalState=${(await service().repo.get(task.id))?.state}`
+      );
+      // Two 200s and a failed task means the second STEP was refused, not the
+      // provider. Say which response the parser rejected, and why, so this is
+      // attributable to the model rather than to the pipeline.
+      const { parseComputerProposal } = await import('@ownpilot/core/computer');
+      calls.forEach((call, i) => {
+        const content = (() => {
+          try {
+            return (
+              JSON.parse(call.responseText) as { choices?: { message?: { content?: string } }[] }
+            ).choices?.[0]?.message?.content;
+          } catch {
+            return undefined;
+          }
+        })();
+        let verdict = 'no content';
+        if (typeof content === 'string') {
+          try {
+            parseComputerProposal(content);
+            verdict = 'PARSE_OK';
+          } catch (e) {
+            verdict = `PARSE_FAIL ${e instanceof Error ? e.message : String(e)}`;
+          }
+        }
+        console.log(`[live-model] step ${i + 1}: ${verdict} content=${content ?? '<none>'}`);
+      });
+    }
+
+    expect((await service().repo.get(task.id))?.state).toBe('COMPLETED');
+
+    // Two real inferences, each carrying its own freshly redacted observation.
+    const calls = outbound.slice(requestsBefore);
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    for (const call of calls) expect(call.status).toBe(200);
+
+    const shots = redactedScreenshots.slice(shotsBefore);
+    expect(shots.length).toBeGreaterThanOrEqual(2);
+    const sentImages = calls.map((call) => {
+      const body = JSON.parse(call.body) as { messages: { content: unknown }[] };
+      const parts = body.messages.flatMap((m) => (Array.isArray(m.content) ? m.content : []));
+      const image = parts.find(
+        (part): part is { image_url: { url: string } } =>
+          typeof part === 'object' && part !== null && 'image_url' in part
+      );
+      return image!.image_url.url.slice('data:image/png;base64,'.length);
+    });
+    // Every step's model input was a trusted redactor output, not a replay of
+    // the first capture held in memory.
+    for (const sent of sentImages) expect(shots).toContain(sent);
+
+    // The ledger records both steps under distinct observation identities.
+    const rows = await fixture.adapter.query<{ resource: string; action: string }>(
+      "SELECT resource,action FROM action_ledger WHERE execution_task_id=$1 AND tool=$2 AND result='SUCCESS'",
+      [task.id, 'computer_service']
+    );
+    const acted = rows.filter((r) => r.action !== 'computer.screenshot');
+    expect(new Set(acted.map((r) => JSON.parse(r.resource).iteration)).size).toBe(2);
+    expect(new Set(rows.map((r) => JSON.parse(r.resource).observationId)).size).toBe(2);
   }, 300_000);
 
   it('cancels a live task without leaving the external request unbounded', async () => {
