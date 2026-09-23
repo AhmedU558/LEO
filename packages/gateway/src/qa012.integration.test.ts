@@ -6,11 +6,14 @@ import { closeAdapter, initializeAdapter } from './db/adapters/index.js';
 
 const url = process.env.LEO_QA_POSTGRES_URL;
 
-describe('QA-012/QA-013 Integration: Approval Integrity and Liveness', () => {
+// Skipped, not failed, without a database. Every other integration suite in
+// this repository gates the same way, and the deterministic suite has to run
+// without external services — throwing here made a credential-free run report
+// a failed suite even though all of its tests were skipped.
+describe.skipIf(!url)('QA-012/QA-013 Integration: Approval Integrity and Liveness', () => {
   const database = `leo_qa012_${randomUUID().replaceAll('-', '')}`;
   let admin: pg.Pool | undefined;
   beforeAll(async () => {
-    if (!url) throw new Error('LEO_QA_POSTGRES_URL is required for the approval integration tests');
     admin = new pg.Pool({ connectionString: url });
     await admin.query(`CREATE DATABASE "${database}"`);
     const testUrl = new URL(url);
