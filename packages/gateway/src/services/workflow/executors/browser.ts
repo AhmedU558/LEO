@@ -43,6 +43,9 @@ export async function executeBrowserNode(
     const baseUrl = getAggregatorProvider(provider)?.apiBase;
     const result = await runComputerVisionLoop({
       iterations: typeof params.iterations === 'number' ? params.iterations : 1,
+      // The workflow author's goal for this node. It reaches the model as
+      // delimited untrusted data and is never read back out of the page.
+      ...(typeof params.objective === 'string' ? { objective: params.objective } : {}),
       proposer: new OpenAIComputerActionProposer({ apiKey, model, baseUrl, provider }),
       redactor: new StructuralScreenshotRedactor(),
     });

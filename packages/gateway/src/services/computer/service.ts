@@ -19,6 +19,7 @@ import {
   validateComputerPoint,
   parseComputerProposal,
   validateComputerObservation,
+  validateComputerObjective,
   COMPUTER_MODEL_LIMITS,
 } from '@ownpilot/core/computer';
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
@@ -231,7 +232,13 @@ export class ComputerService {
       | ((
           image: { screenshot: string; viewport: typeof COMPUTER_VIEWPORT },
           signal: AbortSignal
-        ) => Promise<ComputerModelObservation>)
+        ) => Promise<ComputerModelObservation>),
+    /**
+     * The trusted caller's task goal. Supplied as an explicit argument by the
+     * loop that owns the task, never read out of the ambient context and never
+     * derived from the page.
+     */
+    objective?: string
   ): Promise<
     { outcome: 'PROPOSED'; proposal: BoundComputerProposal } | { outcome: 'DENIED'; error: string }
   > {
@@ -290,6 +297,7 @@ export class ComputerService {
               untrusted: true,
               disclosure: 'redacted',
             },
+            ...(objective !== undefined ? { objective: validateComputerObjective(objective) } : {}),
             signal: signal!,
           });
           signal!.throwIfAborted();

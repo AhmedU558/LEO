@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
+import { validateComputerObjective } from '@ownpilot/core/computer';
 import type {
   ComputerActionProposer,
   ScreenshotRedactor,
@@ -58,6 +59,13 @@ export async function runComputerVisionLoop(
     iterations: number;
     proposer: ComputerActionProposer;
     redactor: ScreenshotRedactor;
+    /**
+     * The trusted caller's task goal, which makes the loop goal-directed
+     * instead of merely asking for some next action. It is folded into the
+     * fingerprint below, so a task that pauses for approval cannot resume
+     * under a different goal.
+     */
+    objective?: string;
     limits?: Partial<Limits>;
   },
   service = new ComputerService()
@@ -75,6 +83,13 @@ export async function runComputerVisionLoop(
   const repo = new ExecutionTasksRepository(ctx.userId, ctx.workspaceId);
   const key = JSON.stringify([ctx.userId, ctx.workspaceId, ctx.taskId, step.runId, step.nodeId]);
   const limits: Limits = { ...VISION_LIMITS, ...options.limits };
+  // Reject a malformed goal before spending a capture on it.
+  let objective: string | undefined;
+  try {
+    if (options.objective !== undefined) objective = validateComputerObjective(options.objective);
+  } catch {
+    return failed('FAILED');
+  }
   if (
     !Number.isSafeInteger(options.iterations) ||
     options.iterations < 1 ||
@@ -85,7 +100,9 @@ export async function runComputerVisionLoop(
   )
     return failed('LIMIT_REACHED');
   const fingerprint = createHash('sha256')
-    .update(JSON.stringify({ iterations: options.iterations, limits }))
+    .update(
+      JSON.stringify({ iterations: options.iterations, limits, objective: objective ?? null })
+    )
     .digest('hex');
   let state = states.get(key);
   if (state?.busy) return failed('FAILED');
@@ -235,7 +252,7 @@ export async function runComputerVisionLoop(
               observationId: current.result.observationId,
             };
             const proposal = await computerStepContext.run(proposalStep, () =>
-              service.proposeAction(current.capture!, options.proposer, options.redactor)
+              service.proposeAction(current.capture!, options.proposer, options.redactor, objective)
             );
             current.capture = undefined;
             current.nextEffect = proposalStep.effectIndex;

@@ -187,8 +187,47 @@ export interface ComputerModelObservation {
   readonly disclosure: 'redacted';
 }
 
+/** Longest trusted task objective. Enough to state one goal, never a document. */
+export const COMPUTER_OBJECTIVE_MAX_CHARS = 200;
+
+/** Prose only: no braces, brackets, angles, backticks, slashes, pipes or equals. */
+const OBJECTIVE_SHAPE = /^[\p{L}\p{N} .,:;!?'"()-]+$/u;
+
+/**
+ * Validate a trusted caller's task goal, and return it normalised.
+ *
+ * The objective comes from the workflow author, never from the page — there is
+ * no path by which observed content can become one. It is nevertheless treated
+ * as untrusted DATA at the model boundary: capped, collapsed to a single
+ * printable line, and restricted to prose characters. Braces, angle brackets,
+ * backticks, slashes, pipes and equals are refused, so an objective cannot
+ * carry JSON, markup, a path, a URL or a command shape.
+ *
+ * The filter is a hardening measure, not the security boundary. Prose cannot be
+ * reliably screened for instruction-like content, so nothing here assumes it
+ * can be. The actual guarantee is structural and sits downstream: whatever the
+ * objective persuades the model to say, the reply must still satisfy the exact
+ * proposal schema, and the capability, policy, risk and approval decisions are
+ * all taken server-side afterwards from the parsed action alone.
+ */
+export function validateComputerObjective(raw: unknown): string {
+  if (typeof raw !== 'string') throw new Error('Invalid computer objective');
+  const text = raw.replace(/\s+/g, ' ').trim();
+  if (!text || text.length > COMPUTER_OBJECTIVE_MAX_CHARS)
+    throw new Error('Invalid computer objective');
+  if (!OBJECTIVE_SHAPE.test(text)) throw new Error('Invalid computer objective');
+  return text;
+}
+
 export interface ComputerModelRequest {
   readonly observation: ComputerModelObservation;
+  /**
+   * The trusted caller's task goal, already through
+   * {@link validateComputerObjective}. Absent means the proposer asks only for
+   * a next action against the observation, exactly as before this channel
+   * existed.
+   */
+  readonly objective?: string;
   readonly signal: AbortSignal;
 }
 

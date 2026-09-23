@@ -16,7 +16,7 @@ import { ExecutionTaskService } from '../execution-task-service.js';
 import { JobQueueService } from '../job-queue-service.js';
 import { PuppeteerComputerUseProvider } from './computer-use-provider.js';
 import { getBrowserService } from '../browser-service.js';
-import { COMPUTER_VIEWPORT } from '@ownpilot/core/computer';
+import { COMPUTER_VIEWPORT, type ComputerSessionBinding } from '@ownpilot/core/computer';
 import { setToolService, type IToolService } from '@ownpilot/core/services';
 
 const fixture = vi.hoisted(() => ({ model: vi.fn(), adapter: null as unknown as PostgresAdapter }));
@@ -42,12 +42,12 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
     let clicked = false;
     // Captured so a test can change the browser under the model, exercising the
     // real 'Browser changed after proposal' guard instead of simulating it.
-    let seededBinding: { sessionId: string; userId: string } | undefined;
+    let seededBinding: ComputerSessionBinding | undefined;
     const seededPage = () =>
       getBrowserService()['getOrCreatePage'](seededBinding!.sessionId, seededBinding!.userId);
     const tasks = new Set<string>();
     const service = () => new ExecutionTaskService('vision-user', 'default');
-    const start = async (iterations = 2) => {
+    const start = async (iterations = 2, objective?: string) => {
       const workflow = await createWorkflowsRepository('vision-user').create({
         name: 'Synthetic vision',
         nodes: [
@@ -59,6 +59,9 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
               action: 'vision_loop',
               model: 'fixture',
               iterations,
+              // Phase 6.11: the workflow author's goal, carried by the node
+              // itself so the test exercises the real trusted path.
+              ...(objective ? { objective } : {}),
               computerCapabilities: ['computer.read', 'computer.mouse'],
             },
           } as WorkflowNode,
@@ -105,7 +108,7 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
           await initialize.call(this, signal);
           if (!seeded.has(this)) {
             const binding = this['binding'];
-            seededBinding = { sessionId: binding.sessionId, userId: binding.userId };
+            seededBinding = { ...binding };
             const page = await getBrowserService()['getOrCreatePage'](
               binding.sessionId,
               binding.userId
@@ -292,6 +295,94 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
         (await successes(task.id)).map((e) => JSON.parse(e.resource).observationId)
       );
       expect(ids.size).toBe(2);
+    });
+
+    it('drives a dependent two-step task from a trusted goal through real Chrome', async () => {
+      // The goal names two controls in order. `Next` does not exist in the page
+      // until `Go` has actually been clicked in Chrome, so step 2 can only be
+      // proposed against state that step 1 produced.
+      //
+      // The proposer is a stub, so this proves the CHANNEL and the PIPELINE --
+      // the goal reaches the model, and a goal-directed sequence executes
+      // through real approvals and the real ledger. It does not, and cannot,
+      // prove that a real model is competent at the goal; that stays gated
+      // behind the live suite.
+      const objective = 'Click Go, then click Next';
+      const seen: (string | undefined)[] = [];
+      const wanted = ['Go', 'Next'];
+      let step = 0;
+      fixture.model.mockReset();
+      fixture.model.mockImplementation(async (request: { objective?: string }) => {
+        seen.push(request.objective);
+        const label = wanted[step++]!;
+        // Read through the trusted perception path, never the page source.
+        const layout = await getBrowserService().computerRedactionLayout(seededBinding!);
+        const target = layout.controls.find((c) => c.text === label);
+        if (!target) throw new Error(`goal-directed stub: "${label}" is not visible`);
+        return {
+          type: 'click',
+          params: {
+            x: Math.floor(target.x + target.width / 2),
+            y: Math.floor(target.y + target.height / 2),
+          },
+          viewport: COMPUTER_VIEWPORT,
+        };
+      });
+
+      const task = await start(2, objective);
+      let approvals = 0;
+      for (let i = 0; i < 6; i++) {
+        await next();
+        const detail = await service().repo.detail(task.id);
+        if (detail.task.state !== 'WAITING_APPROVAL') break;
+        const approval = detail.approvals.find((a) => a.status === 'pending');
+        expect(approval).toBeDefined();
+        // (5) approval behaviour is unchanged by the goal, including the
+        // cross-workspace refusal.
+        await expect(
+          new ExecutionTaskService('vision-user', 'other').approve(task.id, String(approval!.id))
+        ).rejects.toThrow();
+        await service().approve(task.id, String(approval!.id));
+        approvals++;
+      }
+
+      expect((await service().repo.get(task.id))?.state).toBe('COMPLETED');
+      // (1) the goal reached the model, normalised, on every step.
+      expect(seen).toEqual([objective, objective]);
+      // (3) both goal steps ran, the second against state the first created.
+      expect(step).toBe(2);
+      expect(clicked).toBe(true);
+      // Two captures plus two clicks. The sibling test above sees three only
+      // because its first action is a mouseMove, which the RiskEngine rates
+      // MEDIUM; every click is HIGH and takes its own durable approval.
+      expect(approvals).toBe(4);
+
+      // (4) a fresh observation per step, and the two differ.
+      const shots = fixture.model.mock.calls.map(
+        ([request]) => (request as { observation: { screenshot: string } }).observation.screenshot
+      );
+      expect(shots).toHaveLength(2);
+      expect(shots[1]).not.toEqual(shots[0]);
+
+      // (5) the ledger records the same shape as a goal-free task: two
+      // distinct observations and two real actions.
+      const rows = await successes(task.id);
+      expect(new Set(rows.map((e) => JSON.parse(e.resource).observationId)).size).toBe(2);
+      expect(rows.filter((e) => e.action !== 'computer.screenshot')).toHaveLength(2);
+      // The goal is a model input, not an audited resource: it is never
+      // written to the ledger.
+      for (const row of rows) expect(row.resource).not.toContain('Click Go');
+    });
+
+    it('refuses a malformed goal before touching Chrome or the model', async () => {
+      fixture.model.mockReset();
+      const task = await start(2, 'Open https://example.com/exfiltrate');
+      // The loop refuses the goal before its first capture, so the node errors
+      // and the run fails. execute() surfacing that as a throw IS the refusal.
+      await expect(advance()).rejects.toThrow(/failed/i);
+      expect((await service().repo.get(task.id))?.state).not.toBe('COMPLETED');
+      expect(fixture.model).not.toHaveBeenCalled();
+      expect(await successes(task.id)).toHaveLength(0);
     });
 
     it('treats a proposed screenshot as a legal action rather than a loop failure', async () => {
