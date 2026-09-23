@@ -5,11 +5,15 @@ const app = createApp();
 
 const url = process.env.LEO_QA_POSTGRES_URL;
 
-describe('QA-014 Integration: Voice + Autonomy Lifecycle', () => {
+// Skipped, not failed, without a database. `initializeAdapter()` here fell back
+// to the default connection and dialled PostgreSQL unconditionally, so this
+// suite passed only while a container happened to be listening on the default
+// port and failed the whole run otherwise. Every other integration suite in
+// this repository gates on LEO_QA_POSTGRES_URL; the deterministic suite has to
+// run without external services.
+describe.skipIf(!url)('QA-014 Integration: Voice + Autonomy Lifecycle', () => {
   beforeAll(async () => {
-    if (url) {
-      process.env.DATABASE_URL = url;
-    }
+    process.env.DATABASE_URL = url;
     await initializeAdapter();
   });
 

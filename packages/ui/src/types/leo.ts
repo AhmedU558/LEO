@@ -196,3 +196,72 @@ export interface UsageStats {
   totalTokens: number;
   activeAgents: number;
 }
+
+// ---------------------------------------------------------------------------
+// Durable execution tasks
+// ---------------------------------------------------------------------------
+// Mirrors `packages/core/src/services/execution-task.ts`.
+
+export type ExecutionTaskState =
+  | 'CREATED'
+  | 'PLANNING'
+  | 'READY'
+  | 'WAITING_APPROVAL'
+  | 'RUNNING'
+  | 'VERIFYING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'RETRYING'
+  | 'PAUSED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+
+export interface ExecutionTask {
+  id: string;
+  userId: string;
+  workspaceId: string;
+  workflowId: string;
+  workflowRunId: string | null;
+  state: ExecutionTaskState;
+  version: number;
+  requestKey: string;
+  requestHash: string;
+  inputs: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  outcome: 'UNKNOWN' | 'SUCCESS' | 'FAILURE' | 'CANCELLED' | null;
+  jobId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Social publishing campaigns
+// ---------------------------------------------------------------------------
+// Mirrors `packages/core/src/social/models.ts`.
+
+export type CampaignStatus =
+  | 'READY'
+  | 'QUEUED'
+  | 'WAITING_APPROVAL'
+  | 'PUBLISHING'
+  | 'PUBLISHED'
+  | 'PARTIAL'
+  | 'FAILED'
+  | 'UNKNOWN'
+  | 'CANCELLED'
+  | 'NEEDS_RECONCILIATION';
+
+export interface PublishingCampaign {
+  id: string;
+  userId: string;
+  workspaceId: string;
+  contentItemId: string;
+  executionTaskId?: string;
+  status: CampaignStatus;
+  scheduledFor?: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}

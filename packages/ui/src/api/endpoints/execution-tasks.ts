@@ -1,5 +1,5 @@
 import { apiClient } from '../client';
-import type { ExecutionTask } from '@ownpilot/core/services';
+import type { ExecutionTask } from '../../types/leo';
 export type { ExecutionTask };
 export interface ExecutionTaskDetail {
   task: ExecutionTask;

@@ -1,7 +1,31 @@
+import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
+import { Share2 } from 'lucide-react';
+import { useToast } from '../components/ToastProvider';
+import { useAuth } from '../hooks/useAuth';
+import type { PublishingCampaign, SocialAccount } from '../types/leo';
+
+/**
+ * Local card shell. This page was committed referencing `PageContainer` and
+ * `Card`, neither of which exists in this codebase, so it never compiled. The
+ * surrounding pages hand-roll their shell markup; this keeps that convention
+ * without adding a component library for one page.
+ */
+function Card({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-xl border border-border dark:border-dark-border bg-bg-secondary dark:bg-dark-bg-secondary p-4">
+      <h3 className="text-sm font-semibold text-text-primary dark:text-dark-text-primary mb-4">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
 export const SocialPage = () => {
-  const { session } = useAuth();
-  const [accounts, setAccounts] = useState<unknown[]>([]);
-  const [campaigns, setCampaigns] = useState<unknown[]>([]);
+  const { isAuthenticated } = useAuth();
+  const toast = useToast();
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [campaigns, setCampaigns] = useState<PublishingCampaign[]>([]);
 
   const [draftTitle, setDraftTitle] = useState('');
   const [draftText, setDraftText] = useState('');
@@ -14,14 +38,14 @@ export const SocialPage = () => {
   useEffect(() => {
     fetchAccounts();
     fetchCampaigns();
-  }, [session]);
+  }, [isAuthenticated]);
 
   const fetchAccounts = async () => {
     try {
       const res = await fetch('/api/v1/social/accounts');
       const data = await res.json();
       setAccounts(data.data || []);
-    } catch {
+    } catch (e) {
       console.error(e);
     }
   };
@@ -31,12 +55,12 @@ export const SocialPage = () => {
       const res = await fetch('/api/v1/social/campaigns');
       const data = await res.json();
       setCampaigns(data.data || []);
-    } catch {
+    } catch (e) {
       console.error(e);
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -162,7 +186,11 @@ export const SocialPage = () => {
   };
 
   return (
-    <PageContainer title="Social Publishing">
+    <div className="flex flex-col h-full overflow-y-auto bg-bg-primary dark:bg-dark-bg-primary text-text-primary dark:text-dark-text-primary p-6">
+      <header className="flex items-center gap-3 mb-6">
+        <Share2 className="w-5 h-5 text-accent" />
+        <h2 className="text-lg font-semibold">Social Publishing</h2>
+      </header>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <Card title="Connected Accounts">
@@ -350,6 +378,6 @@ export const SocialPage = () => {
           </Card>
         </div>
       </div>
-    </PageContainer>
+    </div>
   );
 };

@@ -118,6 +118,37 @@ No control was weakened. Verified against source during this phase:
 - UNKNOWN outcomes finish the durable operation as `unknown` and cancel the task;
   they are never automatically replayed.
 
+## Pre-existing breakage repaired alongside this phase
+
+The Phase 6.7 report flagged three failures that predate this phase and were not
+caused by it. They are fixed here rather than left as a footnote, because
+`tsc -b` and `vite build` were both red on `leo-next` and a phase cannot be
+verified against a package that does not compile.
+
+1. `packages/ui/src/pages/SocialPage.tsx` was committed in `90a47d0d` with **no
+   import statements at all**, and referencing `PageContainer` and `Card`, which
+   do not exist anywhere in this repository. It had never compiled. It also
+   called `useAuth().session`, which that hook does not return, and had two
+   `catch { console.error(e) }` blocks with no binding for `e`. Repaired: real
+   imports, the page shell hand-rolled the way the sibling pages do, a local
+   `Card` helper, `isAuthenticated` for the effect dependency, and bound catch
+   clauses. A colocated smoke test was added per the repository's "a page
+   touched is a page tested" convention.
+2. `packages/ui/src/api/endpoints/execution-tasks.ts` imported `ExecutionTask`
+   from `@ownpilot/core/services`. `@ownpilot/core` is a Node package and is not
+   a dependency of the browser bundle. This is the sixth instance of the mistake
+   `src/types/leo.ts` already exists to prevent, so the type was mirrored there
+   like the other five.
+3. `vite build` failed in `vite-plugin-pwa` / `workbox-build` with
+   `Requires Babel "^7.0.0-0", but was loaded with "8.0.6"`. Root cause was the
+   root `pnpm.overrides` entry `"@babel/core": ">=7.29.6"` — unbounded, so it
+   pulled every consumer onto Babel 8, including `workbox-build@7.4.1`, which
+   declares `^7.24.4`. Every package resolving against core 8.0.6 was itself a
+   Babel **7.x** plugin, so nothing wanted Babel 8. Bounded to
+   `">=7.29.6 <8.0.0"`, which keeps the security floor the override exists for
+   and resolves workbox to 7.29.7. The lockfile change is confined to the Babel
+   subtree.
+
 ## Remaining work to close Phase 6.7
 
 Run the live test with real credentials:
