@@ -274,6 +274,165 @@ voiceRoutes.post('/synthesize', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: getErrorMessage(err) }, 500);
   }
 });
+
+// =============================================================================
+// POST /command
+// =============================================================================
+
+import { parseVoiceCommandIntent } from '../services/voice/voice-command-parser.js';
+import { getWorkflowService } from '../services/workflow/workflow-service.js';
+import { createWorkflowsRepository } from '../db/repositories/workflows/index.js';
+import { RiskEngine, PolicyEngine } from '@ownpilot/core/security';
+import { generateId } from '@ownpilot/core/services';
+import { ignoreError } from '@ownpilot/core/utils';
+
+const voiceCommandPolicyEngine = new PolicyEngine();
+const voiceCommandRiskEngine = new RiskEngine();
+
+voiceRoutes.post('/command', async (c) => {
+  try {
+    const userId = getUserId(c);
+    const workspaceId = getWorkspaceId(c);
+    if (userId === 'default' && !c.get('sessionAuthenticated')) {
+      return apiError(
+        c,
+        { code: ERROR_CODES.UNAUTHORIZED, message: 'Authentication required' },
+        401
+      );
+    }
+
+    const service = getVoiceService();
+    if (!(await service.isAvailable())) {
+      return apiError(
+        c,
+        { code: ERROR_CODES.INTERNAL_ERROR, message: 'Voice service not configured' },
+        503
+      );
+    }
+
+    const body = await c.req.parseBody();
+    const confirmedText = body['confirmedText'] as string;
+    let text = confirmedText;
+
+    if (!text) {
+      const file = body['file'];
+      if (!file || typeof file === 'string') {
+        return apiError(
+          c,
+          {
+            code: ERROR_CODES.VALIDATION_ERROR,
+            message: 'Audio file or confirmedText is required',
+          },
+          400
+        );
+      }
+      const arrayBuffer = await (file as File).arrayBuffer();
+      const audioBuffer = Buffer.from(arrayBuffer);
+      const filename = (file as File).name || 'audio.webm';
+      const result = await service.transcribe(audioBuffer, filename);
+      text = result.text;
+    }
+
+    const parsed = await parseVoiceCommandIntent(text);
+
+    if (parsed.intent === 'AMBIGUOUS') {
+      return apiResponse(c, {
+        status: 'confirmation_required',
+        reason: 'ambiguous',
+        text,
+        message: parsed.reason,
+      });
+    }
+
+    if (parsed.intent === 'CANCEL_TASK') {
+      // Find active workflows and cancel them
+      const repo = createWorkflowsRepository(userId);
+      const runningLogs = await repo.listRunningLogs();
+      const wfService = getWorkflowService();
+      let canceledCount = 0;
+      for (const log of runningLogs) {
+        const fullLog = await repo.getLog(log.id);
+        if (fullLog && fullLog.workflowId && wfService.isRunning(fullLog.workflowId)) {
+          wfService.cancelExecution(fullLog.workflowId);
+          canceledCount++;
+        }
+      }
+      return apiResponse(c, {
+        status: 'cancelled',
+        message: `Cancelled ${canceledCount} running task(s)`,
+      });
+    }
+
+    if (parsed.intent === 'INITIATE_TASK') {
+      const risk = voiceCommandRiskEngine.classify('computer.control', 'vision_loop');
+
+      // Require confirmation if high risk
+      if ((risk === 'HIGH' || risk === 'CRITICAL') && !confirmedText) {
+        return apiResponse(c, {
+          status: 'confirmation_required',
+          reason: 'high_risk',
+          text,
+          objective: parsed.objective,
+        });
+      }
+
+      const policyResult = voiceCommandPolicyEngine.evaluate({
+        identity: { userId, workspaceId, roles: ['user'] },
+        action: 'voice.command',
+        resource: 'computer',
+        capability: 'computer.control',
+        risk,
+        environment: 'production',
+        autonomous: false,
+        requestedParameters: { objective: parsed.objective },
+      });
+
+      if (policyResult.decision === 'DENY') {
+        return apiError(
+          c,
+          { code: ERROR_CODES.ACCESS_DENIED, message: 'Voice command denied by policy' },
+          403
+        );
+      }
+
+      // We proceed even if REQUIRE_APPROVAL because the browser node will pause execution!
+      const repo = createWorkflowsRepository(userId);
+      const workflow = await repo.create({
+        name: `Voice Command`,
+        description: `Voice Command: ${parsed.objective}`,
+        nodes: [
+          {
+            id: generateId('node'),
+            type: 'browser',
+            data: {
+              action: 'vision_loop',
+              objective: parsed.objective,
+              provider: 'openai',
+              model: 'default',
+            },
+            position: { x: 100, y: 100 },
+          },
+        ],
+        edges: [],
+        variables: {},
+        inputSchema: [],
+      });
+
+      const wfService = getWorkflowService();
+      ignoreError(wfService.executeWorkflow(workflow.id, userId), 'voice-command-workflow');
+
+      return apiResponse(c, {
+        status: 'started',
+        workflowId: workflow.id,
+        objective: parsed.objective,
+      });
+    }
+
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: 'Unknown intent' }, 500);
+  } catch (err) {
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: getErrorMessage(err) }, 500);
+  }
+});
 import { VoiceService } from '../services/voice/service.js';
 import type { VoiceSession } from '@ownpilot/core/voice';
 
