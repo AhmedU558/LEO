@@ -19,7 +19,11 @@ import { getBrowserService } from '../browser-service.js';
 import { COMPUTER_VIEWPORT, type ComputerSessionBinding } from '@ownpilot/core/computer';
 import { setToolService, type IToolService } from '@ownpilot/core/services';
 
-const fixture = vi.hoisted(() => ({ model: vi.fn(), adapter: null as unknown as PostgresAdapter }));
+const fixture = vi.hoisted(() => ({
+  model: vi.fn(),
+  judge: vi.fn(),
+  adapter: null as unknown as PostgresAdapter,
+}));
 vi.mock('../../db/adapters/index.js', () => ({ getAdapter: async () => fixture.adapter }));
 vi.mock('../app-settings.js', async (original) => ({
   ...(await original<typeof import('../app-settings.js')>()),
@@ -31,6 +35,12 @@ vi.mock('@ownpilot/core/computer', async (original) => ({
   OpenAIComputerActionProposer: class {
     metadata = { provider: 'test', model: 'fixture' };
     propose = fixture.model;
+  },
+  // A goal-directed node also builds a completion evaluator. Without this stub
+  // it would be the real client, calling the provider with the fake key above.
+  OpenAIComputerCompletionEvaluator: class {
+    metadata = { provider: 'test', model: 'fixture' };
+    evaluate = fixture.judge;
   },
 }));
 const url = process.env.LEO_QA_POSTGRES_URL;
@@ -139,6 +149,10 @@ describe.skipIf(!url || process.env.LEO_QA_BROWSER !== '1')(
     });
     beforeEach(() => {
       clicked = false;
+      // CONTINUE is the neutral verdict: a goal-directed task runs its full
+      // budget, exactly as it did before the evaluator existed.
+      fixture.judge.mockReset();
+      fixture.judge.mockResolvedValue({ status: 'CONTINUE' });
       fixture.model.mockReset();
       fixture.model
         .mockResolvedValueOnce({

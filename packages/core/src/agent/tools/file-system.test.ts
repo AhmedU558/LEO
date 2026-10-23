@@ -251,7 +251,14 @@ describe('Path traversal prevention', () => {
   });
 
   it('blocks symlink escape (realpath resolves outside workspace)', async () => {
-    fsMock.realpath.mockResolvedValue('/etc/passwd');
+    // Only the symlink resolves outside the workspace. Every other path --
+    // including the workspace root, which the check also canonicalises --
+    // resolves to itself, as on a real disk. Resolving EVERY path to
+    // /etc/passwd would make the root and the escape target identical, which
+    // no real filesystem can do.
+    fsMock.realpath.mockImplementation(async (p: string) =>
+      p.endsWith('symlink-to-etc') ? '/etc/passwd' : p
+    );
 
     const result = await readFileExecutor({ path: 'symlink-to-etc' }, ctx());
     expect(result.isError).toBe(true);
