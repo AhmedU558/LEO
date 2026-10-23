@@ -181,7 +181,7 @@ describe('PcmStreamRecorder', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const callArgs = mockFetch.mock.calls[0];
+    const callArgs = mockFetch.mock.calls[0]!;
     expect(callArgs[0]).toBe('/api/v1/voice/sessions/sess_123/audio');
     const body = JSON.parse(callArgs[1].body);
     expect(body.commit).toBe(false);
@@ -221,10 +221,10 @@ describe('PcmStreamRecorder', () => {
     // Verify chunk was sent first, then commit
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
-    const chunkBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const chunkBody = JSON.parse(mockFetch.mock.calls[0]![1].body);
     expect(chunkBody.commit).toBe(false);
 
-    const commitBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+    const commitBody = JSON.parse(mockFetch.mock.calls[1]![1].body);
     expect(commitBody.commit).toBe(true);
     expect(commitBody.turnId).toBe('turn_abc');
   });
@@ -355,8 +355,8 @@ describe('PcmStreamRecorder', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    const body0 = JSON.parse(mockFetch.mock.calls[0][1].body);
-    const body1 = JSON.parse(mockFetch.mock.calls[1][1].body);
+    const body0 = JSON.parse(mockFetch.mock.calls[0]![1].body);
+    const body1 = JSON.parse(mockFetch.mock.calls[1]![1].body);
 
     expect(body0.sequenceNumber).toBe(0);
     expect(body1.sequenceNumber).toBe(1);

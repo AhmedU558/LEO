@@ -141,15 +141,16 @@ export function VoicePage() {
         const data = JSON.parse((e as MessageEvent).data);
         const msg = data.message as VoiceMessage;
         if (msg && msg.text) {
+          const text = msg.text;
           setTranscripts((prev) => {
             // Avoid duplicate message if transcript was already added
-            if (prev.some((p) => p.text === msg.text)) return prev;
+            if (prev.some((p) => p.text === text)) return prev;
             return [
               ...prev,
               {
                 id: msg.id,
                 role: msg.role === 'user' ? 'user' : 'assistant',
-                text: msg.text,
+                text,
               },
             ];
           });
@@ -390,7 +391,7 @@ export function VoicePage() {
         toast.warning(res.error);
         setStatus('connected');
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to commit voice audio');
       setStatus('connected');
     }

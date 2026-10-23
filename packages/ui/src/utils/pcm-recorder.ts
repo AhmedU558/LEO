@@ -43,7 +43,7 @@ export function resampleFloat32(
     const i0 = Math.floor(srcIndex);
     const i1 = Math.min(i0 + 1, input.length - 1);
     const frac = srcIndex - i0;
-    output[i] = input[i0] + frac * (input[i1] - input[i0]);
+    output[i] = input[i0]! + frac * (input[i1]! - input[i0]!);
   }
 
   return output;
@@ -61,7 +61,7 @@ export function float32ToBase64Pcm16(float32: Float32Array): string {
   const bytes = new Uint8Array(len * 2);
 
   for (let i = 0; i < len; i++) {
-    const s = Math.max(-1.0, Math.min(1.0, float32[i]));
+    const s = Math.max(-1.0, Math.min(1.0, float32[i]!));
     let int16 = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
     if (int16 > 32767) int16 = 32767;
     if (int16 < -32768) int16 = -32768;
@@ -75,8 +75,8 @@ export function float32ToBase64Pcm16(float32: Float32Array): string {
   const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) {
     const slice = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    for (let j = 0; j < slice.length; j++) {
-      binary += String.fromCharCode(slice[j]);
+    for (const byte of slice) {
+      binary += String.fromCharCode(byte);
     }
   }
 
@@ -246,8 +246,8 @@ export class PcmStreamRecorder {
   private handleAudioFrame(inputSamples: Float32Array, inputRate: number): void {
     if (!this.isRecordingState || this.isCancelled) return;
 
-    for (let i = 0; i < inputSamples.length; i++) {
-      this.sampleBuffer.push(inputSamples[i]);
+    for (const sample of inputSamples) {
+      this.sampleBuffer.push(sample);
     }
 
     // Target sample count for a single chunk before resampling
@@ -314,7 +314,7 @@ export class PcmStreamRecorder {
 
     try {
       while (this.queue.length > 0 && !this.isCancelled && !this.hasAudioLoss) {
-        const item = this.queue[0];
+        const item = this.queue[0]!;
         try {
           const res = await this.fetchFn(`/api/v1/voice/sessions/${this.sessionId}/audio`, {
             method: 'POST',

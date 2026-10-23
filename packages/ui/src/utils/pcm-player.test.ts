@@ -32,7 +32,7 @@ describe('base64ToFloat32Array', () => {
 
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+      binary += String.fromCharCode(bytes[i]!);
     }
     const base64 = btoa(binary);
 
@@ -50,7 +50,7 @@ describe('base64ToFloat32Array', () => {
     const bytes = new Uint8Array([0x00, 0x00, 0xff]);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+      binary += String.fromCharCode(bytes[i]!);
     }
     const base64 = btoa(binary);
 
@@ -136,7 +136,7 @@ describe('Pcm16Player', () => {
     // 240 samples * 2 bytes = 480 bytes
     const sampleBytes = new Uint8Array(480);
     let binary = '';
-    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]);
+    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]!);
     const chunkBase64 = btoa(binary);
 
     // Enqueue first chunk
@@ -162,7 +162,7 @@ describe('Pcm16Player', () => {
     const player = new Pcm16Player();
     const sampleBytes = new Uint8Array(48);
     let binary = '';
-    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]);
+    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]!);
     const chunkBase64 = btoa(binary);
 
     expect(player.enqueue(chunkBase64, 'resp_original')).toBe(true);
@@ -186,7 +186,7 @@ describe('Pcm16Player', () => {
     const player = new Pcm16Player({ onStateChange });
     const sampleBytes = new Uint8Array(48);
     let binary = '';
-    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]);
+    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]!);
     const chunkBase64 = btoa(binary);
 
     player.enqueue(chunkBase64, 'resp_1');
@@ -210,7 +210,7 @@ describe('Pcm16Player', () => {
     const player = new Pcm16Player({ maxQueuedNodes: 2 });
     const sampleBytes = new Uint8Array(48);
     let binary = '';
-    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]);
+    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]!);
     const chunkBase64 = btoa(binary);
 
     expect(player.enqueue(chunkBase64)).toBe(true);
@@ -227,7 +227,7 @@ describe('Pcm16Player', () => {
     const player = new Pcm16Player({ onStateChange });
     const sampleBytes = new Uint8Array(48);
     let binary = '';
-    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]);
+    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]!);
     const chunkBase64 = btoa(binary);
 
     player.enqueue(chunkBase64);

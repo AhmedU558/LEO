@@ -245,7 +245,7 @@ describe('VoicePage Component', () => {
     // 48 bytes -> 24 samples
     const sampleBytes = new Uint8Array(48);
     let binary = '';
-    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]);
+    for (let i = 0; i < sampleBytes.length; i++) binary += String.fromCharCode(sampleBytes[i]!);
     const chunkBase64 = btoa(binary);
 
     // Emit audio_delta event from SSE stream
@@ -327,6 +327,18 @@ describe('VoicePage Component', () => {
     });
 
     expect(container.textContent).toContain('Listening... Release to process');
+
+    // Deliver one buffer of microphone samples, as a live microphone would.
+    // The recorder deliberately refuses to commit a turn that captured no
+    // audio, so without this the release below has nothing to commit.
+    const processors = mockAudioContext.createScriptProcessor.mock.results;
+    const processor = processors[processors.length - 1]?.value;
+    expect(processor?.onaudioprocess).toBeTypeOf('function');
+    await act(async () => {
+      processor.onaudioprocess({
+        inputBuffer: { getChannelData: () => new Float32Array(4096).fill(0.25) },
+      });
+    });
 
     // Stop push-to-talk (release)
     await act(async () => {

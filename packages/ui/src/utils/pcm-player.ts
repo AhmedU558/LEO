@@ -25,7 +25,7 @@ export interface Pcm16PlayerOptions {
  * Convert a Base64 string containing signed 16-bit little-endian PCM samples
  * to a Float32Array normalized between -1.0 and 1.0.
  */
-export function base64ToFloat32Array(base64: string): Float32Array {
+export function base64ToFloat32Array(base64: string): Float32Array<ArrayBuffer> {
   if (!base64 || typeof base64 !== 'string') {
     return new Float32Array(0);
   }
