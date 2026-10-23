@@ -10,7 +10,7 @@ const url = process.env.LEO_QA_POSTGRES_URL;
 // this repository gates the same way, and the deterministic suite has to run
 // without external services — throwing here made a credential-free run report
 // a failed suite even though all of its tests were skipped.
-describe('QA-012/QA-013 Integration: Approval Integrity and Liveness', () => {
+describe.skipIf(!url)('QA-012/QA-013 Integration: Approval Integrity and Liveness', () => {
   const database = `leo_qa012_${randomUUID().replaceAll('-', '')}`;
   let admin: pg.Pool | undefined;
   beforeAll(async () => {

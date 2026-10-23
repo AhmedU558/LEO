@@ -118,7 +118,12 @@ export async function isPathAllowedAsync(
     const allowedPaths = getAllowedPaths(workspaceDir);
 
     for (const allowed of allowedPaths) {
-      const resolvedAllowed = path.resolve(allowed);
+      // Canonicalise the allowed root the same way as the target. The target
+      // went through realpath, which expands Windows 8.3 short names
+      // (C:\Users\RUNNER~1 -> C:\Users\runneradmin) and macOS /var ->
+      // /private/var; comparing it against an un-canonicalised root rejected
+      // paths that were genuinely inside it.
+      const resolvedAllowed = await realpathNearestExistingAncestor(allowed);
 
       // Normalize separators for cross-platform comparison (Windows backslash → forward slash)
       const normalizedPath = resolvedPath.replace(/\\/g, '/');

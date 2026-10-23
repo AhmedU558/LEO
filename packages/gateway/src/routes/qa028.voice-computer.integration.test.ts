@@ -23,7 +23,7 @@ function createTestApp() {
 
 const url = process.env.LEO_QA_POSTGRES_URL;
 
-describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
+describe.skipIf(!url)('QA-028: Voice-to-Computer Pipeline Integration', () => {
   const database = `leo_qa028_${randomUUID().replaceAll('-', '')}`;
   let admin: pg.Pool | undefined;
   let app: Hono;
@@ -144,7 +144,7 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
       // Force WorkflowService to report this workflow as running and cancel it
       const wfService = getWorkflowService();
       vi.spyOn(wfService, 'isRunning').mockReturnValue(true);
-      vi.spyOn(wfService, 'cancelExecution').mockImplementation((id) => {
+      vi.spyOn(wfService, 'cancelExecution').mockImplementation((_id) => {
         // Mimic the executor aborting and updating the DB
         repo.updateLog(runningLogs[0].id, { status: 'cancelled' }).catch(() => {});
       });
