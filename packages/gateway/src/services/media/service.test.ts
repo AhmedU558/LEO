@@ -15,7 +15,8 @@ vi.mock('../../db/repositories/media.js', () => ({
 vi.mock('../storage/index.js', () => ({
   storageProvider: {
     upload: vi.fn(async (workspaceId, filename, stream) => {
-      for await (const chunk of stream) {}
+      for await (const chunk of stream) {
+      }
       return 'test_key';
     }),
     download: vi.fn(),
@@ -65,7 +66,12 @@ describe('MediaService', () => {
     const expiresAt = parseInt(urlObj.searchParams.get('expiresAt')!, 10);
     const signature = urlObj.searchParams.get('signature')!;
 
-    const isValid = MediaService.validateDeliverySignature('ws1', 'asset_123', expiresAt, signature);
+    const isValid = MediaService.validateDeliverySignature(
+      'ws1',
+      'asset_123',
+      expiresAt,
+      signature
+    );
     expect(isValid).toBe(true);
   });
 
@@ -75,7 +81,12 @@ describe('MediaService', () => {
     const expiresAt = parseInt(urlObj.searchParams.get('expiresAt')!, 10);
     const signature = urlObj.searchParams.get('signature')!;
 
-    const isValid = MediaService.validateDeliverySignature('ws1', 'asset_123', expiresAt, signature);
+    const isValid = MediaService.validateDeliverySignature(
+      'ws1',
+      'asset_123',
+      expiresAt,
+      signature
+    );
     expect(isValid).toBe(false); // Should be false because Date.now() > expiresAt
   });
 
@@ -85,7 +96,12 @@ describe('MediaService', () => {
     const expiresAt = parseInt(urlObj.searchParams.get('expiresAt')!, 10);
     const signature = urlObj.searchParams.get('signature')!;
 
-    const isValid = MediaService.validateDeliverySignature('ws2', 'asset_123', expiresAt, signature);
+    const isValid = MediaService.validateDeliverySignature(
+      'ws2',
+      'asset_123',
+      expiresAt,
+      signature
+    );
     expect(isValid).toBe(false);
   });
 });

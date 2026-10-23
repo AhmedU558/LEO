@@ -16,6 +16,7 @@ export class RiskEngine {
       case 'memory.read':
       case 'agent.execute':
       case 'task.execute':
+      case 'ai.learn':
         return 'LOW';
 
       // MEDIUM
@@ -23,6 +24,8 @@ export class RiskEngine {
       case 'browser.navigate':
       case 'memory.write':
       case 'workflow.execute':
+      case 'ai.execute':
+      case 'social.write':
         return 'MEDIUM';
 
       // HIGH
@@ -42,6 +45,7 @@ export class RiskEngine {
       case 'shell.execute':
       case 'computer.control':
       case 'computer.read':
+      case 'shell':
         return 'CRITICAL';
 
       default:

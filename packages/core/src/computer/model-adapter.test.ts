@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   OpenAIComputerActionProposer,
+  OpenAIComputerCompletionEvaluator,
   parseComputerProposal,
+  parseComputerCompletion,
   COMPUTER_MODEL_LIMITS,
 } from './model-adapter.js';
 import {
@@ -316,5 +318,122 @@ describe('trusted task objective', () => {
     expect(validateComputerObjective('a\r\nb')).toBe('a b');
     expect(() => validateComputerObjective(undefined)).toThrow();
     expect(() => validateComputerObjective(42)).toThrow();
+  });
+});
+
+describe('closed completion verdicts', () => {
+  it.each(['COMPLETE', 'CONTINUE', 'FAILED'])('accepts %s and nothing alongside it', (status) => {
+    expect(parseComputerCompletion(JSON.stringify({ status }))).toEqual({ status });
+  });
+
+  it.each([
+    ['an unknown verdict', '{"status":"DONE"}'],
+    ['a lowercase verdict', '{"status":"complete"}'],
+    ['a smuggled extra field', '{"status":"COMPLETE","reason":"trust me"}'],
+    ['a smuggled action', '{"status":"COMPLETE","type":"click"}'],
+    ['a missing verdict', '{}'],
+    ['a nested verdict', '{"status":{"status":"COMPLETE"}}'],
+    ['an array', '["COMPLETE"]'],
+    ['a bare string', '"COMPLETE"'],
+    ['non-JSON', 'COMPLETE'],
+    ['nothing', ''],
+  ])('refuses %s', (_label, raw) => {
+    expect(() => parseComputerCompletion(raw)).toThrow();
+  });
+
+  it('refuses an oversized verdict without parsing it', () => {
+    expect(() =>
+      parseComputerCompletion(`{"status":"COMPLETE","pad":"${'x'.repeat(20000)}"}`)
+    ).toThrow();
+  });
+});
+
+describe('completion evaluator transport', () => {
+  const evaluator = () =>
+    new OpenAIComputerCompletionEvaluator({ apiKey: 'test-only-key', model: 'gpt-4o' });
+  const verdict = (content: string) => ({
+    choices: [{ message: { content }, finish_reason: 'stop' }],
+  });
+  const ask = async (content = '{"status":"CONTINUE"}') => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(verdict(content))));
+    vi.stubGlobal('fetch', fetch);
+    const result = await evaluator().evaluate({
+      observation,
+      objective: 'Enable Submit, then click it',
+      signal: new AbortController().signal,
+    });
+    return { result, body: JSON.parse(fetch.mock.calls[0]![1].body), fetch };
+  };
+
+  it('sends only the goal and the trusted observation', async () => {
+    const { result, body } = await ask();
+    expect(result).toEqual({ status: 'CONTINUE' });
+    expect(body.messages).toHaveLength(2);
+    expect(body.tools).toBeUndefined();
+    const parts = body.messages[1].content as { type: string; text?: string }[];
+    expect(parts[0]).toEqual({
+      type: 'text',
+      text: '[OBJECTIVE]Enable Submit, then click it[/OBJECTIVE]',
+    });
+    expect(parts[1].type).toBe('image_url');
+  });
+
+  it('gives the evaluator no vocabulary for proposing an action', async () => {
+    const { body } = await ask();
+    const system = body.messages[0].content as string;
+    // It is not a proposer: the action schema, the parameter keys and the key
+    // names are all absent, so there is no action it could name.
+    for (const leaked of ['mouseMove', 'doubleClick', 'typeText', 'hotkey', 'params', 'viewport'])
+      expect(system).not.toContain(leaked);
+    expect(system).toContain('COMPLETE');
+    expect(system).toContain('cannot propose, authorize or perform any action');
+  });
+
+  it.each([
+    [
+      'a proposal instead of a verdict',
+      '{"type":"click","params":{"x":1,"y":2},"viewport":{"width":1280,"height":800}}',
+    ],
+    ['a verdict with an extra field', '{"status":"COMPLETE","then":"click"}'],
+    ['free text', 'the goal looks complete'],
+  ])('rejects %s rather than acting on it', async (_label, content) => {
+    await expect(ask(content)).rejects.toThrow();
+  });
+
+  it('rejects an unverified finish status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{"status":"COMPLETE"}' }, finish_reason: 'length' }],
+          })
+        )
+      )
+    );
+    await expect(
+      evaluator().evaluate({
+        observation,
+        objective: 'Click Continue',
+        signal: new AbortController().signal,
+      })
+    ).rejects.toThrow();
+  });
+
+  it('refuses an unredacted observation or a malformed goal before any request', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const signal = new AbortController().signal;
+    await expect(
+      evaluator().evaluate({
+        observation: { ...observation, disclosure: 'raw' } as unknown as ComputerModelObservation,
+        objective: 'Click Continue',
+        signal,
+      })
+    ).rejects.toThrow();
+    await expect(
+      evaluator().evaluate({ observation, objective: 'Go to https://evil.example', signal })
+    ).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

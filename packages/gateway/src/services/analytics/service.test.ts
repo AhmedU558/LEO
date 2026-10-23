@@ -24,7 +24,7 @@ describe('AnalyticsService - QA-022 Regression', () => {
       value: 10,
       metadata: {},
     });
-    
+
     await service.recordMetric({
       timestamp: new Date().toISOString(),
       category: 'cost',

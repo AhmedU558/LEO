@@ -156,15 +156,15 @@ export async function generateAIBriefing(
       // Dedicated conversationId so the briefing gets its own agent instance,
       // isolated from user chat sessions and the streaming briefing path.
       const agent = await getOrCreateChatAgent(
-          provider,
-          model,
-          undefined,
-          null,
-          'dashboard-briefing',
-          undefined,
-          userId,
-          'default'
-        );
+        provider,
+        model,
+        undefined,
+        null,
+        'dashboard-briefing',
+        undefined,
+        userId,
+        'default'
+      );
       const result = await agent.chat(prompt, { stream: false });
 
       if (!result.ok) {
@@ -206,15 +206,15 @@ export async function generateAIBriefingStreaming(
     // Dedicated conversationId, distinct from the non-streaming briefing path,
     // so the two never share a single-flight agent instance.
     const agent = await getOrCreateChatAgent(
-        options.provider,
-        model,
-        undefined,
-        null,
-        'dashboard-briefing-stream',
-        undefined,
-        userId,
-        'default'
-      );
+      options.provider,
+      model,
+      undefined,
+      null,
+      'dashboard-briefing-stream',
+      undefined,
+      userId,
+      'default'
+    );
 
     let fullContent = '';
 
@@ -445,4 +445,3 @@ export function generateFallbackBriefing(data: DailyBriefingData): AIBriefing {
     cached: false,
   };
 }
-

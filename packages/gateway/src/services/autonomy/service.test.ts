@@ -9,12 +9,12 @@ vi.mock('@ownpilot/core/security', async (importOriginal) => {
       record: vi.fn().mockResolvedValue({ actionId: 'test-action-id' }),
       updateResult: vi.fn(),
     },
-    PolicyEngine: vi.fn().mockImplementation(function() {
+    PolicyEngine: vi.fn().mockImplementation(function () {
       return {
         evaluate: vi.fn().mockReturnValue({ decision: 'ALLOW' }),
       };
     }),
-    RiskEngine: vi.fn().mockImplementation(function() {
+    RiskEngine: vi.fn().mockImplementation(function () {
       return {
         classify: vi.fn().mockReturnValue('LOW'),
       };
@@ -39,12 +39,12 @@ describe('AutonomyService - QA-004 Regression', () => {
       createdAt: '',
       updatedAt: '',
     };
-    
+
     await service.startTask(task);
-    
+
     // Wait for the background setTimeout loop
-    await new Promise(resolve => setTimeout(resolve, 150));
-    
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
     const status = await service.getTaskStatus('task-1');
     expect(status).toBe('failed'); // Must fail, no real provider
   });

@@ -193,7 +193,7 @@ settingsRoutes.delete('/api-keys/:provider', async (c) => {
 
   const key = `${API_KEY_PREFIX}${provider}`;
   await settingsRepo.delete(key);
-    invalidateAgentCache();
+  invalidateAgentCache();
 
   const sanitizedProvider = sanitizeProviderName(provider);
   if (sanitizedProvider) {

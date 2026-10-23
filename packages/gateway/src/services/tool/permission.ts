@@ -17,33 +17,45 @@ import type { ExecutionPermissions } from '@ownpilot/core/tools';
 import { PolicyEngine, RiskEngine } from '@ownpilot/core/security';
 import type { Capability } from '@ownpilot/core/security';
 
-function determineCapabilityForTool(toolName: string): Capability {
+export function determineCapabilityForTool(toolName: string): Capability {
   switch (toolName) {
-    case 'execute_shell': return 'shell.execute';
-    case 'execute_python': return 'computer.control';
-    case 'execute_javascript': return 'computer.control';
-    case 'compile_code': return 'computer.control';
-    case 'package_manager': return 'computer.control';
-    case 'read_file': return 'filesystem.read';
-    case 'write_file': return 'filesystem.write';
-    case 'send_email': return 'email.send';
-    case 'read_email': return 'email.read';
-      case 'browse_web':
-      case 'browser_navigate': return 'browser.navigate';
-      case 'browser_click':
-      case 'browser_type':
-      case 'browser_scroll':
-      case 'browser_wait_for':
-      case 'browser_select':
-      case 'browser_press_key':
-      case 'browser_hover':
-      case 'browser_fill_form':
-      case 'browser_extract':
-      case 'browser_extract_data':
-      case 'browser_screenshot':
-      case 'browser_accessibility_tree':
-      case 'browser_get_state': return 'browser.read';
-      default: return 'agent.execute';
+    case 'execute_shell':
+      return 'shell.execute';
+    case 'execute_python':
+      return 'computer.control';
+    case 'execute_javascript':
+      return 'computer.control';
+    case 'compile_code':
+      return 'computer.control';
+    case 'package_manager':
+      return 'computer.control';
+    case 'read_file':
+      return 'filesystem.read';
+    case 'write_file':
+      return 'filesystem.write';
+    case 'send_email':
+      return 'email.send';
+    case 'read_email':
+      return 'email.read';
+    case 'browse_web':
+    case 'browser_navigate':
+      return 'browser.navigate';
+    case 'browser_click':
+    case 'browser_type':
+    case 'browser_scroll':
+    case 'browser_wait_for':
+    case 'browser_select':
+    case 'browser_press_key':
+    case 'browser_hover':
+    case 'browser_fill_form':
+    case 'browser_extract':
+    case 'browser_extract_data':
+    case 'browser_screenshot':
+    case 'browser_accessibility_tree':
+    case 'browser_get_state':
+      return 'browser.read';
+    default:
+      return 'agent.execute';
   }
 }
 
@@ -265,7 +277,7 @@ export async function checkToolPermission(
   const riskEngine = new RiskEngine();
   const capability = determineCapabilityForTool(baseName);
   const risk = riskEngine.classify(capability, baseName);
-  
+
   const policyResult = policyEngine.evaluate({
     identity: { userId, workspaceId: 'default', roles: [] },
     action: baseName,

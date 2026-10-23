@@ -12,8 +12,8 @@ export async function executeSocialPublishNode(
 
   try {
     // Inputs come from ExecutionTask mapping
-    const publishRequestId = (context as any).workflowInputs
-      ?.publishRequestId as string | undefined;
+    const publishRequestId = (context as any).workflowInputs?.publishRequestId as
+      string | undefined;
     if (!publishRequestId) throw new Error('Missing publishRequestId input');
 
     // Need workspaceId which was missing from the DispatchNodeContext type in this context?
@@ -50,7 +50,7 @@ export async function executeSocialPublishNode(
       throw e;
     }
 
-        // Inject provider account ID so providers that need it (like Instagram) have access to it
+    // Inject provider account ID so providers that need it (like Instagram) have access to it
     if (!post.metadata) post.metadata = {};
     post.metadata.providerAccountId = account.accountId;
 
@@ -96,4 +96,3 @@ export async function executeSocialPublishNode(
     };
   }
 }
-

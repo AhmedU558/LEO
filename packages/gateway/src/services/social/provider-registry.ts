@@ -29,4 +29,3 @@ socialProviderRegistry.register(new YouTubeProvider());
 socialProviderRegistry.register(new InstagramProvider());
 socialProviderRegistry.register(new FacebookProvider());
 socialProviderRegistry.register(new TikTokProvider());
-

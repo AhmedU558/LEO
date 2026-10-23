@@ -161,6 +161,15 @@ export interface ComputerVisionResult {
   screenshots: number;
   modelRequests: number;
   actions: number;
+  /** Completion evaluations performed, bounded separately from proposals. */
+  evaluations?: number;
+  /**
+   * The evaluator's last verdict, recorded as a model CLAIM about the trusted
+   * observation. `COMPLETE` means the loop stopped early because the evaluator
+   * asked it to; it is not an attestation that the objective was achieved, and
+   * nothing downstream may read it as one.
+   */
+  completion?: ComputerCompletionStatus;
   approvalId?: string;
   sessionId?: string;
   observationId?: string;
@@ -177,6 +186,37 @@ export interface ComputerSessionBinding {
 export interface ComputerActionProposer {
   readonly metadata: { readonly provider: string; readonly model: string };
   propose(request: ComputerModelRequest): Promise<ComputerActionProposal>;
+}
+
+/**
+ * The only three things a completion evaluator may say.
+ *
+ * `COMPLETE` is a request to STOP, nothing more. It carries no authority: it
+ * cannot execute, approve, extend a budget or attest that the objective was
+ * genuinely met. The server decides what a stop means.
+ */
+export type ComputerCompletionStatus = 'COMPLETE' | 'CONTINUE' | 'FAILED';
+
+export interface ComputerCompletionRequest {
+  /** The same trusted, redacted observation the proposer is given. */
+  readonly observation: ComputerModelObservation;
+  /** The trusted caller's goal, already through {@link validateComputerObjective}. */
+  readonly objective: string;
+  readonly signal: AbortSignal;
+}
+
+export interface ComputerCompletionResult {
+  readonly status: ComputerCompletionStatus;
+}
+
+/**
+ * Asks whether the objective looks met. Deliberately NOT a proposer: it has no
+ * way to name an action, so a compromised or confused evaluator can only end a
+ * task early or keep it going — never widen what the task does.
+ */
+export interface ComputerCompletionEvaluator {
+  readonly metadata: { readonly provider: string; readonly model: string };
+  evaluate(request: ComputerCompletionRequest): Promise<ComputerCompletionResult>;
 }
 
 export interface ComputerModelObservation {

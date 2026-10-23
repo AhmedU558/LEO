@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runComputerVisionLoop, closeComputerVisionLoops } from './vision-loop.js';
 import { executionTaskContext, computerStepContext } from '../execution-task-context.js';
 import { ComputerService } from './service.js';
-import type { ComputerActionProposer, ScreenshotRedactor } from '@ownpilot/core/computer';
+import type {
+  ComputerActionProposer,
+  ScreenshotRedactor,
+  ComputerCompletionEvaluator,
+} from '@ownpilot/core/computer';
 
 const mocks = vi.hoisted(() => ({
   active: vi.fn(),
@@ -34,6 +38,10 @@ describe('bounded computer vision orchestration', () => {
     propose: vi.fn(),
   } as ComputerActionProposer;
   const redactor = { redact: vi.fn() } as ScreenshotRedactor;
+  const evaluator = {
+    metadata: { provider: 'test', model: 'fixture' },
+    evaluate: vi.fn(),
+  } as unknown as ComputerCompletionEvaluator;
   let controller: AbortController;
   let service: ComputerService;
   let task: string;
@@ -84,6 +92,7 @@ describe('bounded computer vision orchestration', () => {
       })),
       proposeAction: vi.fn(async () => ({ outcome: 'PROPOSED', proposal: { id: serial } })),
       executeProposal: vi.fn(async () => ({ success: true, outcome: 'SUCCESS' })),
+      evaluateCompletion: vi.fn(async () => 'CONTINUE' as const),
     } as unknown as ComputerService;
   });
   afterEach(async () => {
@@ -295,5 +304,137 @@ describe('bounded computer vision orchestration', () => {
     controller.abort();
     expect((await pending).outcome).toBe('CANCELLED');
     expect(service.executeProposal).not.toHaveBeenCalled();
+  });
+
+  // Phase 6.12. `goal` runs a task that is both goal-directed and evaluated.
+  const goal = (
+    options: Partial<Parameters<typeof runComputerVisionLoop>[0]> = {},
+    approvalId?: string
+  ) => run({ objective: 'Click Continue', evaluator, ...options }, approvalId);
+
+  it('stops early when the objective is already met', async () => {
+    vi.mocked(service.evaluateCompletion).mockResolvedValue('COMPLETE');
+    // Budget of 3, but the verdict after action 1 ends it.
+    expect(await goal({ iterations: 3 })).toMatchObject({
+      outcome: 'COMPLETED',
+      iterations: 1,
+      completion: 'COMPLETE',
+      evaluations: 1,
+    });
+    expect(service.executeProposal).toHaveBeenCalledTimes(1);
+    expect(service.proposeAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the whole budget while the objective is not met', async () => {
+    vi.mocked(service.evaluateCompletion).mockResolvedValue('CONTINUE');
+    expect(await goal({ iterations: 3 })).toMatchObject({
+      outcome: 'COMPLETED',
+      iterations: 3,
+      completion: 'CONTINUE',
+      // One verdict per executed action that the loop continued past; the
+      // final action is not evaluated because the run is already ending.
+      evaluations: 2,
+    });
+    expect(service.executeProposal).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['FAILED', 'malformed'])('fails closed on a %s verdict', async (mode) => {
+    // evaluateCompletion converts every fault -- malformed output, timeout,
+    // stale session -- into FAILED, so both cases arrive the same way.
+    vi.mocked(service.evaluateCompletion).mockResolvedValue('FAILED');
+    const result = await goal({ iterations: 3 });
+    expect(result.outcome).toBe('FAILED');
+    // Never treated as done, and never allowed to spend another action.
+    expect(result.completion).not.toBe('COMPLETE');
+    expect(service.executeProposal).toHaveBeenCalledTimes(1);
+    expect(mocks.cancel).toHaveBeenCalledWith(task, 'Vision loop FAILED', 'UNKNOWN');
+    expect(mode).toBeTruthy();
+  });
+
+  it('cannot execute, approve or propose anything from a verdict', async () => {
+    const before = {
+      execute: vi.mocked(service.executeAction).mock.calls.length,
+      propose: vi.mocked(service.proposeAction).mock.calls.length,
+    };
+    vi.mocked(service.evaluateCompletion).mockImplementation(async () => {
+      // Whatever an evaluator does, it holds no handle that could act: the
+      // loop passes it a capture, a redactor and a goal, and nothing else.
+      expect(vi.mocked(service.executeProposal).mock.calls.length).toBe(1);
+      return 'COMPLETE';
+    });
+    await goal({ iterations: 3 });
+    // One capture + one action beyond the pre-test baseline, both from the
+    // single iteration that ran -- the verdict itself added neither.
+    expect(vi.mocked(service.executeAction).mock.calls.length).toBe(before.execute + 2);
+    expect(vi.mocked(service.proposeAction).mock.calls.length).toBe(before.propose + 1);
+  });
+
+  it('judges the objective against the fresh observation the proposer then sees', async () => {
+    const judged: unknown[] = [];
+    const proposed: unknown[] = [];
+    vi.mocked(service.evaluateCompletion).mockImplementation(async (capture) => {
+      judged.push(capture);
+      return 'CONTINUE';
+    });
+    vi.mocked(service.proposeAction).mockImplementation(async (shot) => {
+      proposed.push(shot);
+      return { outcome: 'PROPOSED', proposal: {} as never };
+    });
+    await goal({ iterations: 3 });
+    // Two verdicts, each on the capture taken AFTER an action, and each on the
+    // very object handed to the proposer -- not a re-capture, not a replay.
+    expect(judged).toHaveLength(2);
+    expect(judged[0]).toBe(proposed[1]);
+    expect(judged[1]).toBe(proposed[2]);
+  });
+
+  it('never judges before the first action, or without a goal', async () => {
+    vi.mocked(service.evaluateCompletion).mockResolvedValue('COMPLETE');
+    // iterations: 1 means one action and no continuation, so nothing to judge.
+    expect((await goal({ iterations: 1 })).outcome).toBe('COMPLETED');
+    expect(service.evaluateCompletion).not.toHaveBeenCalled();
+    // An evaluator without an objective has nothing to judge against.
+    expect((await run({ iterations: 3, evaluator })).outcome).toBe('COMPLETED');
+    expect(service.evaluateCompletion).not.toHaveBeenCalled();
+  });
+
+  it('bounds verdicts with their own budget', async () => {
+    vi.mocked(service.evaluateCompletion).mockResolvedValue('CONTINUE');
+    expect((await goal({ iterations: 3, limits: { evaluations: 1 } })).outcome).toBe(
+      'LIMIT_REACHED'
+    );
+    expect(service.evaluateCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves durable approval unchanged when a verdict is in play', async () => {
+    vi.mocked(service.evaluateCompletion).mockResolvedValue('CONTINUE');
+    vi.mocked(service.executeProposal).mockResolvedValueOnce({
+      success: false,
+      outcome: 'WAITING_APPROVAL',
+      approvalId: 'a',
+    });
+    expect((await goal({ iterations: 2 })).outcome).toBe('WAITING_APPROVAL');
+    // The verdict has no say in resumption: a mismatched approval is still
+    // refused, and the original one still resumes the same pending action.
+    expect((await goal({ iterations: 2 }, 'different')).outcome).toBe('FAILED');
+    expect((await goal({ iterations: 2 }, 'a')).outcome).toBe('COMPLETED');
+    expect(service.executeProposal).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['UNKNOWN', 'DENIED'] as const)('still stops on %s before judging', async (outcome) => {
+    vi.mocked(service.executeProposal).mockResolvedValue({ success: false, outcome });
+    expect((await goal()).outcome).toBe(outcome === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED');
+    expect(service.evaluateCompletion).not.toHaveBeenCalled();
+  });
+
+  it('stops during a verdict on cancellation without dispatching another action', async () => {
+    vi.mocked(service.evaluateCompletion).mockImplementation(async () => {
+      controller.abort();
+      return 'CONTINUE';
+    });
+    expect((await goal({ iterations: 3 })).outcome).toBe('CANCELLED');
+    // The verdict said continue; cancellation still wins.
+    expect(service.executeProposal).toHaveBeenCalledTimes(1);
+    expect(ComputerService.closeTask).toHaveBeenCalled();
   });
 });

@@ -50,7 +50,11 @@ describe('safeVmEval — functionality preserved', () => {
 
   it('returns object literals', async () => {
     expect(
-      await safeVmEval('({ sum: data.x + variables.y })', { data: { x: 1 }, variables: { y: 2 } }, 2000)
+      await safeVmEval(
+        '({ sum: data.x + variables.y })',
+        { data: { x: 1 }, variables: { y: 2 } },
+        2000
+      )
     ).toEqual({ sum: 3 });
   });
 

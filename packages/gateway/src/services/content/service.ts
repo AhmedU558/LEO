@@ -26,7 +26,7 @@ export class ContentService {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
+
     const repo = createContentRepository();
     await repo.insertItem(item);
     return item;
@@ -43,7 +43,7 @@ export class ContentService {
     const repo = createContentRepository();
     const item = await repo.getItem(id, this.workspaceId, this.userId);
     if (!item) return undefined;
-    
+
     const variants = await repo.getVariants(id);
     return { item, variants };
   }

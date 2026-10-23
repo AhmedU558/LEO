@@ -116,8 +116,8 @@ socialRoutes.get('/youtube/callback', async (c) => {
       id: `acc_${randomUUID()}`,
       platform: 'youtube',
       accountId: authData.accountId!,
-        userId: getUserId(c),
-        workspaceId: getWorkspaceId(c),
+      userId: getUserId(c),
+      workspaceId: getWorkspaceId(c),
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
@@ -164,8 +164,8 @@ socialRoutes.get('/instagram/callback', async (c) => {
       id: `acc_${randomUUID()}`,
       platform: 'instagram',
       accountId: authData.accountId!,
-        userId: getUserId(c),
-        workspaceId: getWorkspaceId(c),
+      userId: getUserId(c),
+      workspaceId: getWorkspaceId(c),
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
@@ -279,8 +279,8 @@ socialRoutes.get('/tiktok/callback', async (c) => {
       id: `acc_${randomUUID()}`,
       platform: 'tiktok',
       accountId: authData.accountId!,
-        userId: getUserId(c),
-        workspaceId: getWorkspaceId(c),
+      userId: getUserId(c),
+      workspaceId: getWorkspaceId(c),
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
@@ -388,5 +388,3 @@ socialRoutes.post('/campaigns/:id/reconcile', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
   }
 });
-
-

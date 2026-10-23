@@ -11,14 +11,14 @@ export const ledgerRoutes = new Hono();
 ledgerRoutes.get('/', async (c) => {
   const userId = c.get('userId') as string;
   const workspaceId = c.req.query('workspaceId');
-  
+
   let entries;
   if (workspaceId) {
     entries = await ActionLedger.getByWorkspaceId(workspaceId, userId);
   } else {
     entries = await ActionLedger.getEntries(userId);
   }
-  
+
   const reversed = [...entries].reverse();
 
   return apiResponse(c, {

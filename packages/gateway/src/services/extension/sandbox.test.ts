@@ -24,7 +24,7 @@ describe('ExtensionSandboxManager - QA-009 Isolated execution', () => {
       code: 'module.exports = function(args) { return args.x + 1; }',
       args: { x: 5 },
     });
-    
+
     expect(result.success).toBe(true);
     expect(result.result).toBe(6);
   });
@@ -37,7 +37,7 @@ describe('ExtensionSandboxManager - QA-009 Isolated execution', () => {
       code: 'throw new Error("fail");',
       args: {},
     });
-    
+
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/simulated error/);
   });

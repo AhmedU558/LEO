@@ -26,7 +26,7 @@ describe.skipIf(!url)('QA-017 Integration: Worker Cancellation and Recovery', ()
       priority: 0,
       payload: {},
       maxAttempts: 3,
-      runAfter: new Date()
+      runAfter: new Date(),
     });
 
     // Claim with a very short lease
@@ -39,7 +39,7 @@ describe.skipIf(!url)('QA-017 Integration: Worker Cancellation and Recovery', ()
     expect(claim2).toBeNull();
 
     // Wait for lease to expire
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 1500));
 
     // Next claim must reclaim the abandoned job
     const claim3 = await repo.claimJob(queue, 5000);
@@ -57,7 +57,7 @@ describe.skipIf(!url)('QA-017 Integration: Worker Cancellation and Recovery', ()
       priority: 0,
       payload: {},
       maxAttempts: 3,
-      runAfter: new Date()
+      runAfter: new Date(),
     });
 
     const claim = await repo.claimJob(queue, 10000);
@@ -83,11 +83,11 @@ describe.skipIf(!url)('QA-017 Integration: Worker Cancellation and Recovery', ()
       priority: 0,
       payload: {},
       maxAttempts: 3,
-      runAfter: new Date()
+      runAfter: new Date(),
     });
 
     const claim = await repo.claimJob(queue, 1000); // 1 sec
-    await new Promise(r => setTimeout(r, 1500)); // Let it expire
+    await new Promise((r) => setTimeout(r, 1500)); // Let it expire
 
     // Someone else reclaims
     const reclaim = await repo.claimJob(queue, 5000);

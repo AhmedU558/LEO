@@ -48,7 +48,9 @@ export async function safeVmEval(
     );
   }
 
-  return await executeIsolatedJavaScript(`return (${expression});`, context, { timeout: timeoutMs });
+  return await executeIsolatedJavaScript(`return (${expression});`, context, {
+    timeout: timeoutMs,
+  });
 }
 
 /** Convert ToolServiceResult to ToolExecutionResult. */

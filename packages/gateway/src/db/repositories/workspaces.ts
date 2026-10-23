@@ -330,7 +330,7 @@ export class WorkspacesRepository extends BaseRepository {
         exitCode ?? null,
         executionTimeMs ?? null,
         executionId,
-        this.userId
+        this.userId,
       ]
     );
     return result.changes > 0;

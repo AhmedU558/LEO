@@ -226,7 +226,7 @@ providerRoutes.put('/providers/:id', async (c) => {
           isEnabled: body.isEnabled ?? true,
           config: body.config,
         });
-    invalidateAgentCache();
+        invalidateAgentCache();
 
         wsGateway.broadcast('data:changed', {
           entity: 'model_provider',
@@ -277,8 +277,8 @@ providerRoutes.delete('/providers/:id', async (c) => {
   }
 
   const deleted = await modelConfigsRepo.deleteProvider(userId, providerId);
-    invalidateAgentCache();
-    invalidateAgentCache();
+  invalidateAgentCache();
+  invalidateAgentCache();
 
   if (!deleted) {
     return notFoundError(c, 'Provider', providerId);
@@ -327,7 +327,7 @@ providerRoutes.patch('/providers/:id/toggle', async (c) => {
         providerType: 'openai_compatible',
         isEnabled: body.enabled,
       });
-    invalidateAgentCache();
+      invalidateAgentCache();
 
       wsGateway.broadcast('data:changed', {
         entity: 'model_provider',
@@ -351,10 +351,10 @@ providerRoutes.patch('/providers/:id/toggle', async (c) => {
         providerType: agg.type,
         isEnabled: body.enabled,
       });
-    invalidateAgentCache();
+      invalidateAgentCache();
     } else {
       const toggled = await modelConfigsRepo.toggleProvider(userId, providerId, body.enabled);
-    invalidateAgentCache();
+      invalidateAgentCache();
       if (!toggled) {
         return notFoundError(c, 'Provider', providerId);
       }
@@ -546,7 +546,7 @@ providerRoutes.post('/providers/:id/discover-models', async (c) => {
         isEnabled: true,
         isCustom: true,
       });
-    invalidateAgentCache();
+      invalidateAgentCache();
 
       discovered.push({ modelId: model.id, displayName, isNew });
     }

@@ -395,4 +395,3 @@ browserRoutes.delete('/workflows/:id', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: getErrorMessage(err) }, 500);
   }
 });
-

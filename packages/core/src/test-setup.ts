@@ -9,4 +9,3 @@ vi.mock('undici', async (importOriginal) => {
     fetch: (input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init),
   };
 });
-

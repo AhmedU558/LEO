@@ -1,6 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { validateComputerObjective } from '@ownpilot/core/computer';
 import type {
+  ComputerCompletionEvaluator,
   ComputerActionProposer,
   ScreenshotRedactor,
   ComputerVisionResult,
@@ -21,6 +22,9 @@ export const VISION_LIMITS = {
   iterations: 5,
   screenshots: 5,
   modelRequests: 5,
+  // Completion verdicts are bounded separately so adding the evaluator cannot
+  // quietly consume the proposal budget. At most one runs per executed action.
+  evaluations: 5,
   actions: 10,
   durationMs: 120000,
 } as const;
@@ -66,6 +70,14 @@ export async function runComputerVisionLoop(
      * under a different goal.
      */
     objective?: string;
+    /**
+     * Judges whether the objective is already met, so the task can stop before
+     * spending its whole budget. Only consulted when an objective is present:
+     * there is nothing to judge without one. It can end a run or let it
+     * continue, and nothing else -- it names no action and takes no decision
+     * about capability, policy, risk, approval or limits.
+     */
+    evaluator?: ComputerCompletionEvaluator;
     limits?: Partial<Limits>;
   },
   service = new ComputerService()
@@ -78,6 +90,7 @@ export async function runComputerVisionLoop(
     screenshots: 0,
     modelRequests: 0,
     actions: 0,
+    evaluations: 0,
   });
   if (!ctx?.jobId || !ctx.leaseToken || !step || !options.redactor?.redact) return failed('FAILED');
   const repo = new ExecutionTasksRepository(ctx.userId, ctx.workspaceId);
@@ -237,6 +250,37 @@ export async function runComputerVisionLoop(
             current.result.approvalId = undefined;
             current.capture = capture;
             current.phase = 'propose';
+
+            // Phase 6.12. This capture is the fresh observation that follows
+            // the action just executed, so it is also what the objective is
+            // judged against -- no second screenshot, and the evaluator sees
+            // exactly the bytes the proposer is about to see.
+            //
+            // The final action is not evaluated: the loop is already ending on
+            // its budget, so a verdict could not change the outcome and would
+            // cost a capture the screenshot budget does not have.
+            if (objective && options.evaluator && current.result.iterations > 0) {
+              if ((current.result.evaluations ?? 0) >= limits.evaluations)
+                return finish('LIMIT_REACHED');
+              current.result.evaluations = (current.result.evaluations ?? 0) + 1;
+              const verdict = await computerStepContext.run(
+                { ...step, iteration, observationId: current.result.observationId },
+                () =>
+                  service.evaluateCompletion(
+                    capture,
+                    options.evaluator!,
+                    options.redactor,
+                    objective
+                  )
+              );
+              if (signal.aborted) return finish(stopped());
+              current.result.completion = verdict;
+              // COMPLETE ends the run; it never marks the objective achieved.
+              // FAILED covers every evaluator fault, so an unusable evaluator
+              // stops the task rather than letting it spend more actions.
+              if (verdict === 'COMPLETE') return finish('COMPLETED');
+              if (verdict === 'FAILED') return finish('FAILED');
+            }
           }
           if (current.phase === 'propose') {
             if (

@@ -177,7 +177,11 @@ describe('Browser Routes', () => {
       const json = await res.json();
       expect(json.success).toBe(true);
       expect(json.data.url).toBe('https://example.com');
-      expect(mockBrowserService.navigate).toHaveBeenCalledWith(expect.any(String), 'default', 'https://example.com');
+      expect(mockBrowserService.navigate).toHaveBeenCalledWith(
+        expect.any(String),
+        'default',
+        'https://example.com'
+      );
     });
 
     it('returns 400 when url is missing', async () => {

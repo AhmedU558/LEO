@@ -38,29 +38,38 @@ vi.mock('undici', async (importOriginal) => {
 // (data-encryption.test.ts manages this env var itself for key-resolution tests.)
 process.env.OWNPILOT_ENCRYPTION_KEY ??= 'gateway-test-suite-encryption-key';
 
-
 vi.mock('@ownpilot/core/sandbox', async (importOriginal) => {
   const original = await importOriginal();
-  
+
   const isIntegration = expect.getState().testPath?.includes('.integration.test.ts');
   if (isIntegration) {
     return original;
   }
 
-  return { ...((original || {}) as any), executeIsolatedJavaScript: async (code: any, context: any, options: any) => {
+  return {
+    ...((original || {}) as any),
+    executeIsolatedJavaScript: async (code: any, context: any, options: any) => {
       // Preserve realistic success, failure, timeout, cancellation, and sandbox-error behavior in the mock
       return new Promise((resolve, reject) => {
         // 1. Syntax/Validation Simulation
         if (code.includes('syntax error') || code.includes('invalidcode')) {
-           return reject(new Error("SyntaxError: Unexpected identifier"));
+          return reject(new Error('SyntaxError: Unexpected identifier'));
         }
 
         // 3. Timeout Simulation
-        if (code.includes('while(true)') || code.includes('while (true)') || code.includes('for(;;)') || code.includes('infinite')) {
+        if (
+          code.includes('while(true)') ||
+          code.includes('while (true)') ||
+          code.includes('for(;;)') ||
+          code.includes('infinite')
+        ) {
           if (options?.timeout) {
-            setTimeout(() => {
-              reject(new Error("Sandbox execution timed out"));
-            }, Math.min(options.timeout, 50)); // Fast fail for tests
+            setTimeout(
+              () => {
+                reject(new Error('Sandbox execution timed out'));
+              },
+              Math.min(options.timeout, 50)
+            ); // Fast fail for tests
             return;
           }
         }
@@ -80,17 +89,27 @@ vi.mock('@ownpilot/core/sandbox', async (importOriginal) => {
           reject(error);
         }
       });
-    }
+    },
   };
 });
 
 vi.mock('./routes/helpers.js', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...((actual || {}) as any), getUserId: (c: any) => {
-      try { return c.get('userId') || 'default'; } catch { return 'default'; }
+  return {
+    ...((actual || {}) as any),
+    getUserId: (c: any) => {
+      try {
+        return c.get('userId') || 'default';
+      } catch {
+        return 'default';
+      }
     },
     getWorkspaceId: (c: any) => {
-      try { return c.req.header('X-Workspace-ID') || 'default'; } catch { return 'default'; }
-    }
+      try {
+        return c.req.header('X-Workspace-ID') || 'default';
+      } catch {
+        return 'default';
+      }
+    },
   };
 });

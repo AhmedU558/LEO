@@ -46,4 +46,3 @@ mediaRoutes.delete('/:id', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
   }
 });
-

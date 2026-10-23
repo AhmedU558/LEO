@@ -1,7 +1,10 @@
 import type { WorkflowNode, NodeResult } from '../../../db/repositories/workflows/index.js';
 import { ComputerService } from '../../computer/service.js';
 import type { ComputerAction } from '@ownpilot/core/computer';
-import { OpenAIComputerActionProposer } from '@ownpilot/core/computer';
+import {
+  OpenAIComputerActionProposer,
+  OpenAIComputerCompletionEvaluator,
+} from '@ownpilot/core/computer';
 import { getAggregatorProvider } from '@ownpilot/core';
 import { runComputerVisionLoop } from '../../computer/vision-loop.js';
 import { StructuralScreenshotRedactor } from '../../computer/screenshot-redactor.js';
@@ -45,7 +48,14 @@ export async function executeBrowserNode(
       iterations: typeof params.iterations === 'number' ? params.iterations : 1,
       // The workflow author's goal for this node. It reaches the model as
       // delimited untrusted data and is never read back out of the page.
-      ...(typeof params.objective === 'string' ? { objective: params.objective } : {}),
+      ...(typeof params.objective === 'string'
+        ? {
+            objective: params.objective,
+            // Only meaningful with a goal to judge against, so it is created
+            // alongside one and never on its own.
+            evaluator: new OpenAIComputerCompletionEvaluator({ apiKey, model, baseUrl, provider }),
+          }
+        : {}),
       proposer: new OpenAIComputerActionProposer({ apiKey, model, baseUrl, provider }),
       redactor: new StructuralScreenshotRedactor(),
     });

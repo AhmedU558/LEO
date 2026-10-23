@@ -83,7 +83,14 @@ export interface ComputerTask {
 // ---------------------------------------------------------------------------
 
 export type VoiceSessionStatus =
-  'disconnected' | 'connecting' | 'connected' | 'recording' | 'processing' | 'speaking' | 'error';
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'listening'
+  | 'recording'
+  | 'processing'
+  | 'speaking'
+  | 'error';
 
 export interface VoiceMessage {
   id: string;

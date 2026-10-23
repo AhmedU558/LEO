@@ -315,7 +315,10 @@ describe('Claw Tools', () => {
 
     it('should accept valid tool creation and execute', async () => {
       setClawContext();
-      mockSandboxExecute.mockResolvedValueOnce({ success: true, result: { parsed: true, input: 'a,b,c' } });
+      mockSandboxExecute.mockResolvedValueOnce({
+        success: true,
+        result: { parsed: true, input: 'a,b,c' },
+      });
 
       const result = await executeClawTool(
         'claw_create_tool',
@@ -648,7 +651,10 @@ describe('Claw Tools', () => {
     for (const eventType of reservedExamples) {
       it(`should reject reserved event type "${eventType}"`, async () => {
         setClawContext();
-        mockSandboxExecute.mockResolvedValueOnce({ success: true, result: { parsed: true, input: 'a,b,c' } });
+        mockSandboxExecute.mockResolvedValueOnce({
+          success: true,
+          result: { parsed: true, input: 'a,b,c' },
+        });
         const result = await executeClawTool(
           'claw_emit_event',
           { event_type: eventType, payload: {} },
@@ -1545,6 +1551,3 @@ describe('Claw Tools', () => {
     });
   });
 });
-
-
-

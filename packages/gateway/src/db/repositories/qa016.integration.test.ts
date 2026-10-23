@@ -28,7 +28,7 @@ describe.skipIf(!url)('QA-016 Integration: Idempotency and Retries', () => {
     // Concurrent claims
     const [claim1, claim2] = await Promise.all([
       repo.claimOperation(userId, operationId, requestHash, owner1),
-      repo.claimOperation(userId, operationId, requestHash, owner2)
+      repo.claimOperation(userId, operationId, requestHash, owner2),
     ]);
 
     // Exactly one should win
@@ -42,7 +42,9 @@ describe.skipIf(!url)('QA-016 Integration: Idempotency and Retries', () => {
     expect(loser.state).toBe('pending');
 
     // Winner finishes
-    await repo.finishOperation(userId, operationId, winner.claimed ? owner1 : owner2, 'success', { val: 'test' });
+    await repo.finishOperation(userId, operationId, winner.claimed ? owner1 : owner2, 'success', {
+      val: 'test',
+    });
 
     // Loser polling or next retry should see success
     const retry = await repo.claimOperation(userId, operationId, requestHash, randomUUID());

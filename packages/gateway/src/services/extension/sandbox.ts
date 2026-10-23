@@ -1,14 +1,7 @@
 ﻿import { executeIsolatedJavaScript } from '@ownpilot/core/sandbox';
 
-
-
-
 export class ExtensionSandboxManager {
-  
-
-  setCallToolHandler(_handler: (...args: any[]) => Promise<any>) {
-    
-  }
+  setCallToolHandler(_handler: (...args: any[]) => Promise<any>) {}
 
   async execute(options: {
     extensionId: string;
@@ -23,7 +16,7 @@ export class ExtensionSandboxManager {
     const startTime = Date.now();
     try {
       const globals = { args: options.args, utils: {} };
-      
+
       const wrappedCode = `
         const module = { exports: {} };
         ${options.code}
@@ -34,7 +27,7 @@ export class ExtensionSandboxManager {
           return module.exports;
         })();
       `;
-      
+
       const value = await executeIsolatedJavaScript(wrappedCode, globals, {
         timeout: options.maxExecutionTime ?? 30000,
         memoryMB: options.maxMemory ? Math.floor(options.maxMemory / 1024 / 1024) : 128,

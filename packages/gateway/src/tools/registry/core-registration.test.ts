@@ -23,22 +23,24 @@ describe('core-registration (QA-007)', () => {
     });
 
     registerGatewayTools(tools, 'user-123', false);
-    
+
     // Pick any registered tool, e.g., 'core.create_memory'
     const tool = tools.get('core.create_memory');
     if (!tool) throw new Error('Tool not registered');
 
     // Execute the native tool directly on the registry
-    const result = await tools.execute('core.create_memory', { text: 'test' }, { userId: 'user-123' });
-    
+    const result = await tools.execute(
+      'core.create_memory',
+      { text: 'test' },
+      { userId: 'user-123' }
+    );
+
     // It should have failed closed
     expect(result.ok).toBe(true);
     expect(result.value.isError).toBe(true);
     expect(String(result.value.content)).toContain('blocked: QA-007 test denial');
-    
+
     // Verify checkToolPermission was called
     expect(permissionService.checkToolPermission).toHaveBeenCalled();
   });
 });
-
-

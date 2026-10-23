@@ -4,7 +4,7 @@
 
 export const CORE_TABLES_SQL = `
 -- Enable pgvector extension for vector similarity search
-CREATE EXTENSION IF NOT EXISTS vector;
+-- CREATE EXTENSION IF NOT EXISTS vector;
 
 -- =====================================================
 -- CORE TABLES

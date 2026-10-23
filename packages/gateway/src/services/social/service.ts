@@ -1,4 +1,9 @@
-import type { SocialPost, PublishRequest, SocialAccount, PublishResult } from '@ownpilot/core/social';
+import type {
+  SocialPost,
+  PublishRequest,
+  SocialAccount,
+  PublishResult,
+} from '@ownpilot/core/social';
 import { SocialRepository } from '../../db/repositories/social.js';
 import { socialProviderRegistry } from './provider-registry.js';
 import { ExecutionTaskService } from '../execution-task-service.js';
@@ -65,9 +70,9 @@ export class SocialService {
     // Risk and Policy Checks
     const identity = { userId: this.userId, workspaceId: this.workspaceId, roles: [] };
     const resourceId = `social_account:${account.id}`;
-    
+
     const riskLevel = new RiskEngine().classify('social.post.publish', 'publish');
-    
+
     const policyResult = new PolicyEngine().evaluate({
       identity,
       action: 'social.publish',
@@ -78,11 +83,11 @@ export class SocialService {
       autonomous: true,
       requestedParameters: { platform: account.platform },
     });
-    
+
     if (policyResult.decision === 'DENY') throw new Error(`Policy denied: ${policyResult.reason}`);
 
     // Ledger
-        await ActionLedger.record({
+    await ActionLedger.record({
       userId: this.userId,
       workspaceId: this.workspaceId,
       agentId: 'social_publish',
@@ -94,9 +99,8 @@ export class SocialService {
       policyDecision: policyResult.decision,
       riskLevel: riskLevel,
       executionEnvironment: 'trusted',
-      durationMs: 0
+      durationMs: 0,
     });
-
 
     const provider = socialProviderRegistry.get(postInput.platform);
     if (postInput.media && postInput.media.length > 0) {
@@ -212,8 +216,3 @@ export class SocialService {
     return result;
   }
 }
-
-
-
-
-

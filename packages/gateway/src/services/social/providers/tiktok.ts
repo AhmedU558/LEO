@@ -36,18 +36,21 @@ export class TikTokProvider implements SocialProvider {
       body: p.toString(),
     });
 
-    const tokenData = await tokenRes.json() as any;
+    const tokenData = (await tokenRes.json()) as any;
     if (!tokenRes.ok || tokenData.error) {
       throw new Error(`Failed to exchange code: ${tokenData.error || tokenData.message}`);
     }
 
     const { access_token, refresh_token } = tokenData;
 
-    const userRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,avatar_url,display_name', {
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
+    const userRes = await fetch(
+      'https://open.tiktokapis.com/v2/user/info/?fields=open_id,avatar_url,display_name',
+      {
+        headers: { Authorization: `Bearer ${access_token}` },
+      }
+    );
 
-    const userData = await userRes.json() as any;
+    const userData = (await userRes.json()) as any;
     if (!userRes.ok || userData.error?.code !== 'ok') {
       throw new Error(`Failed to fetch user: ${userData.error?.message || 'unknown'}`);
     }
@@ -93,7 +96,10 @@ export class TikTokProvider implements SocialProvider {
 
   async publish(post: SocialPost, accessToken: string): Promise<PublishResult> {
     if (!post.media || post.media.length === 0) {
-      return { status: 'failed', error: { code: 'INVALID_INPUT', message: 'Media required', retryable: false } };
+      return {
+        status: 'failed',
+        error: { code: 'INVALID_INPUT', message: 'Media required', retryable: false },
+      };
     }
 
     const media = post.media[0]!;
@@ -123,14 +129,17 @@ export class TikTokProvider implements SocialProvider {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     if (!res.ok || data.error?.code !== 'ok') {
       return { status: 'failed', error: this.normalizeError(data) };
     }
 
     const publishId = data.data?.publish_id;
     if (!publishId) {
-      return { status: 'unknown', error: { code: 'NO_PUBLISH_ID', message: 'No publish ID returned', retryable: false } };
+      return {
+        status: 'unknown',
+        error: { code: 'NO_PUBLISH_ID', message: 'No publish ID returned', retryable: false },
+      };
     }
 
     return { status: 'publishing', providerPostId: publishId };
@@ -147,7 +156,7 @@ export class TikTokProvider implements SocialProvider {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     if (!res.ok || data.error?.code !== 'ok') {
       return { status: 'unknown', error: this.normalizeError(data) };
     }
@@ -158,7 +167,15 @@ export class TikTokProvider implements SocialProvider {
     } else if (status === 'PUBLISH_PROCESSING') {
       return { status: 'publishing', providerPostId };
     } else if (status === 'PUBLISH_FAILED') {
-      return { status: 'failed', providerPostId, error: { code: 'PUBLISH_FAILED', message: data.data?.fail_reason || 'Publish failed', retryable: false } };
+      return {
+        status: 'failed',
+        providerPostId,
+        error: {
+          code: 'PUBLISH_FAILED',
+          message: data.data?.fail_reason || 'Publish failed',
+          retryable: false,
+        },
+      };
     }
 
     return { status: 'unknown' };
@@ -176,6 +193,3 @@ export class TikTokProvider implements SocialProvider {
     return { code: String(code), message: String(message), retryable };
   }
 }
-
-
-

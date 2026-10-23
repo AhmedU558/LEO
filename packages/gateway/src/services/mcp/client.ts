@@ -302,27 +302,27 @@ export class McpClientService implements IMcpClientService {
         }
 
         const baseEnv = {
-            PATH: process.env.PATH,
-            HOME: process.env.HOME,
-            USER: process.env.USER,
-            APPDATA: process.env.APPDATA,
-            LOCALAPPDATA: process.env.LOCALAPPDATA,
-            TEMP: process.env.TEMP,
-            TMP: process.env.TMP,
-            LANG: process.env.LANG,
-          };
-          // Remove undefined values
-          const cleanEnv = Object.fromEntries(
-            Object.entries(baseEnv).filter(([_, v]) => v !== undefined)
-          ) as Record<string, string>;
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          USER: process.env.USER,
+          APPDATA: process.env.APPDATA,
+          LOCALAPPDATA: process.env.LOCALAPPDATA,
+          TEMP: process.env.TEMP,
+          TMP: process.env.TMP,
+          LANG: process.env.LANG,
+        };
+        // Remove undefined values
+        const cleanEnv = Object.fromEntries(
+          Object.entries(baseEnv).filter(([_, v]) => v !== undefined)
+        ) as Record<string, string>;
 
-          return new StdioClientTransport({
-            command: server.command,
-            args: server.args,
-            env: {
-              ...cleanEnv,
-              ...server.env,
-            },
+        return new StdioClientTransport({
+          command: server.command,
+          args: server.args,
+          env: {
+            ...cleanEnv,
+            ...server.env,
+          },
           stderr: 'pipe',
         });
       }
@@ -389,7 +389,7 @@ export class McpClientService implements IMcpClientService {
           overrides?.workflowUsable !== undefined ? overrides.workflowUsable : undefined,
       };
 
-            const executor = async (
+      const executor = async (
         args: Record<string, unknown>,
         context?: import('@ownpilot/core/tools').ToolContext
       ): Promise<ToolExecutionResult> => {
@@ -451,4 +451,3 @@ export class McpClientService implements IMcpClientService {
 // =============================================================================
 
 export const mcpClientService = new McpClientService();
-

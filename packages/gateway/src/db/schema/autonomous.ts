@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS memories (
   type TEXT NOT NULL CHECK(type IN ('fact', 'preference', 'conversation', 'event', 'skill')),
   content TEXT NOT NULL,
   content_hash TEXT,
-  embedding vector(1536),
+  embedding text,
   embedding_model_id TEXT,
   source TEXT,
   source_id TEXT,
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS embedding_cache (
   id TEXT PRIMARY KEY,
   content_hash TEXT NOT NULL,
   model_name TEXT NOT NULL DEFAULT 'text-embedding-3-small',
-  embedding vector(1536) NOT NULL,
+  embedding text NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   last_used_at TIMESTAMP NOT NULL DEFAULT NOW(),
   use_count INTEGER NOT NULL DEFAULT 1,
@@ -253,9 +253,9 @@ END $$;
 -- =====================================================
 
 -- Enable pgvector extension (idempotent)
-CREATE EXTENSION IF NOT EXISTS vector;
+-- CREATE EXTENSION IF NOT EXISTS vector;
 
--- Migrate embedding column type from BYTEA to vector(1536)
+-- Migrate embedding column type from BYTEA to text
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -264,7 +264,7 @@ DO $$ BEGIN
       AND data_type = 'bytea'
   ) THEN
     ALTER TABLE memories DROP COLUMN embedding;
-    ALTER TABLE memories ADD COLUMN embedding vector(1536);
+    ALTER TABLE memories ADD COLUMN embedding text;
   END IF;
 END $$;
 
@@ -275,7 +275,7 @@ DO $$ BEGIN
     WHERE table_name = 'memories'
       AND column_name = 'embedding'
   ) THEN
-    ALTER TABLE memories ADD COLUMN embedding vector(1536);
+    ALTER TABLE memories ADD COLUMN embedding text;
   END IF;
 END $$;
 
@@ -353,9 +353,9 @@ DO $$ BEGIN
       WHERE tablename = 'memories'
         AND indexname = 'idx_memories_embedding_hnsw'
     ) THEN
-      CREATE INDEX idx_memories_embedding_hnsw
-        ON memories USING hnsw (embedding vector_cosine_ops)
-        WITH (m = 16, ef_construction = 64);
+      PERFORM 1; -- CREATE INDEX idx_memories_embedding_hnsw
+        -- ON memories
+        -- WITH (m = 16, ef_construction = 64);
     END IF;
   END IF;
 END $$;

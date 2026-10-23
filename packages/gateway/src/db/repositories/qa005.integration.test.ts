@@ -13,11 +13,11 @@ describe.skipIf(!url)('QA-005 Integration: Cross-user authorization boundaries (
   let adapter: PostgresAdapter;
   let admin: pg.Pool;
   const database = `test_qa005_${randomUUID().replace(/-/g, '')}`;
-  
+
   beforeAll(async () => {
     admin = new pg.Pool({ connectionString: url });
     await admin.query(`CREATE DATABASE "${database}"`);
-    
+
     const testUrl = new URL(url!);
     testUrl.pathname = `/${database}`;
     adapter = new PostgresAdapter({ type: 'postgres', postgresUrl: testUrl.toString() });
@@ -42,12 +42,12 @@ describe.skipIf(!url)('QA-005 Integration: Cross-user authorization boundaries (
     }
   });
 
-  it('Tasks: User A cannot read, list, update, or delete User B\'s tasks', async () => {
+  it("Tasks: User A cannot read, list, update, or delete User B's tasks", async () => {
     const userA = 'user-a-' + randomUUID();
     const userB = 'user-b-' + randomUUID();
     const repoA = new TasksRepository(userA);
     const repoB = new TasksRepository(userB);
-    
+
     // We must pass the adapter down so tests use the isolated DB, not the global config DB
     (repoA as any).adapter = adapter;
     (repoB as any).adapter = adapter;
@@ -74,12 +74,12 @@ describe.skipIf(!url)('QA-005 Integration: Cross-user authorization boundaries (
     expect(verifyB?.title).toBe('User B Task');
   });
 
-  it('Notes: User A cannot read, list, update, or delete User B\'s notes', async () => {
+  it("Notes: User A cannot read, list, update, or delete User B's notes", async () => {
     const userA = 'user-a-' + randomUUID();
     const userB = 'user-b-' + randomUUID();
     const repoA = new NotesRepository(userA);
     const repoB = new NotesRepository(userB);
-    
+
     (repoA as any).adapter = adapter;
     (repoB as any).adapter = adapter;
 
@@ -92,28 +92,28 @@ describe.skipIf(!url)('QA-005 Integration: Cross-user authorization boundaries (
     expect((await repoB.get(note.id))?.title).toBe('Secret Note');
   });
 
-  it('Memories: User A cannot read, list, update, or delete User B\'s memories', async () => {
+  it("Memories: User A cannot read, list, update, or delete User B's memories", async () => {
     const userA = 'user-a-' + randomUUID();
     const userB = 'user-b-' + randomUUID();
     const repoA = new MemoriesRepository(userA);
     const repoB = new MemoriesRepository(userB);
-    
+
     (repoA as any).adapter = adapter;
     (repoB as any).adapter = adapter;
 
     const memory = await repoB.create({ content: 'Secret Memory', source: 'test', type: 'fact' });
 
     expect(await repoA.get(memory.id)).toBeNull();
-    expect((await repoA.list({}))).toHaveLength(0);
+    expect(await repoA.list({})).toHaveLength(0);
     expect(await repoA.update(memory.id, { content: 'Hacked Memory' })).toBeNull();
     expect(await repoA.delete(memory.id)).toBe(false);
     expect((await repoB.get(memory.id))?.content).toBe('Secret Memory');
   });
 
-  it('Workspaces & Executions: User A cannot read or access User B\'s workspace executions', async () => {
+  it("Workspaces & Executions: User A cannot read or access User B's workspace executions", async () => {
     const userA = 'user-a-' + randomUUID();
     const userB = 'user-b-' + randomUUID();
-    
+
     // Dynamically import WorkspacesRepository if it exists, otherwise skip
     let repoB: any;
     let repoA: any;
@@ -124,25 +124,25 @@ describe.skipIf(!url)('QA-005 Integration: Cross-user authorization boundaries (
     } catch {
       return; // Not available in this context
     }
-    
+
     repoA.adapter = adapter;
     repoB.adapter = adapter;
 
     const wsB = await repoB.create({
       name: 'User B Workspace',
       storagePath: '/tmp/b',
-      containerConfig: {}
+      containerConfig: {},
     });
 
     expect(await repoA.get(wsB.id)).toBeNull();
-    
+
     // Executions
     const execB = await repoB.createExecution(wsB.id, 'python', 'abc');
     expect(await repoA.listExecutions(wsB.id)).toHaveLength(0);
     expect(await repoB.listExecutions(wsB.id)).toHaveLength(1);
-    
+
     expect(await repoA.countExecutions(wsB.id)).toBe(0);
-    
+
     // Wait, updateExecution needs ID
     const updateResult = await repoA.updateExecution(execB.id, 'failed');
     expect(updateResult).toBe(false);

@@ -193,7 +193,7 @@ export async function executeRunScript(
   // probe `docker version` once; if it isn't available we fall back to local
   // and surface the fallback in the result so the LLM knows what happened.
   // @ts-expect-error ignore dynamic import
-const _sandboxPref = ctx.sandbox ?? 'auto';
+  const _sandboxPref = ctx.sandbox ?? 'auto';
   const useDocker = true; // QA-009: local fallback strictly forbidden
   const dockerFallbackReason = undefined;
 
@@ -333,7 +333,7 @@ export async function executeCreateTool(args: Record<string, unknown>): Promise<
   const description = args.description as string;
   const code = args.code as string;
   // @ts-expect-error ignore dynamic import
-const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
+  const _toolArgs = (args.parameters as Record<string, unknown>) ?? undefined;
   const invokeArgs = (args.args as Record<string, unknown>) ?? {};
 
   if (!validateToolName(name)) {
@@ -421,6 +421,3 @@ export async function executeProgrammaticCode(
     return { success: false, error: getErrorMessage(err) };
   }
 }
-
-
-

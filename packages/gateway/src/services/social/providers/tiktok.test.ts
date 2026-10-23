@@ -5,22 +5,44 @@ vi.stubGlobal(
   'fetch',
   vi.fn(async (url: string) => {
     if (url.includes('oauth/token')) {
-      return { ok: true, json: async () => ({ access_token: 'mock_token', refresh_token: 'mock_ref', open_id: 'tiktok_user' }) };
+      return {
+        ok: true,
+        json: async () => ({
+          access_token: 'mock_token',
+          refresh_token: 'mock_ref',
+          open_id: 'tiktok_user',
+        }),
+      };
     }
     if (url.includes('user/info')) {
       return {
         ok: true,
         json: async () => ({
-          data: { user: { open_id: 'tiktok_user', display_name: 'TikTok User Test', avatar_url: 'http://img' } },
+          data: {
+            user: {
+              open_id: 'tiktok_user',
+              display_name: 'TikTok User Test',
+              avatar_url: 'http://img',
+            },
+          },
           error: { code: 'ok' },
         }),
       };
     }
     if (url.includes('post/publish/video/init')) {
-      return { ok: true, json: async () => ({ data: { publish_id: 'pub_123' }, error: { code: 'ok' } }) };
+      return {
+        ok: true,
+        json: async () => ({ data: { publish_id: 'pub_123' }, error: { code: 'ok' } }),
+      };
     }
     if (url.includes('post/publish/status/fetch')) {
-      return { ok: true, json: async () => ({ data: { status: 'PUBLISH_COMPLETE', public_url: 'http://tiktok.com/v' }, error: { code: 'ok' } }) };
+      return {
+        ok: true,
+        json: async () => ({
+          data: { status: 'PUBLISH_COMPLETE', public_url: 'http://tiktok.com/v' },
+          error: { code: 'ok' },
+        }),
+      };
     }
     return { ok: true, json: async () => ({}) };
   })
@@ -47,19 +69,71 @@ describe('TikTokProvider', () => {
   });
 
   it('validateMedia: rejects image', async () => {
-    const res = await provider.validateMedia([{ id: 'm1', userId: 'u', workspaceId: 'w', storageKey: 'k', checksum: 'c', mediaType: 'image', status: 'READY', filename: '1.jpg', mimeType: 'image/jpeg', sizeBytes: 10, createdAt: new Date(), updatedAt: new Date() }]);
+    const res = await provider.validateMedia([
+      {
+        id: 'm1',
+        userId: 'u',
+        workspaceId: 'w',
+        storageKey: 'k',
+        checksum: 'c',
+        mediaType: 'image',
+        status: 'READY',
+        filename: '1.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 10,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
     expect(res.valid).toBe(false);
   });
 
   it('validateMedia: accepts video', async () => {
-    const res = await provider.validateMedia([{ id: 'm1', userId: 'u', workspaceId: 'w', storageKey: 'k', checksum: 'c', mediaType: 'video', status: 'READY', filename: '1.mp4', mimeType: 'video/mp4', sizeBytes: 10, createdAt: new Date(), updatedAt: new Date() }]);
+    const res = await provider.validateMedia([
+      {
+        id: 'm1',
+        userId: 'u',
+        workspaceId: 'w',
+        storageKey: 'k',
+        checksum: 'c',
+        mediaType: 'video',
+        status: 'READY',
+        filename: '1.mp4',
+        mimeType: 'video/mp4',
+        sizeBytes: 10,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
     expect(res.valid).toBe(true);
   });
 
   it('publish: single video calls init and returns publishing', async () => {
     const post = {
-      id: 'p1', userId: 'u', workspaceId: 'w', accountId: 't1', platform: 'tiktok' as const, text: 'hi', hashtags: [], metadata: {},
-      media: [{ id: 'm1', userId: 'u', workspaceId: 'w', storageKey: 'k', checksum: 'c', mediaType: 'video' as const, status: 'READY' as const, filename: '1.mp4', mimeType: 'video/mp4', sizeBytes: 10, createdAt: new Date(), updatedAt: new Date() }]
+      id: 'p1',
+      userId: 'u',
+      workspaceId: 'w',
+      accountId: 't1',
+      platform: 'tiktok' as const,
+      text: 'hi',
+      hashtags: [],
+      metadata: {},
+      media: [
+        {
+          id: 'm1',
+          userId: 'u',
+          workspaceId: 'w',
+          storageKey: 'k',
+          checksum: 'c',
+          mediaType: 'video' as const,
+          status: 'READY' as const,
+          filename: '1.mp4',
+          mimeType: 'video/mp4',
+          sizeBytes: 10,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
     };
     const res = await provider.publish(post, 'token');
     expect(res.status).toBe('publishing');
@@ -72,5 +146,3 @@ describe('TikTokProvider', () => {
     expect(res.publishedUrl).toBe('http://tiktok.com/v');
   });
 });
-
-

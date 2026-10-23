@@ -87,7 +87,8 @@ generationRoutes.post('/:id/execute', async (c) => {
   try {
     const result = await executeCustomToolUnified(tool.name, body.arguments ?? {}, {
       conversationId: 'direct-execution',
-      userId: getUserId(c) });
+      userId: getUserId(c),
+    });
     const duration = Date.now() - startTime;
 
     // Record usage
@@ -206,7 +207,8 @@ generationRoutes.post('/test', async (c) => {
     const result = await testRegistry.execute(body.name, body.testArguments ?? {}, {
       callId: `test_${Date.now()}`,
       conversationId: 'test-execution',
-      userId: getUserId(c) });
+      userId: getUserId(c),
+    });
     const duration = Date.now() - startTime;
 
     return apiResponse(c, {

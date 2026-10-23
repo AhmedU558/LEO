@@ -43,25 +43,25 @@ export async function executeDynamicTool(
 
   // Legacy VM path for tests that explicitly require host APIs (config, callTool)
   if (process.env.OWNPILOT_TOOL_SANDBOX === 'vm') {
-    return executeDynamicToolInVm(
-      tool,
-      args,
-      context,
-      pluginId,
-      toolPermissions,
-      callableTools
-    );
+    return executeDynamicToolInVm(tool, args, context, pluginId, toolPermissions, callableTools);
   }
 
   // Default: QA-009 TRUE UNTRUSTED EXECUTION ISOLATION via Docker
   try {
     const { executeIsolatedJavaScript } = await import('../../sandbox/docker.js');
-    const globals = { args, context: { toolName: tool.name, callId: context.callId, conversationId: context.conversationId, userId: context.userId } };
-    const result = await executeIsolatedJavaScript(
-      tool.code,
-      globals,
-      { timeout: 30000, memoryMB: 50 }
-    );
+    const globals = {
+      args,
+      context: {
+        toolName: tool.name,
+        callId: context.callId,
+        conversationId: context.conversationId,
+        userId: context.userId,
+      },
+    };
+    const result = await executeIsolatedJavaScript(tool.code, globals, {
+      timeout: 30000,
+      memoryMB: 50,
+    });
     return { content: result };
   } catch (error) {
     return { content: getErrorMessage(error, 'Tool execution failed'), isError: true };

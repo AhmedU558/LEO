@@ -804,7 +804,10 @@ describe('McpClientService', () => {
         content: [{ type: 'text', text: 'hello' }],
       });
 
-      const result = await executor({ message: 'hello' }, { userId: 'default', callId: '1', conversationId: '1' });
+      const result = await executor(
+        { message: 'hello' },
+        { userId: 'default', callId: '1', conversationId: '1' }
+      );
 
       expect(result).toEqual({ content: 'hello' });
     });

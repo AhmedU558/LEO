@@ -833,12 +833,12 @@ workflowRoutes.get('/approvals/pending', pagination(), async (c) => {
   ]);
 
   return apiResponse(c, {
-      items: approvals,
-      total,
-      page: Math.floor(offset / limit) + 1,
-      limit,
-      hasMore: offset + limit < total,
-    });
+    items: approvals,
+    total,
+    page: Math.floor(offset / limit) + 1,
+    limit,
+    hasMore: offset + limit < total,
+  });
 });
 
 workflowRoutes.get('/approvals/all', pagination(), async (c) => {
@@ -853,12 +853,12 @@ workflowRoutes.get('/approvals/all', pagination(), async (c) => {
   ]);
 
   return apiResponse(c, {
-      items: approvals,
-      total,
-      page: Math.floor(offset / limit) + 1,
-      limit,
-      hasMore: offset + limit < total,
-    });
+    items: approvals,
+    total,
+    page: Math.floor(offset / limit) + 1,
+    limit,
+    hasMore: offset + limit < total,
+  });
 });
 
 workflowRoutes.post('/approvals/:id/approve', async (c) => {
@@ -868,7 +868,7 @@ workflowRoutes.post('/approvals/:id/approve', async (c) => {
 
   const repo = createWorkflowApprovalsRepository(userId);
   const approval = await repo.decide(id, 'approved', workspaceId);
-  if ((approval?.context || {} as any).executionTaskId)
+  if ((approval?.context || ({} as any)).executionTaskId)
     return apiError(c, 'Use the execution task approval endpoint', 409);
   if (!approval || approval.status !== 'approved') {
     return apiError(
@@ -909,7 +909,7 @@ workflowRoutes.post('/approvals/:id/reject', async (c) => {
 
   const repo = createWorkflowApprovalsRepository(userId);
   const approval = await repo.decide(id, 'rejected', workspaceId);
-  if ((approval?.context || {} as any).executionTaskId)
+  if ((approval?.context || ({} as any)).executionTaskId)
     return apiError(c, 'Use the execution task approval endpoint', 409);
   if (!approval || approval.status !== 'rejected') {
     return apiError(
@@ -1137,5 +1137,3 @@ workflowRoutes.post('/logs/:logId/replay', async (c) => {
     }
   });
 });
-
-

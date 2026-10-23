@@ -141,4 +141,3 @@ describe('FacebookProvider', () => {
     expect(res).toBe(true);
   });
 });
-

@@ -12,7 +12,7 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => {
       constructor(args: any) {
         capturedArgs = args;
       }
-    }
+    },
   };
 });
 
@@ -26,7 +26,7 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => {
       getServerVersion = vi.fn().mockReturnValue({ name: 'test', version: '1.0' });
       close = vi.fn();
       callTool = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'success' }] });
-    }
+    },
   };
 });
 
@@ -46,7 +46,7 @@ vi.mock('../tool/executor.js', () => ({
 
 describe('QA-025 and QA-026: MCP Credentials and Process Boundary', () => {
   let mcpClient: McpClientService;
-  
+
   beforeEach(() => {
     vi.mocked(getSharedToolRegistry).mockReturnValue({ registerMcpTools: vi.fn() } as any);
     mcpClient = new McpClientService();
@@ -55,13 +55,13 @@ describe('QA-025 and QA-026: MCP Credentials and Process Boundary', () => {
     process.env.HOME = '/mock/home';
     capturedArgs = null;
   });
-  
+
   afterEach(() => {
     vi.mocked(getSharedToolRegistry).mockReturnValue({ registerMcpTools: vi.fn() } as any);
     delete process.env.SUPER_SECRET_KEY;
     vi.resetAllMocks();
   });
-  
+
   it('does not inherit unrestricted host environment variables in StdioClientTransport', async () => {
     const server: McpServerRecord = {
       id: 'test-1',
@@ -78,9 +78,9 @@ describe('QA-025 and QA-026: MCP Credentials and Process Boundary', () => {
       auto_connect: true,
       status: 'disconnected',
     };
-    
+
     await mcpClient.connect(server);
-    
+
     expect(capturedArgs).toBeDefined();
     expect(capturedArgs.env).toHaveProperty('PATH', '/mock/path');
     expect(capturedArgs.env).toHaveProperty('HOME', '/mock/home');
@@ -104,46 +104,57 @@ describe('QA-025 and QA-026: MCP Credentials and Process Boundary', () => {
       auto_connect: true,
       status: 'disconnected',
     };
-    
+
     const repoMock = {
       updateStatus: vi.fn(),
-      getByName: vi.fn().mockResolvedValue(server)
+      getByName: vi.fn().mockResolvedValue(server),
     };
     vi.mocked(getMcpServersRepo).mockReturnValue(repoMock as any);
-    
+
     await mcpClient.connect(server);
-    
+
     const registryMock = vi.mocked(getSharedToolRegistry);
     expect(registryMock).toHaveBeenCalled();
     const registerCall = registryMock().registerMcpTools as any;
     expect(registerCall).toHaveBeenCalled();
-    
+
     const toolsMap = registerCall.mock.calls[0][1];
     const tool = toolsMap.get('test-tool');
     expect(tool).toBeDefined();
-    
+
     const executor = tool.executor;
-    
+
     // Attempt to execute WITHOUT context
     const resNoContext = await executor({ arg1: 'value' }, undefined);
     expect(resNoContext.isError).toBe(true);
     expect(resNoContext.content).toMatch(/PolicyEngine DENY: Missing execution context/);
-    
+
     // Attempt to execute with WRONG user context (cross-workspace)
     repoMock.getByName.mockResolvedValueOnce(null); // Simulated not found for wrong user
-    const resWrongContext = await executor({ arg1: 'value' }, { userId: 'wrong-user', callId: '1', conversationId: '1' });
+    const resWrongContext = await executor(
+      { arg1: 'value' },
+      { userId: 'wrong-user', callId: '1', conversationId: '1' }
+    );
     expect(resWrongContext.isError).toBe(true);
-    expect(resWrongContext.content).toMatch(/PolicyEngine DENY: MCP server "test-mcp-2" is not authorized/);
+    expect(resWrongContext.content).toMatch(
+      /PolicyEngine DENY: MCP server "test-mcp-2" is not authorized/
+    );
 
     // Attempt to execute with DISABLED server
     repoMock.getByName.mockResolvedValueOnce({ ...server, enabled: false });
-    const resDisabled = await executor({ arg1: 'value' }, { userId: 'user-2', callId: '1', conversationId: '1' });
+    const resDisabled = await executor(
+      { arg1: 'value' },
+      { userId: 'user-2', callId: '1', conversationId: '1' }
+    );
     expect(resDisabled.isError).toBe(true);
     expect(resDisabled.content).toMatch(/PolicyEngine DENY: MCP server "test-mcp-2" is disabled/);
 
     // Valid execution
     repoMock.getByName.mockResolvedValueOnce(server);
-    const resValid = await executor({ arg1: 'value' }, { userId: 'user-2', callId: '1', conversationId: '1' });
+    const resValid = await executor(
+      { arg1: 'value' },
+      { userId: 'user-2', callId: '1', conversationId: '1' }
+    );
     expect(resValid.isError).toBeUndefined(); // No error!
   });
 });

@@ -1082,5 +1082,3 @@ chatHistoryRoutes.post('/search', async (c) => {
     );
   }
 });
-
-

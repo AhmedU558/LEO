@@ -7,6 +7,8 @@ import type {
   BrowserProvider,
   ComputerActionProposer,
   ComputerActionProposal,
+  ComputerCompletionEvaluator,
+  ComputerCompletionStatus,
   ComputerModelObservation,
   ComputerScreenshot,
   ScreenshotRedactor,
@@ -20,6 +22,7 @@ import {
   parseComputerProposal,
   validateComputerObservation,
   validateComputerObjective,
+  parseComputerCompletion,
   COMPUTER_MODEL_LIMITS,
 } from '@ownpilot/core/computer';
 import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
@@ -331,6 +334,98 @@ export class ComputerService {
       return { outcome: 'PROPOSED', proposal: bound };
     } catch {
       return { outcome: 'DENIED', error: 'Computer model proposal denied or unavailable' };
+    } finally {
+      clearTimeout(timer);
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+      if (modelSession) modelSession.modelBusy = false;
+    }
+  }
+
+  /**
+   * Ask whether the objective already looks met, against the same capture the
+   * proposer is about to see.
+   *
+   * Three things this deliberately does NOT do, and which keep a completion
+   * verdict from ever becoming an action:
+   *   - it does not consume the observation, so the proposer still gets the
+   *     identical redacted bytes rather than a second, later capture;
+   *   - it registers no proposal, so there is nothing `executeProposal` could
+   *     ever be handed;
+   *   - it returns a verdict and nothing else.
+   *
+   * Every failure -- stale session, changed page, timeout, malformed verdict --
+   * comes back as FAILED. Failing to 'COMPLETE' would let a broken evaluator
+   * end a task while claiming the goal was met; failing to 'CONTINUE' would let
+   * it keep spending actions. Stopping without that claim is the closed door.
+   */
+  async evaluateCompletion(
+    observation: ComputerActionResult,
+    evaluator: ComputerCompletionEvaluator,
+    redact: ScreenshotRedactor,
+    objective: string
+  ): Promise<ComputerCompletionStatus> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    let signal: AbortSignal | undefined;
+    let modelSession: Session | undefined;
+    try {
+      const captured = ComputerService.observations.get(observation);
+      if (!captured) throw new Error('Unverified model observation');
+      const session = await this.assertModelScope(captured.binding);
+      if (session.count !== captured.version || session.modelBusy)
+        throw new Error('Stale model observation');
+      session.modelBusy = true;
+      modelSession = session;
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), COMPUTER_MODEL_LIMITS.timeoutMs);
+      signal = AbortSignal.any([executionTaskContext.getStore()!.signal, controller.signal]);
+      const stopped = new Promise<never>((_, reject) => {
+        onAbort = () => reject(new Error('Model request stopped'));
+        signal!.addEventListener('abort', onAbort, { once: true });
+      });
+      signal.throwIfAborted();
+      const verdict = await Promise.race([
+        (async () => {
+          const prepared = (
+            await redact.redact({
+              image: captured.image,
+              binding: captured.binding,
+              observationId: captured.observationId,
+              signal: signal!,
+            })
+          ).observation;
+          signal!.throwIfAborted();
+          validateComputerObservation(prepared);
+          if ((await this.assertModelScope(captured.binding)).count !== captured.version)
+            throw new Error('Stale model observation');
+          if (
+            captured.image.layout &&
+            (await session.provider.inspectForRedaction?.())?.revision !==
+              captured.image.layout.revision
+          )
+            throw new Error('Browser changed before model disclosure');
+          // Allowlisted request: the observation, the goal, nothing else. No
+          // task, workspace, session, ledger or capability context travels.
+          const result = await evaluator.evaluate({
+            observation: {
+              screenshot: prepared.screenshot,
+              viewport: { ...COMPUTER_VIEWPORT },
+              untrusted: true,
+              disclosure: 'redacted',
+            },
+            objective: validateComputerObjective(objective),
+            signal: signal!,
+          });
+          signal!.throwIfAborted();
+          return parseComputerCompletion(JSON.stringify(result));
+        })(),
+        stopped,
+      ]);
+      if ((await this.assertModelScope(captured.binding)).count !== captured.version)
+        throw new Error('Stale model observation');
+      return verdict.status;
+    } catch {
+      return 'FAILED';
     } finally {
       clearTimeout(timer);
       if (signal && onAbort) signal.removeEventListener('abort', onAbort);

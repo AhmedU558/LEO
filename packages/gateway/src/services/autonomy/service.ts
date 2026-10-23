@@ -72,7 +72,7 @@ export class AutonomyService implements AutonomyEngine {
   private async runLoop(taskId: string) {
     const task = this.tasks.get(taskId);
     if (!task) return;
-    
+
     // Fail immediately because we don't have a real autonomy provider
     task.status = 'failed';
     this.tasks.set(taskId, task);

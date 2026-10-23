@@ -103,12 +103,17 @@ export class MediaService {
     const signature = createHmac('sha256', process.env.APP_SECRET || 'dev_secret')
       .update(data)
       .digest('hex');
-    
+
     const baseUrl = process.env.APP_URL || 'http://localhost:3000';
     return `${baseUrl}/api/v1/media/delivery/${this.workspaceId}/${assetId}?expiresAt=${expiresAt}&signature=${signature}`;
   }
 
-  static validateDeliverySignature(workspaceId: string, assetId: string, expiresAt: number, signature: string): boolean {
+  static validateDeliverySignature(
+    workspaceId: string,
+    assetId: string,
+    expiresAt: number,
+    signature: string
+  ): boolean {
     if (Date.now() > expiresAt) return false;
     const data = `${workspaceId}:${assetId}:${expiresAt}`;
     const expected = createHmac('sha256', process.env.APP_SECRET || 'dev_secret')

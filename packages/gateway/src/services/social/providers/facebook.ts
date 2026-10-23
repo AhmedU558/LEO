@@ -85,7 +85,7 @@ export class FacebookProvider implements SocialProvider {
       const res = await fetch(`https://graph.facebook.com/v19.0/${pageId}/photos?${p.toString()}`, {
         method: 'POST',
       });
-      const data = await res.json() as Record<string, any>;
+      const data = (await res.json()) as Record<string, any>;
       if (!res.ok) return { status: 'failed', error: this.normalizeError(data) };
 
       // Photos are synchronous usually
@@ -103,7 +103,7 @@ export class FacebookProvider implements SocialProvider {
       const res = await fetch(`https://graph.facebook.com/v19.0/${pageId}/videos?${p.toString()}`, {
         method: 'POST',
       });
-      const data = await res.json() as Record<string, any>;
+      const data = (await res.json()) as Record<string, any>;
       if (!res.ok) return { status: 'failed', error: this.normalizeError(data) };
 
       // Videos are async
@@ -116,10 +116,10 @@ export class FacebookProvider implements SocialProvider {
       `https://graph.facebook.com/v19.0/${providerPostId}?fields=status&access_token=${accessToken}`
     );
     if (!res.ok) {
-      const errData = await res.json() as Record<string, any>;
+      const errData = (await res.json()) as Record<string, any>;
       return { status: 'unknown', error: this.normalizeError(errData) };
     }
-    const data = await res.json() as Record<string, any>;
+    const data = (await res.json()) as Record<string, any>;
 
     // Status object structure for videos: { video_status: "ready" | "processing" | "error" }
     const videoStatus = data.status?.video_status;
@@ -158,6 +158,3 @@ export class FacebookProvider implements SocialProvider {
     return { code: String(code), message: String(message), retryable };
   }
 }
-
-
-
