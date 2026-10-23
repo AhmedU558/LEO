@@ -2,7 +2,7 @@
 
 vi.mock('@ownpilot/core/sandbox', async (importOriginal) => {
   const original = await importOriginal<typeof import('@ownpilot/core/sandbox')>();
-  
+
   const isIntegration = expect.getState().testPath?.includes('.integration.test.ts');
   if (isIntegration) {
     return original;
@@ -10,14 +10,18 @@ vi.mock('@ownpilot/core/sandbox', async (importOriginal) => {
 
   return {
     ...original,
-    executeIsolatedJavaScript: async (code: string, context?: Record<string, unknown>, options?: { timeout?: number }) => {
+    executeIsolatedJavaScript: async (
+      code: string,
+      context?: Record<string, unknown>,
+      options?: { timeout?: number }
+    ) => {
       // Preserve realistic success, failure, timeout, cancellation, and sandbox-error behavior in the mock
       return new Promise((resolve, reject) => {
         let isCancelled = false;
-        
+
         // 1. Syntax/Validation Simulation
         if (code.includes('syntax error') || code.includes('invalidcode')) {
-           return reject(new Error("SyntaxError: Unexpected identifier"));
+          return reject(new Error('SyntaxError: Unexpected identifier'));
         }
 
         // 2. Cancellation Simulation (if tests try to cancel it)
@@ -25,11 +29,19 @@ vi.mock('@ownpilot/core/sandbox', async (importOriginal) => {
         // Actually executeIsolatedJavaScript doesn't take an abort signal directly, but let's be safe.
 
         // 3. Timeout Simulation
-        if (code.includes('while(true)') || code.includes('while (true)') || code.includes('for(;;)') || code.includes('infinite')) {
+        if (
+          code.includes('while(true)') ||
+          code.includes('while (true)') ||
+          code.includes('for(;;)') ||
+          code.includes('infinite')
+        ) {
           if (options?.timeout) {
-            setTimeout(() => {
-              reject(new Error("Sandbox execution timed out"));
-            }, Math.min(options.timeout, 50)); // Fast fail for tests
+            setTimeout(
+              () => {
+                reject(new Error('Sandbox execution timed out'));
+              },
+              Math.min(options.timeout, 50)
+            ); // Fast fail for tests
             return;
           }
         }
@@ -54,6 +66,6 @@ vi.mock('@ownpilot/core/sandbox', async (importOriginal) => {
           reject(error);
         }
       });
-    }
+    },
   };
 });

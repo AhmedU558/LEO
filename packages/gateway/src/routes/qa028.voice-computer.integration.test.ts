@@ -37,7 +37,7 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
     const testUrl = new URL(url);
     testUrl.pathname = `/${database}`;
     await initializeAdapter({ type: 'postgres', postgresUrl: testUrl.toString() });
-    
+
     app = createTestApp();
   });
 
@@ -55,14 +55,14 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-      
+
       const mockVoiceService = {
         isAvailable: vi.fn().mockResolvedValue(true),
         transcribe: vi.fn(),
       };
       transcribeSpy = mockVoiceService.transcribe;
       vi.spyOn(voiceServiceModule, 'getVoiceService').mockReturnValue(mockVoiceService);
-      
+
       parseIntentSpy = vi.spyOn(voiceCommandParser, 'parseVoiceCommandIntent');
     });
 
@@ -78,12 +78,12 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
       const res = await app.request('/api/v1/voice/command', {
         method: 'POST',
         body: formData,
-        headers: { 'x-user-id': 'test-user-1' }
+        headers: { 'x-user-id': 'test-user-1' },
       });
 
       expect(res.status).toBe(200);
       const json = await res.json();
-      
+
       // Should require confirmation because computer.control is CRITICAL risk
       expect(json.success).toBe(true);
       expect(json.data.status).toBe('confirmation_required');
@@ -104,7 +104,7 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
       const res = await app.request('/api/v1/voice/command', {
         method: 'POST',
         body: formData,
-        headers: { 'x-user-id': 'test-user-1' }
+        headers: { 'x-user-id': 'test-user-1' },
       });
 
       expect(res.status).toBe(200);
@@ -125,15 +125,15 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
     it('cancels active workflows through CANCEL_TASK voice intent', async () => {
       // First, create a running workflow
       const repo = createWorkflowsRepository('test-user-cancel');
-      
+
       const wf = await repo.create({
         workspaceId: randomUUID(),
         name: 'Voice Cancel Test Workflow',
         trigger: { type: 'manual' },
         nodes: [{ id: 'n1', type: 'browser', data: { action: 'vision_loop' }, dependencies: [] }],
-        edges: []
+        edges: [],
       });
-      
+
       // Instead of relying on executeWorkflow which might finish immediately in test,
       // create a 'running' log explicitly to mimic a long-running process
       await repo.createLog(wf.id, wf.name);
@@ -157,17 +157,17 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
       const res = await app.request('/api/v1/voice/command', {
         method: 'POST',
         body: formData,
-        headers: { 'x-user-id': 'test-user-cancel' }
+        headers: { 'x-user-id': 'test-user-cancel' },
       });
 
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
       expect(json.data.status).toBe('cancelled');
-      
+
       // Wait a tick for the async cancel DB update to settle
-      await new Promise(r => setTimeout(r, 50));
-      
+      await new Promise((r) => setTimeout(r, 50));
+
       // Verify it's cancelled in engine
       const runningLogsAfter = await repo.listRunningLogs();
       expect(runningLogsAfter.length).toBe(0);
@@ -175,14 +175,14 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
 
     it('handles ambiguous commands by requiring confirmation without executing', async () => {
       parseIntentSpy.mockResolvedValue({ intent: 'AMBIGUOUS', reason: 'Unclear command' });
-      
+
       const formData = new FormData();
       formData.append('confirmedText', 'Hello agent');
 
       const res = await app.request('/api/v1/voice/command', {
         method: 'POST',
         body: formData,
-        headers: { 'x-user-id': 'test-user-3' }
+        headers: { 'x-user-id': 'test-user-3' },
       });
 
       expect(res.status).toBe(200);
@@ -193,29 +193,32 @@ describe('QA-028: Voice-to-Computer Pipeline Integration', () => {
     });
   });
 
-  describe.skipIf(!process.env.LEO_QA_LIVE_MODEL_API_KEY)('Voice-to-Computer Pipeline (Real Models)', () => {
-    beforeEach(() => {
-      vi.restoreAllMocks(); // Use real transcription and intent parsing
-    });
-
-    it('really transcribes and parses a valid computer command intent', async () => {
-      // NOTE: We cannot easily provide real audio without a fixture, so we just use confirmedText
-      // to test the real LLM intent parser.
-      const formData = new FormData();
-      formData.append('confirmedText', 'Open Google Chrome and search for the latest news.');
-
-      const res = await app.request('/api/v1/voice/command', {
-        method: 'POST',
-        body: formData,
-        headers: { 'x-user-id': 'real-user-1' }
+  describe.skipIf(!process.env.LEO_QA_LIVE_MODEL_API_KEY)(
+    'Voice-to-Computer Pipeline (Real Models)',
+    () => {
+      beforeEach(() => {
+        vi.restoreAllMocks(); // Use real transcription and intent parsing
       });
 
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.success).toBe(true);
-      expect(json.data.status).toBe('started');
-      expect(json.data.objective).toMatch(/search.*news/i);
-      expect(json.data.workflowId).toBeDefined();
-    });
-  });
+      it('really transcribes and parses a valid computer command intent', async () => {
+        // NOTE: We cannot easily provide real audio without a fixture, so we just use confirmedText
+        // to test the real LLM intent parser.
+        const formData = new FormData();
+        formData.append('confirmedText', 'Open Google Chrome and search for the latest news.');
+
+        const res = await app.request('/api/v1/voice/command', {
+          method: 'POST',
+          body: formData,
+          headers: { 'x-user-id': 'real-user-1' },
+        });
+
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(json.success).toBe(true);
+        expect(json.data.status).toBe('started');
+        expect(json.data.objective).toMatch(/search.*news/i);
+        expect(json.data.workflowId).toBeDefined();
+      });
+    }
+  );
 });

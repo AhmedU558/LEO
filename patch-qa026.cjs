@@ -1,5 +1,8 @@
 const fs = require('fs');
-let content = fs.readFileSync('packages/gateway/src/services/mcp/qa026.integration.test.ts', 'utf8');
+let content = fs.readFileSync(
+  'packages/gateway/src/services/mcp/qa026.integration.test.ts',
+  'utf8'
+);
 
 content = content.replace(
   `let mockClientInstance: any;`,

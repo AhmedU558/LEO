@@ -52,7 +52,10 @@ fs.appendFileSync('packages/core/src/test-setup.ts', mockCode);
 
 // Fix action-ledger.test.ts
 let al = fs.readFileSync('packages/core/src/security/action-ledger.test.ts', 'utf8');
-al = al.replace(/expect\(ActionLedger.getEntries\(\)\)/g, 'expect(await ActionLedger.getEntries())');
+al = al.replace(
+  /expect\(ActionLedger.getEntries\(\)\)/g,
+  'expect(await ActionLedger.getEntries())'
+);
 fs.writeFileSync('packages/core/src/security/action-ledger.test.ts', al, 'utf8');
 
 // Also the test uses old mock expectations for dynamic-tools.test.ts.

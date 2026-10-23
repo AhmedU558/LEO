@@ -7,7 +7,7 @@ const files = [
   'packages/gateway/src/routes/workspaces/integration.test.ts',
   'packages/gateway/src/tools/claw/tools.test.ts',
   'packages/gateway/src/routes/model-configs/pricing.test.ts',
-  'packages/gateway/src/routes/custom-tools/generation.test.ts'
+  'packages/gateway/src/routes/custom-tools/generation.test.ts',
 ];
 
 for (const file of files) {
@@ -19,7 +19,7 @@ for (const file of files) {
         "const app = new Hono();\napp.use('*', async (c, next) => { c.set('userId', 'default'); await next(); });"
       );
       fs.writeFileSync(file, content);
-      console.log("Patched", file);
+      console.log('Patched', file);
     }
   }
 }
