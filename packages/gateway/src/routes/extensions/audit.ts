@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions Audit Routes
  *
@@ -8,7 +9,6 @@
  * POST /audit-manifest   — Audit a manifest before installation
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import { createProvider, getProviderConfig as coreGetProviderConfig } from '@ownpilot/core/agent';
 import type { AIProvider } from '@ownpilot/core/costs';
@@ -57,7 +57,7 @@ const getExtService = getGatewayExtensionService;
 // =============================================================================
 
 auditRoutes.post('/:id/audit', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();

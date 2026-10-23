@@ -54,211 +54,196 @@ describe('ToolService', () => {
   // =========================================================================
 
   describe('execute', () => {
-    it('delegates to registry.executeToolCall with correct tool call object', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'ok', isError: false });
+    // QA-016 / QA-007: execute() has exactly one path. It previously branched —
+    // with `execSource` it went through executeTool() and got permission
+    // checks, the atomic idempotency claim and the audit record; without it,
+    // it called registry.executeToolCall() directly and got none of them. These
+    // tests pin that the bypass is gone: an optional field on the context must
+    // not decide whether an effect is policed.
+
+    function okResult(result: unknown) {
+      mockExecuteTool.mockResolvedValue({ success: true, result });
+    }
+
+    it('routes every call through executeTool, never the registry directly', async () => {
+      okResult('ok');
 
       const svc = new ToolService('user-1');
       await svc.execute('my_tool', { key: 'val' });
 
-      expect(mockExecuteToolCall).toHaveBeenCalledOnce();
-      const [toolCall, conversationId, userId] = mockExecuteToolCall.mock.calls[0];
-      expect(toolCall.name).toBe('my_tool');
-      expect(toolCall.arguments).toBe('{"key":"val"}');
-      expect(conversationId).toBe('service');
+      expect(mockExecuteTool).toHaveBeenCalledOnce();
+      expect(mockExecuteToolCall).not.toHaveBeenCalled();
+      const [name, args, userId] = mockExecuteTool.mock.calls[0];
+      expect(name).toBe('my_tool');
+      expect(args).toEqual({ key: 'val' });
       expect(userId).toBe('user-1');
     });
 
-    it('generates a tool call id that starts with "call_"', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+    it('defaults the execution source to "system" when the caller declares none', async () => {
+      okResult('ok');
 
-      const svc = new ToolService();
-      await svc.execute('tool_a', {});
+      await new ToolService().execute('tool_a', {});
 
-      const [toolCall] = mockExecuteToolCall.mock.calls[0];
-      expect(toolCall.id).toMatch(/^call_[0-9a-f-]+$/);
+      const execContext = mockExecuteTool.mock.calls[0][4];
+      expect(execContext.source).toBe('system');
+    });
+
+    it('forwards a declared execSource, operationId and signal', async () => {
+      okResult('ok');
+      const controller = new AbortController();
+
+      await new ToolService().execute(
+        'tool_a',
+        {},
+        { execSource: 'plan', operationId: 'op-1', signal: controller.signal }
+      );
+
+      const execContext = mockExecuteTool.mock.calls[0][4];
+      expect(execContext).toEqual({
+        source: 'plan',
+        operationId: 'op-1',
+        signal: controller.signal,
+      });
     });
 
     it('returns string content as-is', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'result text', isError: false });
+      okResult('result text');
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_a', {});
+      const result = await new ToolService().execute('tool_a', {});
 
       expect(result.content).toBe('result text');
     });
 
     it('stringifies object content to JSON', async () => {
-      mockExecuteToolCall.mockResolvedValue({
-        content: { data: 123, nested: { key: 'val' } },
-        isError: false,
-      });
+      okResult({ data: 123, nested: { key: 'val' } });
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_b', {});
+      const result = await new ToolService().execute('tool_b', {});
 
       expect(result.content).toBe(JSON.stringify({ data: 123, nested: { key: 'val' } }));
     });
 
     it('stringifies array content to JSON', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: [1, 2, 3], isError: false });
+      okResult([1, 2, 3]);
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_c', {});
+      const result = await new ToolService().execute('tool_c', {});
 
       expect(result.content).toBe('[1,2,3]');
     });
 
     it('stringifies number content to JSON', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 42, isError: false });
+      okResult(42);
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_num', {});
+      const result = await new ToolService().execute('tool_num', {});
 
       expect(result.content).toBe('42');
     });
 
     it('stringifies boolean content to JSON', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: true, isError: false });
+      okResult(true);
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_bool', {});
+      const result = await new ToolService().execute('tool_bool', {});
 
       expect(result.content).toBe('true');
     });
 
-    it('stringifies null content to JSON', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: null, isError: false });
+    it('renders null content as empty string', async () => {
+      okResult(null);
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_null', {});
+      const result = await new ToolService().execute('tool_null', {});
 
-      expect(result.content).toBe('null');
+      expect(result.content).toBe('');
     });
 
-    it('propagates isError: true from registry result', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'oops', isError: true });
+    it('handles empty string content as string (no stringify)', async () => {
+      okResult('');
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_fail', {});
+      const result = await new ToolService().execute('tool_empty_str', {});
+
+      expect(result.content).toBe('');
+    });
+
+    it('reports a failed execution as isError with its error message', async () => {
+      mockExecuteTool.mockResolvedValue({ success: false, error: 'oops' });
+
+      const result = await new ToolService().execute('tool_fail', {});
 
       expect(result.isError).toBe(true);
       expect(result.content).toBe('oops');
     });
 
-    it('propagates isError: false from registry result', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'good', isError: false });
+    it('falls back to a generic message when a failure carries no error text', async () => {
+      mockExecuteTool.mockResolvedValue({ success: false });
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_ok', {});
+      const result = await new ToolService().execute('tool_fail', {});
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toBe('Tool execution failed');
+    });
+
+    it('propagates isError: false from a successful execution', async () => {
+      okResult('good');
+
+      const result = await new ToolService().execute('tool_ok', {});
 
       expect(result.isError).toBe(false);
     });
 
-    it('uses "service" as default conversationId when context is omitted', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
-
-      const svc = new ToolService('user-1');
-      await svc.execute('tool_x', {});
-
-      const [, conversationId] = mockExecuteToolCall.mock.calls[0];
-      expect(conversationId).toBe('service');
-    });
-
     it('uses the constructor userId as default when context userId is omitted', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+      okResult('');
 
-      const svc = new ToolService('my-user');
-      await svc.execute('tool_x', {});
+      await new ToolService('my-user').execute('tool_x', {});
 
-      const [, , userId] = mockExecuteToolCall.mock.calls[0];
-      expect(userId).toBe('my-user');
+      expect(mockExecuteTool.mock.calls[0][2]).toBe('my-user');
     });
 
     it('uses "default" userId when constructed without userId and no context', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+      okResult('');
 
-      const svc = new ToolService();
-      await svc.execute('tool_x', {});
+      await new ToolService().execute('tool_x', {});
 
-      const [, , userId] = mockExecuteToolCall.mock.calls[0];
-      expect(userId).toBe('default');
-    });
-
-    it('uses provided conversationId from context', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'ok', isError: false });
-
-      const svc = new ToolService();
-      await svc.execute('tool_a', {}, { conversationId: 'conv-42' });
-
-      const [, conversationId] = mockExecuteToolCall.mock.calls[0];
-      expect(conversationId).toBe('conv-42');
+      expect(mockExecuteTool.mock.calls[0][2]).toBe('default');
     });
 
     it('uses provided userId from context', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'ok', isError: false });
+      okResult('ok');
 
-      const svc = new ToolService('constructor-user');
-      await svc.execute('tool_a', {}, { userId: 'ctx-user' });
+      await new ToolService('constructor-user').execute('tool_a', {}, { userId: 'ctx-user' });
 
-      const [, , userId] = mockExecuteToolCall.mock.calls[0];
-      expect(userId).toBe('ctx-user');
+      expect(mockExecuteTool.mock.calls[0][2]).toBe('ctx-user');
     });
 
-    it('uses both conversationId and userId from context together', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'ok', isError: false });
-
-      const svc = new ToolService('ignored');
-      await svc.execute('tool_a', {}, { conversationId: 'conv-1', userId: 'u-2' });
-
-      const [, conversationId, userId] = mockExecuteToolCall.mock.calls[0];
-      expect(conversationId).toBe('conv-1');
-      expect(userId).toBe('u-2');
-    });
-
-    it('serializes complex nested args to JSON', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+    it('passes complex nested args through unchanged', async () => {
+      okResult('');
 
       const args = { deep: { nested: { array: [1, 2], flag: true } } };
-      const svc = new ToolService();
-      await svc.execute('tool_nested', args);
+      await new ToolService().execute('tool_nested', args);
 
-      const [toolCall] = mockExecuteToolCall.mock.calls[0];
-      expect(JSON.parse(toolCall.arguments)).toEqual(args);
+      expect(mockExecuteTool.mock.calls[0][1]).toEqual(args);
     });
 
-    it('serializes empty args to "{}"', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+    it('rejects unserialisable args before any operation is claimed', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
 
-      const svc = new ToolService();
-      await svc.execute('tool_empty', {});
+      const result = await new ToolService().execute('tool_circular', circular);
 
-      const [toolCall] = mockExecuteToolCall.mock.calls[0];
-      expect(toolCall.arguments).toBe('{}');
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('cannot serialize');
+      expect(mockExecuteTool).not.toHaveBeenCalled();
     });
 
-    it('propagates errors thrown by the registry', async () => {
-      mockExecuteToolCall.mockRejectedValue(new Error('registry boom'));
+    it('propagates errors thrown by the executor', async () => {
+      mockExecuteTool.mockRejectedValue(new Error('registry boom'));
 
-      const svc = new ToolService();
-      await expect(svc.execute('tool_err', {})).rejects.toThrow('registry boom');
-    });
-
-    it('handles empty string content as string (no stringify)', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
-
-      const svc = new ToolService();
-      const result = await svc.execute('tool_empty_str', {});
-
-      expect(result.content).toBe('');
+      await expect(new ToolService().execute('tool_err', {})).rejects.toThrow('registry boom');
     });
 
     it('returns result with only content and isError fields', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: 'data', isError: false, extra: 'ignored' });
+      okResult('data');
 
-      const svc = new ToolService();
-      const result = await svc.execute('tool_x', {});
+      const result = await new ToolService().execute('tool_x', {});
 
-      expect(Object.keys(result)).toEqual(expect.arrayContaining(['content', 'isError']));
+      expect(Object.keys(result).sort()).toEqual(['content', 'isError']);
       expect(result.content).toBe('data');
       expect(result.isError).toBe(false);
     });
@@ -516,13 +501,12 @@ describe('ToolService', () => {
     });
 
     it('defaults userId to "default" when not provided', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+      mockExecuteTool.mockResolvedValue({ success: true, result: '' });
 
       const svc = new ToolService();
       await svc.execute('tool_x', {});
 
-      const [, , userId] = mockExecuteToolCall.mock.calls[0];
-      expect(userId).toBe('default');
+      expect(mockExecuteTool.mock.calls[0][2]).toBe('default');
     });
   });
 
@@ -555,13 +539,12 @@ describe('ToolService', () => {
     });
 
     it('returned instance uses the provided userId for execution', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+      mockExecuteTool.mockResolvedValue({ success: true, result: '' });
 
       const svc = createToolService('factory-user');
       await svc.execute('t', {});
 
-      const [, , userId] = mockExecuteToolCall.mock.calls[0];
-      expect(userId).toBe('factory-user');
+      expect(mockExecuteTool.mock.calls[0][2]).toBe('factory-user');
     });
   });
 
@@ -571,7 +554,7 @@ describe('ToolService', () => {
 
   describe('instance isolation', () => {
     it('different instances use different userIds', async () => {
-      mockExecuteToolCall.mockResolvedValue({ content: '', isError: false });
+      mockExecuteTool.mockResolvedValue({ success: true, result: '' });
 
       const svc1 = new ToolService('user-A');
       const svc2 = new ToolService('user-B');
@@ -579,10 +562,8 @@ describe('ToolService', () => {
       await svc1.execute('tool_x', {});
       await svc2.execute('tool_x', {});
 
-      const [, , userId1] = mockExecuteToolCall.mock.calls[0];
-      const [, , userId2] = mockExecuteToolCall.mock.calls[1];
-      expect(userId1).toBe('user-A');
-      expect(userId2).toBe('user-B');
+      expect(mockExecuteTool.mock.calls[0][2]).toBe('user-A');
+      expect(mockExecuteTool.mock.calls[1][2]).toBe('user-B');
     });
   });
 
@@ -668,7 +649,7 @@ describe('ToolService', () => {
           throw new Error('no serialize');
         },
       };
-      mockExecuteToolCall.mockResolvedValue({ content: unserializable, isError: false });
+      mockExecuteTool.mockResolvedValue({ success: true, result: unserializable });
 
       const svc = new ToolService();
       const result = await svc.execute('tool_x', {});

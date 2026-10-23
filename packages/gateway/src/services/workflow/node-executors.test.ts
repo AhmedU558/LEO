@@ -194,37 +194,37 @@ beforeEach(() => {
 // ============================================================================
 
 describe('toToolExecResult', () => {
-  it('returns error result when isError is true', () => {
+  it('', async () => {
     const result = toToolExecResult({ content: 'Something went wrong', isError: true });
     expect(result).toEqual({ success: false, error: 'Something went wrong' });
   });
 
-  it('returns success with parsed JSON content when content is valid JSON', () => {
+  it('', async () => {
     const result = toToolExecResult({ content: '{"key":"value"}', isError: false });
     expect(result).toEqual({ success: true, result: { key: 'value' } });
   });
 
-  it('returns success with raw string content when content is not JSON', () => {
+  it('', async () => {
     const result = toToolExecResult({ content: 'plain text result', isError: false });
     expect(result).toEqual({ success: true, result: 'plain text result' });
   });
 
-  it('returns success with parsed JSON array', () => {
+  it('', async () => {
     const result = toToolExecResult({ content: '[1,2,3]', isError: false });
     expect(result).toEqual({ success: true, result: [1, 2, 3] });
   });
 
-  it('returns success with raw string for invalid JSON', () => {
+  it('', async () => {
     const result = toToolExecResult({ content: '{broken', isError: false });
     expect(result).toEqual({ success: true, result: '{broken' });
   });
 
-  it('returns success when isError is undefined (falsy)', () => {
+  it('', async () => {
     const result = toToolExecResult({ content: 'ok' });
     expect(result).toEqual({ success: true, result: 'ok' });
   });
 
-  it('handles empty string content', () => {
+  it('', async () => {
     const result = toToolExecResult({ content: '', isError: false });
     expect(result).toEqual({ success: true, result: '' });
   });
@@ -235,14 +235,14 @@ describe('toToolExecResult', () => {
 // ============================================================================
 
 describe('resolveWorkflowToolName', () => {
-  it('returns name as-is if toolService.has() returns true (exact match)', () => {
+  it('', async () => {
     mockToolService.has.mockReturnValue(true);
     const result = resolveWorkflowToolName('core.get_time', mockToolService);
     expect(result).toBe('core.get_time');
     expect(mockToolService.has).toHaveBeenCalledWith('core.get_time');
   });
 
-  it('performs normalized match when exact match fails', () => {
+  it('', async () => {
     mockToolService.has.mockReturnValue(false);
     mockToolService.getDefinitions.mockReturnValue([
       { name: 'mcp.github.list_repositories' },
@@ -252,21 +252,21 @@ describe('resolveWorkflowToolName', () => {
     expect(result).toBe('mcp.github.list_repositories');
   });
 
-  it('returns original name when no match found', () => {
+  it('', async () => {
     mockToolService.has.mockReturnValue(false);
     mockToolService.getDefinitions.mockReturnValue([{ name: 'core.get_time' }]);
     const result = resolveWorkflowToolName('nonexistent_tool', mockToolService);
     expect(result).toBe('nonexistent_tool');
   });
 
-  it('normalized match is case-insensitive', () => {
+  it('', async () => {
     mockToolService.has.mockReturnValue(false);
     mockToolService.getDefinitions.mockReturnValue([{ name: 'MCP.GitHub.ListRepos' }]);
     const result = resolveWorkflowToolName('MCPGitHubListRepos', mockToolService);
     expect(result).toBe('MCP.GitHub.ListRepos');
   });
 
-  it('returns exact match before trying normalized match', () => {
+  it('', async () => {
     mockToolService.has.mockReturnValue(true);
     const result = resolveWorkflowToolName('some_tool', mockToolService);
     expect(result).toBe('some_tool');
@@ -359,120 +359,120 @@ describe('executeNode', () => {
 // ============================================================================
 
 describe('executeConditionNode', () => {
-  it('evaluates truthy expression and returns branchTaken "true"', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '1 + 1 === 2' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: '1 + 1 === 2' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(true);
     expect(result.branchTaken).toBe('true');
   });
 
-  it('evaluates falsy expression and returns branchTaken "false"', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '1 > 5' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: '1 > 5' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(false);
     expect(result.branchTaken).toBe('false');
   });
 
-  it('has access to upstream node outputs in the evaluation context', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'n1 > 10' });
 
     const nodeOutputs = { n1: makeResult('n1', 42) };
     const node = makeNode('cond1', 'conditionNode', { expression: 'n1 > 10' });
-    const result = executeConditionNode(node, nodeOutputs, {});
+    const result = await executeConditionNode(node, nodeOutputs, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(true);
     expect(result.branchTaken).toBe('true');
   });
 
-  it('has access to workflow variables in the evaluation context', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'threshold === 5' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: 'threshold === 5' });
-    const result = executeConditionNode(node, {}, { threshold: 5 });
+    const result = await executeConditionNode(node, {}, { threshold: 5 });
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(true);
   });
 
-  it('returns error result for invalid expression', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'this is not valid js !!!' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: 'this is not valid js !!!' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.status).toBe('error');
     expect(result.error).toBeDefined();
   });
 
-  it('returns error for undefined variable reference in expression', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'undefinedVar.length > 0' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: 'undefinedVar.length > 0' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.status).toBe('error');
     expect(result.error).toBeDefined();
   });
 
-  it('includes timing information in result', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'true' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: 'true' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.startedAt).toBeDefined();
     expect(result.completedAt).toBeDefined();
   });
 
-  it('uses custom timeout from node data', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'true' });
 
     const node = makeNode('cond1', 'conditionNode', {
       expression: 'true',
       timeoutMs: 1000,
     });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.status).toBe('success');
   });
 
-  it('coerces truthy non-boolean values to true branch', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '"non-empty string"' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: '"non-empty string"' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(true);
     expect(result.branchTaken).toBe('true');
   });
 
-  it('coerces falsy values (0) to false branch', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '0' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: '0' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(false);
     expect(result.branchTaken).toBe('false');
   });
 
-  it('coerces empty string to false branch', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '""' });
 
     const node = makeNode('cond1', 'conditionNode', { expression: '""' });
-    const result = executeConditionNode(node, {}, {});
+    const result = await executeConditionNode(node, {}, {});
 
     expect(result.output).toBe(false);
     expect(result.branchTaken).toBe('false');
@@ -609,80 +609,80 @@ describe('executeCodeNode', () => {
 // ============================================================================
 
 describe('executeTransformerNode', () => {
-  it('evaluates a simple expression and returns result', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '1 + 2 + 3' });
 
     const node = makeNode('tf1', 'transformerNode', { expression: '1 + 2 + 3' });
-    const result = executeTransformerNode(node, {}, {});
+    const result = await executeTransformerNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(6);
     expect(result.resolvedArgs).toEqual({ expression: '1 + 2 + 3' });
   });
 
-  it('has access to upstream outputs via node ID', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'n1.map(x => x * 2)' });
 
     const nodeOutputs = { n1: makeResult('n1', [1, 2, 3]) };
     const node = makeNode('tf1', 'transformerNode', { expression: 'n1.map(x => x * 2)' });
-    const result = executeTransformerNode(node, nodeOutputs, {});
+    const result = await executeTransformerNode(node, nodeOutputs, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toEqual([2, 4, 6]);
   });
 
-  it('has access to "data" alias for the last upstream output', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'data.toUpperCase()' });
 
     const nodeOutputs = { n1: makeResult('n1', 'hello') };
     const node = makeNode('tf1', 'transformerNode', { expression: 'data.toUpperCase()' });
-    const result = executeTransformerNode(node, nodeOutputs, {});
+    const result = await executeTransformerNode(node, nodeOutputs, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe('HELLO');
   });
 
-  it('has access to workflow variables', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'multiplier * 10' });
 
     const node = makeNode('tf1', 'transformerNode', { expression: 'multiplier * 10' });
-    const result = executeTransformerNode(node, {}, { multiplier: 5 });
+    const result = await executeTransformerNode(node, {}, { multiplier: 5 });
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(50);
   });
 
-  it('returns error result for invalid expression', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'invalid !! syntax' });
 
     const node = makeNode('tf1', 'transformerNode', { expression: 'invalid !! syntax' });
-    const result = executeTransformerNode(node, {}, {});
+    const result = await executeTransformerNode(node, {}, {});
 
     expect(result.status).toBe('error');
     expect(result.error).toBeDefined();
   });
 
-  it('returns error for undefined variable reference', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'noSuchVar.property' });
 
     const node = makeNode('tf1', 'transformerNode', { expression: 'noSuchVar.property' });
-    const result = executeTransformerNode(node, {}, {});
+    const result = await executeTransformerNode(node, {}, {});
 
     expect(result.status).toBe('error');
   });
 
-  it('includes timing information', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '42' });
 
     const node = makeNode('tf1', 'transformerNode', { expression: '42' });
-    const result = executeTransformerNode(node, {}, {});
+    const result = await executeTransformerNode(node, {}, {});
 
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.startedAt).toBeDefined();
     expect(result.completedAt).toBeDefined();
   });
 
-  it('sets data alias to the most recent upstream output', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'data' });
 
     const nodeOutputs = {
@@ -690,31 +690,31 @@ describe('executeTransformerNode', () => {
       n2: makeResult('n2', 'second'),
     };
     const node = makeNode('tf1', 'transformerNode', { expression: 'data' });
-    const result = executeTransformerNode(node, nodeOutputs, {});
+    const result = await executeTransformerNode(node, nodeOutputs, {});
 
     // 'data' is the last output in iteration order
     expect(result.status).toBe('success');
     expect(result.output).toBe('second');
   });
 
-  it('uses custom timeout from node data', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '42' });
 
     const node = makeNode('tf1', 'transformerNode', {
       expression: '42',
       timeoutMs: 1000,
     });
-    const result = executeTransformerNode(node, {}, {});
+    const result = await executeTransformerNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toBe(42);
   });
 
-  it('returns object results from expression', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '({name: "test", count: 3})' });
 
     const node = makeNode('tf1', 'transformerNode', { expression: '({name: "test", count: 3})' });
-    const result = executeTransformerNode(node, {}, {});
+    const result = await executeTransformerNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toEqual({ name: 'test', count: 3 });
@@ -1430,7 +1430,7 @@ describe('executeNotificationNode', () => {
 // ============================================================================
 
 describe('executeMergeNode', () => {
-  it('collects outputs from all incoming node IDs', () => {
+  it('', async () => {
     const nodeOutputs = {
       n1: makeResult('n1', 'output-1'),
       n2: makeResult('n2', 'output-2'),
@@ -1438,7 +1438,7 @@ describe('executeMergeNode', () => {
     };
 
     const node = makeNode('merge1', 'mergeNode', { mode: 'waitAll' });
-    const result = executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2', 'n3']);
+    const result = await executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2', 'n3']);
 
     expect(result.status).toBe('success');
     const output = result.output as Record<string, unknown>;
@@ -1447,7 +1447,7 @@ describe('executeMergeNode', () => {
     expect(output.mode).toBe('waitAll');
   });
 
-  it('only includes outputs for provided incomingNodeIds', () => {
+  it('', async () => {
     const nodeOutputs = {
       n1: makeResult('n1', 'output-1'),
       n2: makeResult('n2', 'output-2'),
@@ -1455,38 +1455,38 @@ describe('executeMergeNode', () => {
     };
 
     const node = makeNode('merge1', 'mergeNode', { mode: 'waitAll' });
-    const result = executeMergeNode(node, nodeOutputs, {}, ['n1', 'n3']);
+    const result = await executeMergeNode(node, nodeOutputs, {}, ['n1', 'n3']);
 
     const output = result.output as Record<string, unknown>;
     expect(output.count).toBe(2);
     expect((output.results as Record<string, unknown>).n2).toBeUndefined();
   });
 
-  it('returns empty results when no upstream nodes have output', () => {
+  it('', async () => {
     const node = makeNode('merge1', 'mergeNode', {});
-    const result = executeMergeNode(node, {}, {}, ['n1', 'n2']);
+    const result = await executeMergeNode(node, {}, {}, ['n1', 'n2']);
 
     expect(result.status).toBe('success');
     const output = result.output as Record<string, unknown>;
     expect(output.count).toBe(0);
   });
 
-  it('defaults to waitAll mode', () => {
+  it('', async () => {
     const node = makeNode('merge1', 'mergeNode', {});
-    const result = executeMergeNode(node, {}, {}, []);
+    const result = await executeMergeNode(node, {}, {}, []);
 
     expect((result.output as Record<string, unknown>).mode).toBe('waitAll');
   });
 
-  it('includes timing information', () => {
+  it('', async () => {
     const node = makeNode('merge1', 'mergeNode', {});
-    const result = executeMergeNode(node, {}, {}, []);
+    const result = await executeMergeNode(node, {}, {}, []);
 
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.startedAt).toBeDefined();
   });
 
-  it('firstCompleted mode returns only the first non-null result', () => {
+  it('', async () => {
     const nodeOutputs = {
       n1: makeResult('n1', null),
       n2: makeResult('n2', 'second-output'),
@@ -1494,7 +1494,7 @@ describe('executeMergeNode', () => {
     };
 
     const node = makeNode('merge1', 'mergeNode', { mode: 'firstCompleted' });
-    const result = executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2', 'n3']);
+    const result = await executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2', 'n3']);
 
     expect(result.status).toBe('success');
     const output = result.output as Record<string, unknown>;
@@ -1504,14 +1504,14 @@ describe('executeMergeNode', () => {
     expect(output.selectedNode).toBe('n2');
   });
 
-  it('firstCompleted mode returns empty when all outputs are null/undefined', () => {
+  it('', async () => {
     const nodeOutputs = {
       n1: makeResult('n1', null),
       n2: makeResult('n2', undefined),
     };
 
     const node = makeNode('merge1', 'mergeNode', { mode: 'firstCompleted' });
-    const result = executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2']);
+    const result = await executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2']);
 
     expect(result.status).toBe('success');
     const output = result.output as Record<string, unknown>;
@@ -1520,14 +1520,14 @@ describe('executeMergeNode', () => {
     expect(output.count).toBe(0);
   });
 
-  it('firstCompleted mode selects first available node in order', () => {
+  it('', async () => {
     const nodeOutputs = {
       n1: makeResult('n1', 'first-output'),
       n2: makeResult('n2', 'second-output'),
     };
 
     const node = makeNode('merge1', 'mergeNode', { mode: 'firstCompleted' });
-    const result = executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2']);
+    const result = await executeMergeNode(node, nodeOutputs, {}, ['n1', 'n2']);
 
     const output = result.output as Record<string, unknown>;
     expect(output.selectedNode).toBe('n1');
@@ -1540,7 +1540,7 @@ describe('executeMergeNode', () => {
 // ============================================================================
 
 describe('executeSwitchNode', () => {
-  it('matches expression result against cases and returns matched label', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '"active"' });
 
     const node = makeNode('switch1', 'switchNode', {
@@ -1551,14 +1551,14 @@ describe('executeSwitchNode', () => {
       ],
     });
 
-    const result = executeSwitchNode(node, {}, {});
+    const result = await executeSwitchNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.branchTaken).toBe('Active Branch');
     expect(result.output).toBe('active');
   });
 
-  it('returns "default" branch when no case matches', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '"unknown"' });
 
     const node = makeNode('switch1', 'switchNode', {
@@ -1569,13 +1569,13 @@ describe('executeSwitchNode', () => {
       ],
     });
 
-    const result = executeSwitchNode(node, {}, {});
+    const result = await executeSwitchNode(node, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.branchTaken).toBe('default');
   });
 
-  it('evaluates expression with upstream outputs', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'n1 > 50 ? "high" : "low"' });
 
     const nodeOutputs = { n1: makeResult('n1', 75) };
@@ -1584,13 +1584,13 @@ describe('executeSwitchNode', () => {
       cases: [{ value: 'high', label: 'High Priority' }],
     });
 
-    const result = executeSwitchNode(node, nodeOutputs, {});
+    const result = await executeSwitchNode(node, nodeOutputs, {});
 
     expect(result.status).toBe('success');
     expect(result.branchTaken).toBe('High Priority');
   });
 
-  it('returns error for invalid expression', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: 'invalid !! syntax @@' });
 
     const node = makeNode('switch1', 'switchNode', {
@@ -1598,13 +1598,13 @@ describe('executeSwitchNode', () => {
       cases: [],
     });
 
-    const result = executeSwitchNode(node, {}, {});
+    const result = await executeSwitchNode(node, {}, {});
 
     expect(result.status).toBe('error');
     expect(result.error).toBeDefined();
   });
 
-  it('includes resolvedArgs with expression and evaluated value', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '42' });
 
     const node = makeNode('switch1', 'switchNode', {
@@ -1612,7 +1612,7 @@ describe('executeSwitchNode', () => {
       cases: [{ value: '42', label: 'Forty-Two' }],
     });
 
-    const result = executeSwitchNode(node, {}, {});
+    const result = await executeSwitchNode(node, {}, {});
 
     expect(result.resolvedArgs).toEqual(
       expect.objectContaining({
@@ -1623,7 +1623,7 @@ describe('executeSwitchNode', () => {
     );
   });
 
-  it('includes timing information', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _expr: '1' });
 
     const node = makeNode('switch1', 'switchNode', {
@@ -1631,7 +1631,7 @@ describe('executeSwitchNode', () => {
       cases: [],
     });
 
-    const result = executeSwitchNode(node, {}, {});
+    const result = await executeSwitchNode(node, {}, {});
 
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.startedAt).toBeDefined();
@@ -1648,7 +1648,7 @@ describe('executeDataStoreNode', () => {
     vi.mocked(resolveTemplates).mockImplementation((args: Record<string, unknown>) => args);
   });
 
-  it('allows list operation without a key', () => {
+  it('', async () => {
     const setNode = makeNode('store_set', 'dataStoreNode', {
       operation: 'set',
       key: 'answer',
@@ -1661,29 +1661,29 @@ describe('executeDataStoreNode', () => {
     });
 
     expect(executeDataStoreNode(setNode, {}, {}).status).toBe('success');
-    const result = executeDataStoreNode(listNode, {}, {});
+    const result = await executeDataStoreNode(listNode, {}, {});
 
     expect(result.status).toBe('success');
     expect(result.output).toEqual(['answer']);
     expect(result.resolvedArgs).toEqual({ operation: 'list', namespace: 'test' });
   });
 
-  it('returns error for keyless non-list operations', () => {
+  it('', async () => {
     const node = makeNode('store_get', 'dataStoreNode', { operation: 'get' });
 
-    const result = executeDataStoreNode(node, {}, {});
+    const result = await executeDataStoreNode(node, {}, {});
 
     expect(result.status).toBe('error');
     expect(result.error).toContain('key is required');
   });
 
-  it('returns error for unsupported operations', () => {
+  it('', async () => {
     const node = makeNode('store_bad', 'dataStoreNode', {
       operation: 'append',
       key: 'answer',
     });
 
-    const result = executeDataStoreNode(node, {}, {});
+    const result = await executeDataStoreNode(node, {}, {});
 
     expect(result.status).toBe('error');
     expect(result.error).toContain('Unsupported DataStore operation');
@@ -1699,14 +1699,14 @@ describe('executeAggregateNode', () => {
     vi.mocked(resolveTemplates).mockImplementation((args: Record<string, unknown>) => args);
   });
 
-  it('returns error for unsupported aggregate operations', () => {
+  it('', async () => {
     vi.mocked(resolveTemplates).mockReturnValue({ _arr: [1, 2, 3] });
     const node = makeNode('agg_bad', 'aggregateNode', {
       arrayExpression: '{{source.output}}',
       operation: 'median',
     });
 
-    const result = executeAggregateNode(node, {}, {});
+    const result = await executeAggregateNode(node, {}, {});
 
     expect(result.status).toBe('error');
     expect(result.error).toContain('Unsupported aggregate operation');

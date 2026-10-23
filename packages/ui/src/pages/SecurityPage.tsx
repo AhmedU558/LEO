@@ -53,6 +53,7 @@ export function SecurityPage() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
 
   // Form state
+  const [bootstrapToken, setBootstrapToken] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -78,6 +79,7 @@ export function SecurityPage() {
   };
 
   const resetForm = () => {
+    setBootstrapToken('');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -105,10 +107,13 @@ export function SecurityPage() {
 
     setIsSubmitting(true);
     try {
-      await authApi.setPassword({
-        password: newPassword,
-        currentPassword: passwordConfigured ? currentPassword : undefined,
-      });
+      await authApi.setPassword(
+        {
+          password: newPassword,
+          currentPassword: passwordConfigured ? currentPassword : undefined,
+        },
+        passwordConfigured ? undefined : bootstrapToken
+      );
 
       // Notify other components (WebSocket reconnect) after the server sets the HttpOnly cookie.
       dispatchSessionChanged(true);
@@ -277,6 +282,34 @@ export function SecurityPage() {
               {passwordConfigured ? 'Change Password' : 'Set Password'}
             </h2>
             <form onSubmit={handleSetPassword} className="space-y-3">
+              {!passwordConfigured && (
+                <div>
+                  <label
+                    htmlFor="bootstrap-token"
+                    className="block text-xs text-text-muted dark:text-dark-text-muted mb-1"
+                  >
+                    Setup token
+                  </label>
+                  <input
+                    id="bootstrap-token"
+                    type="password"
+                    value={bootstrapToken}
+                    onChange={(e) => setBootstrapToken(e.target.value)}
+                    autoComplete="off"
+                    required
+                    minLength={64}
+                    aria-describedby="bootstrap-token-help"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-border dark:border-dark-border bg-bg-primary dark:bg-dark-bg-primary text-text-primary dark:text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                  <p
+                    id="bootstrap-token-help"
+                    className="mt-1 text-xs text-text-muted dark:text-dark-text-muted"
+                  >
+                    Required once to protect initial password setup. Use the token supplied by your
+                    local administrator.
+                  </p>
+                </div>
+              )}
               {passwordConfigured && (
                 <div>
                   <label className="block text-xs text-text-muted dark:text-dark-text-muted mb-1">

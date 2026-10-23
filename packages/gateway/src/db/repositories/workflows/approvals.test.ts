@@ -113,11 +113,11 @@ describe('WorkflowApprovalsRepository', () => {
       expect(params[2]).toBe('wf-1'); // workflow_id
       expect(params[3]).toBe('node-gate'); // node_id
       expect(params[4]).toBe('default'); // user_id
-      expect(params[5]).toBe('pending'); // status default
-      expect(params[6]).toBe('{"key":"value"}'); // context JSON
-      expect(params[7]).toBe('Please approve'); // message
-      expect(params[8]).toBeNull(); // expires_at (not provided)
-      expect(typeof params[9]).toBe('string'); // created_at ISO
+      expect(params[8]).toBe('pending'); // status default
+      expect(params[9]).toBe('{"key":"value"}'); // context JSON
+      expect(params[10]).toBe('Please approve'); // message
+      expect(params[11]).toBeNull(); // expires_at (not provided)
+      expect(typeof params[12]).toBe('string'); // created_at ISO
 
       expect(result.id).toBe('wfappr-generated-id');
       expect(result.status).toBe('pending');
@@ -138,9 +138,9 @@ describe('WorkflowApprovalsRepository', () => {
       });
 
       const params = mockAdapter.execute.mock.calls[0]![1] as unknown[];
-      expect(params[6]).toBe('{}'); // context defaults to {}
-      expect(params[7]).toBeNull(); // message defaults to null
-      expect(params[8]).toBeNull(); // expires_at defaults to null
+      expect(params[9]).toBe('{}'); // context defaults to {}
+      expect(params[10]).toBeNull(); // message defaults to null
+      expect(params[11]).toBeNull(); // expires_at defaults to null
     });
 
     it('should pass expiresAt as ISO string when provided', async () => {
@@ -161,7 +161,7 @@ describe('WorkflowApprovalsRepository', () => {
       });
 
       const params = mockAdapter.execute.mock.calls[0]![1] as unknown[];
-      expect(params[8]).toBe(expiresAt.toISOString());
+      expect(params[11]).toBe(expiresAt.toISOString());
     });
 
     it('should throw when approval not found after insert', async () => {
@@ -332,6 +332,35 @@ describe('WorkflowApprovalsRepository', () => {
       expect(result).toBeNull();
     });
 
+    // QA-012 / QA-013: terminal and expired states must be unreachable by a
+    // late decision. The fence lives in the UPDATE predicate, so assert on it
+    // directly — a decision that loses the race must write nothing.
+    it('fences the update on pending status so a cancelled approval cannot be approved', async () => {
+      const cancelled = makeApprovalRow({ status: 'rejected', decided_at: '2024-06-01T13:00:00Z' });
+      mockAdapter.execute.mockResolvedValueOnce({ changes: 0 });
+      mockAdapter.queryOne.mockResolvedValueOnce(cancelled);
+
+      const result = await repo.decide('wfappr-1', 'approved');
+
+      const sql = mockAdapter.execute.mock.calls[0]![0] as string;
+      expect(sql).toContain("status = 'pending'");
+      // The already-rejected state survives.
+      expect(result!.status).toBe('rejected');
+    });
+
+    it('fences the update on expiry so a lapsed approval cannot be approved', async () => {
+      mockAdapter.execute.mockResolvedValueOnce({ changes: 0 });
+      mockAdapter.queryOne.mockResolvedValueOnce(
+        makeApprovalRow({ status: 'pending', expires_at: '2024-01-01T00:00:00Z' })
+      );
+
+      const result = await repo.decide('wfappr-1', 'approved');
+
+      const sql = mockAdapter.execute.mock.calls[0]![0] as string;
+      expect(sql).toContain('expires_at IS NULL OR expires_at > NOW()');
+      expect(result!.status).toBe('pending');
+    });
+
     it('should call get() after execute to return current state', async () => {
       const row = makeApprovalRow({ status: 'approved', decided_at: '2024-06-01T16:00:00Z' });
       mockAdapter.execute.mockResolvedValueOnce({ changes: 1 });
@@ -377,6 +406,20 @@ describe('WorkflowApprovalsRepository', () => {
 
       const params = mockAdapter.query.mock.calls[0]![1] as unknown[];
       expect(params).toEqual(['default', 10, 5]);
+    });
+
+    it('excludes expired approvals from pending work (QA-013)', async () => {
+      mockAdapter.query.mockResolvedValueOnce([]);
+      await repo.getPending();
+      expect(mockAdapter.query.mock.calls[0]![0] as string).toContain(
+        'expires_at IS NULL OR expires_at > NOW()'
+      );
+
+      mockAdapter.queryOne.mockResolvedValueOnce({ count: '0' });
+      await repo.countPending();
+      expect(mockAdapter.queryOne.mock.calls[0]![0] as string).toContain(
+        'expires_at IS NULL OR expires_at > NOW()'
+      );
     });
 
     it('should use default limit=20 and offset=0', async () => {

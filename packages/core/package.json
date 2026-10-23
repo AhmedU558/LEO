@@ -5,6 +5,24 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./media": {
+      "import": {
+        "types": "./dist/media/index.d.ts",
+        "default": "./dist/media/index.js"
+      }
+    },
+    "./content": {
+      "import": {
+        "types": "./dist/content/index.d.ts",
+        "default": "./dist/content/index.js"
+      }
+    },
+    "./storage": {
+      "import": {
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.js"
+      }
+    },
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
@@ -171,6 +189,36 @@
       "import": {
         "types": "./dist/assistant/index.d.ts",
         "default": "./dist/assistant/index.js"
+      }
+    },
+    "./social": {
+      "import": {
+        "types": "./dist/social/index.d.ts",
+        "default": "./dist/social/index.js"
+      }
+    },
+    "./computer": {
+      "import": {
+        "types": "./dist/computer/index.d.ts",
+        "default": "./dist/computer/index.js"
+      }
+    },
+    "./voice": {
+      "import": {
+        "types": "./dist/voice/index.d.ts",
+        "default": "./dist/voice/index.js"
+      }
+    },
+    "./autonomy": {
+      "import": {
+        "types": "./dist/autonomy/index.d.ts",
+        "default": "./dist/autonomy/index.js"
+      }
+    },
+    "./analytics": {
+      "import": {
+        "types": "./dist/analytics/index.d.ts",
+        "default": "./dist/analytics/index.js"
       }
     },
     "./version": {

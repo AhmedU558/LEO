@@ -1,10 +1,10 @@
+import { getUserId } from './helpers.js';
 /**
  * Cost Tracking Routes
  *
  * REST API endpoints for LLM usage cost tracking and budget management
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import { getLog } from '../services/log.js';
 import { estimateCost, MODEL_PRICING, formatCost } from '@ownpilot/core/costs';
@@ -61,7 +61,7 @@ function getPeriodStart(period: 'day' | 'week' | 'month' | 'year'): Date {
 costRoutes.get('/', async (c) => {
   const period =
     validateQueryEnum(c.req.query('period'), ['day', 'week', 'month', 'year'] as const) ?? 'month';
-  const userId = LOCAL_OWNER_ID; // Use authenticated user, not arbitrary query param
+  const userId = getUserId(c); // Use authenticated user, not arbitrary query param
 
   const startDate = getPeriodStart(period);
   const endDate = new Date();
@@ -98,7 +98,7 @@ costRoutes.get('/', async (c) => {
  */
 costRoutes.get('/subscriptions', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID ?? 'default';
+    const userId = getUserId(c) ?? 'default';
     const { ModelConfigsRepository } = await import('../db/repositories/model-configs.js');
     const repo = new ModelConfigsRepository();
 
@@ -172,7 +172,7 @@ costRoutes.get('/subscriptions', async (c) => {
  * GET /costs/usage - Get usage stats for UI dashboard
  */
 costRoutes.get('/usage', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   // Get daily stats
   const dailyStart = new Date();
@@ -211,7 +211,7 @@ costRoutes.get('/usage', async (c) => {
 costRoutes.get('/breakdown', async (c) => {
   const period =
     validateQueryEnum(c.req.query('period'), ['day', 'week', 'month', 'year'] as const) ?? 'month';
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   const startDate = getPeriodStart(period);
   const endDate = new Date();
@@ -508,7 +508,7 @@ costRoutes.post('/budget', async (c) => {
 costRoutes.get('/history', async (c) => {
   const limit = getIntParam(c, 'limit', 100, 1, 1000);
   const days = getIntParam(c, 'days', 30, 1, MAX_DAYS_LOOKBACK);
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const provider = validateQueryEnum(c.req.query('provider'), [
     'openai',
     'anthropic',
@@ -580,7 +580,7 @@ costRoutes.post('/record', async (c) => {
   try {
     const body = validateBody(costRecordSchema, await c.req.json());
 
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
 
     // Record usage
     const record = await usageTracker.record({

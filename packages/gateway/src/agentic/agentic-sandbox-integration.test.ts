@@ -67,6 +67,7 @@ const mockCtx = {
 } as unknown as RuntimeContext;
 
 function sandboxStep(params: Record<string, unknown>) {
+  params.userId = params.userId || 'test-user';
   return { index: 0, executorKind: 'sandbox_code', capabilityId: 'c', params } as never;
 }
 

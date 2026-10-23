@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions Routes Tests
  *
@@ -679,7 +680,7 @@ describe('Extensions Routes', () => {
     });
 
     it('GET / lists only local-owner extensions, filtering out other userIds', async () => {
-      // Single-tenant: every request resolves to LOCAL_OWNER_ID ('default'),
+      // Single-tenant: every request resolves to getUserId(c) ('default'),
       // and the route filters getAll() by that owner. Records carrying any
       // other userId (e.g. legacy rows) must be excluded.
       const otherUserRecord = { ...sampleRecord, id: 'other-ext', userId: 'user-2' };
@@ -692,7 +693,7 @@ describe('Extensions Routes', () => {
     });
 
     it('GET /:id returns 404 for an extension owned by a non-local userId', async () => {
-      // The residual ownership guard (pkg.userId !== LOCAL_OWNER_ID) still 404s
+      // The residual ownership guard (pkg.userId !== getUserId(c)) still 404s
       // rows that are not owned by the local owner.
       mockService.getById.mockReturnValue({ ...sampleRecord, userId: 'user-2' });
       const res = await app.request('/extensions/test-ext');

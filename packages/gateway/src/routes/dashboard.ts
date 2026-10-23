@@ -1,10 +1,10 @@
+import { getUserId } from './helpers.js';
 /**
  * Dashboard Routes
  *
  * API endpoints for the AI-powered daily briefing dashboard
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import { DashboardService, briefingCache, type AIBriefing } from '../services/dashboard/index.js';
 import { getLog } from '../services/log.js';
@@ -25,7 +25,7 @@ export const dashboardRoutes = new Hono();
  * - model: string - Override AI model (uses configured default)
  */
 dashboardRoutes.get('/briefing', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const forceRefresh = c.req.query('refresh') === 'true';
   const aiOnly = c.req.query('aiOnly') === 'true';
   const queryProvider = c.req.query('provider');
@@ -79,7 +79,7 @@ dashboardRoutes.get('/briefing', async (c) => {
  * GET /data - Get raw briefing data without AI summary
  */
 dashboardRoutes.get('/data', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const service = new DashboardService(userId);
 
   try {
@@ -104,7 +104,7 @@ dashboardRoutes.get('/data', async (c) => {
  * POST /briefing/refresh - Force refresh the AI briefing
  */
 dashboardRoutes.post('/briefing/refresh', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await c.req
     .json<{ provider?: string; model?: string }>()
     .catch(() => ({ provider: undefined, model: undefined }));
@@ -144,7 +144,7 @@ dashboardRoutes.post('/briefing/refresh', async (c) => {
  * GET /timeline - Get today's timeline view
  */
 dashboardRoutes.get('/timeline', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const service = new DashboardService(userId);
 
   try {
@@ -228,7 +228,7 @@ dashboardRoutes.get('/timeline', async (c) => {
  * - model: string - AI model (uses configured default)
  */
 dashboardRoutes.post('/briefing/stream', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = (await parseJsonBody<{ provider?: string; model?: string }>(c)) ?? {};
   const provider = body.provider ?? (await getDefaultProvider());
   if (!provider) {
@@ -304,7 +304,7 @@ dashboardRoutes.post('/briefing/stream', async (c) => {
  * DELETE /briefing/cache - Clear the briefing cache
  */
 dashboardRoutes.delete('/briefing/cache', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   briefingCache.invalidate(userId);
 
   return apiResponse(c, { cleared: true });

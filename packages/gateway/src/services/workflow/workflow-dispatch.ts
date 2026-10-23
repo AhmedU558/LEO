@@ -32,7 +32,13 @@ import { WORKFLOW_NODE_TYPES } from './node-types.js';
 import type { WorkflowProgressEvent } from './types.js';
 import { nodeDataField, nodeDataRecord } from './node-data.js';
 import {
+  executionTaskContext,
+  computerStepContext,
+  assertExecutionTaskActive,
+} from '../execution-task-context.js';
+import {
   executeNode,
+  executeBrowserNode,
   executeLlmNode,
   executeConditionNode,
   executeCodeNode,
@@ -49,6 +55,7 @@ import {
   executeAggregateNode,
   executeWebhookResponseNode,
   executeClawNode,
+  executeSocialPublishNode,
 } from './node-executors.js';
 
 const log = getLog('WorkflowService');
@@ -168,7 +175,160 @@ export type { DispatchNodeContext, DispatchCallbacks } from './workflow-context.
 // Node dispatch (the giant switch)
 // ============================================================================
 
+import { PolicyEngine, RiskEngine, ActionLedger } from '@ownpilot/core/security';
+import type { Capability } from '@ownpilot/core/security';
+
 export async function dispatchNode(
+  ctx: DispatchNodeContext,
+  cb: DispatchCallbacks
+): Promise<NodeResult> {
+  const grants = nodeDataField(ctx.node, 'computerCapabilities');
+  return computerStepContext.run(
+    {
+      nodeId: ctx.nodeId,
+      runId: ctx.logId,
+      capabilities: Array.isArray(grants)
+        ? grants.filter((v): v is string => typeof v === 'string')
+        : [],
+      effectIndex: 0,
+    },
+    () => dispatchAuthorizedNode(ctx, cb)
+  );
+}
+
+async function dispatchAuthorizedNode(
+  ctx: DispatchNodeContext,
+  cb: DispatchCallbacks
+): Promise<NodeResult> {
+  const { node, userId, dryRun, workflowId } = ctx;
+  const taskContext = executionTaskContext.getStore();
+  await assertExecutionTaskActive();
+  const identity = { userId, workspaceId: taskContext?.workspaceId ?? 'default', roles: [] };
+
+  // Map Node to Capability.
+  //
+  // QA-007: the label must match the concrete effect. A `codeNode` dispatches
+  // to execute_javascript / execute_python / execute_shell depending on its
+  // `language`, so only the shell variant is a shell effect. Classifying every
+  // codeNode as `shell.execute` made all of them CRITICAL, which meant every
+  // code node paused for approval — and, before the fix below, paused on an
+  // approval id that was never persisted and so could never be resolved.
+  let capability: Capability = 'workflow.execute';
+  if (node.type === 'llmNode') capability = 'agent.execute';
+  else if (node.type === 'codeNode') {
+    capability = nodeDataField(node, 'language') === 'shell' ? 'shell.execute' : 'workflow.execute';
+  }
+
+  const actionName = ((node.data as Record<string, unknown>).toolName as string) || node.type;
+
+  const policyEngine = new PolicyEngine();
+  const riskEngine = new RiskEngine();
+
+  const risk = riskEngine.classify(capability, actionName);
+  const policyResult = policyEngine.evaluate({
+    identity,
+    action: actionName,
+    resource: 'workflow_node',
+    capability,
+    risk,
+    environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+    autonomous: true,
+    requestedParameters: node.data as Record<string, unknown>,
+  });
+
+  if (policyResult.decision === 'DENY') {
+    return {
+      nodeId: node.id,
+      status: 'error',
+      error: `Policy Engine Denied: ${policyResult.reason}`,
+    };
+  }
+
+  if (policyResult.decision === 'REQUIRE_APPROVAL' && !dryRun) {
+    const approvalRepo = createWorkflowApprovalsRepository(userId);
+    // Check if this execution was already approved (e.g. we are resuming)
+    const existingApprovals = await approvalRepo.getAll(100, 0, identity.workspaceId);
+    const alreadyApproved = existingApprovals.find(
+      (a) => a.workflowLogId === ctx.logId && a.nodeId === node.id && a.status === 'approved'
+    );
+
+    if (!alreadyApproved) {
+      const approval = await approvalRepo.create({
+        workflowLogId: ctx.logId,
+        workflowId,
+        nodeId: node.id,
+        workspaceId: identity.workspaceId,
+        action: actionName,
+        capability: capability,
+        context: {
+          reason: policyResult.reason,
+          capability,
+          riskLevel: risk,
+          nodeType: node.type,
+          action: actionName,
+        },
+        message: policyResult.reason ?? `Approval required for ${actionName}`,
+      });
+      await ctx.repo.updateLog(ctx.logId, {
+        status: 'awaiting_approval',
+        nodeResults: ctx.nodeOutputs,
+      });
+      throw new ApprovalPauseError(approval.id);
+    }
+  }
+
+  let ledgerEntryId: string | undefined;
+
+  if (!dryRun) {
+    const ledgerEntry = await ActionLedger.record({
+      userId: identity.userId,
+      workspaceId: identity.workspaceId,
+      tool: actionName,
+      action: actionName,
+      resource: 'workflow_node',
+      resourceType: node.type,
+      taskId: taskContext?.taskId ?? workflowId,
+      runId: ctx.logId,
+      capability,
+      policyDecision: policyResult.decision,
+      riskLevel: risk,
+      executionEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      durationMs: 0,
+    });
+    ledgerEntryId = ledgerEntry.actionId;
+  }
+
+  const startTime = Date.now();
+  let result: NodeResult;
+  try {
+    result = await _dispatchNodeImpl(ctx, cb);
+    await assertExecutionTaskActive();
+  } catch (err) {
+    if (ledgerEntryId) {
+      await ActionLedger.updateResult(
+        ledgerEntryId,
+        { error: err instanceof Error ? err.message : String(err) },
+        Date.now() - startTime
+      );
+    }
+    throw err;
+  }
+
+  if (ledgerEntryId) {
+    await ActionLedger.updateResult(
+      ledgerEntryId,
+      {
+        result: result.status === 'success' ? 'success' : undefined,
+        error: typeof result.error === 'string' ? result.error : undefined,
+      },
+      typeof result.durationMs === 'number' ? result.durationMs : Date.now() - startTime
+    );
+  }
+
+  return result;
+}
+
+async function _dispatchNodeImpl(
   ctx: DispatchNodeContext,
   cb: DispatchCallbacks
 ): Promise<NodeResult> {
@@ -475,6 +635,20 @@ export async function dispatchNode(
   }
 
   // ── stickyNoteNode ──
+  // ???? socialPublishNode ????
+  if (node.type === 'socialPublishNode') {
+    onProgress?.({ type: 'node_start', nodeId, toolName: 'social_publish' });
+    if (dryRun) {
+      return { nodeId, status: 'skipped', output: 'dry run' };
+    }
+    return await cb.retryFn(
+      node,
+      () => executeSocialPublishNode(ctx, node),
+      abortSignal,
+      onProgress
+    );
+  }
+
   if (node.type === 'stickyNoteNode') {
     return {
       nodeId,
@@ -505,6 +679,9 @@ export async function dispatchNode(
       workflowLogId: logId,
       workflowId,
       nodeId,
+      workspaceId: executionTaskContext.getStore()?.workspaceId ?? 'default',
+      action: 'workflow.approve',
+      capability: 'workflow.execute',
       context: {
         approvalMessage: apData.approvalMessage,
         nodeLabel: apData.label,
@@ -673,6 +850,29 @@ export async function dispatchNode(
       abortSignal,
       onProgress
     );
+  }
+
+  // ── browserNode ──
+  if (node.type === 'browserNode') {
+    onProgress?.({
+      type: 'node_start',
+      nodeId,
+      toolName: `browser:${nodeDataField(node, 'action')}`,
+    });
+    if (dryRun) {
+      const args = resolveTemplates(
+        {
+          action: nodeDataField(node, 'action'),
+          url: nodeDataField(node, 'url'),
+          selector: nodeDataField(node, 'selector'),
+        },
+        nodeOutputs,
+        workflow.variables
+      );
+      return dryRunResult(node, args);
+    }
+    // ComputerService owns bounded actions and durable effect claims. Never blindly retry UI effects.
+    return executeBrowserNode(node, nodeOutputs, workflow.variables, userId);
   }
 
   // ── Unknown node type guard ──

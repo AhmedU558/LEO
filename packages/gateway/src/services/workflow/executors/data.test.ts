@@ -26,7 +26,7 @@ function makeNode(id: string, data: unknown): WorkflowNode {
 // --- executeSchemaValidatorNode ---
 
 describe('executeSchemaValidatorNode', () => {
-  it('returns valid=true when all required fields are present and types match', () => {
+  it('', async () => {
     const node = makeNode('v1', {
       schema: {
         type: 'object',
@@ -35,12 +35,12 @@ describe('executeSchemaValidatorNode', () => {
       },
     });
     const nodeOutputs = { src: { output: { name: 'Alice', age: 30 } } as unknown as NodeResult };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.status).toBe('success');
     expect(result.output).toEqual({ valid: true, errors: [] });
   });
 
-  it('returns valid=false when required field is missing', () => {
+  it('', async () => {
     const node = makeNode('v2', {
       schema: {
         type: 'object',
@@ -49,14 +49,14 @@ describe('executeSchemaValidatorNode', () => {
       },
     });
     const nodeOutputs = { src: { output: { name: 'Alice' } } as unknown as NodeResult };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.output).toEqual({
       valid: false,
       errors: ['Missing required field: "email"'],
     });
   });
 
-  it('returns valid=false when field type does not match schema', () => {
+  it('', async () => {
     const node = makeNode('v3', {
       schema: {
         type: 'object',
@@ -64,14 +64,14 @@ describe('executeSchemaValidatorNode', () => {
       },
     });
     const nodeOutputs = { src: { output: { age: 'thirty' } } as unknown as NodeResult };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.output).toEqual({
       valid: false,
       errors: ['Field "age" expected type "number", got "string"'],
     });
   });
 
-  it('returns valid=true when data is null and schema type is object', () => {
+  it('', async () => {
     // JS quirk: typeof null === 'object'. The schema validator checks
     // typeof inputData === 'object' && inputData !== null separately, so null
     // falls through to the else-if which compares typeof null to the schema type.
@@ -79,20 +79,20 @@ describe('executeSchemaValidatorNode', () => {
       schema: { type: 'object' },
     });
     const nodeOutputs = { src: { output: null } as unknown as NodeResult };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.output).toEqual({ valid: true, errors: [] });
   });
 
-  it('returns error result when schema type is a scalar and data matches', () => {
+  it('', async () => {
     const node = makeNode('v5', {
       schema: { type: 'string' },
     });
     const nodeOutputs = { src: { output: 'hello' } as unknown as NodeResult };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.output).toEqual({ valid: true, errors: [] });
   });
 
-  it('combines multiple errors', () => {
+  it('', async () => {
     const node = makeNode('v6', {
       schema: {
         type: 'object',
@@ -103,7 +103,7 @@ describe('executeSchemaValidatorNode', () => {
     const nodeOutputs = {
       src: { output: { count: 'five' } } as unknown as NodeResult,
     };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.output).toEqual({
       valid: false,
       errors: expect.arrayContaining([
@@ -113,24 +113,24 @@ describe('executeSchemaValidatorNode', () => {
     });
   });
 
-  it('returns error status when strict=true and validation fails', () => {
+  it('', async () => {
     const node = makeNode('v7', {
       schema: { type: 'number' },
       strict: true,
     });
     const nodeOutputs = { src: { output: 'not-a-number' } as unknown as NodeResult };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.status).toBe('error');
     expect(result.error).toContain('Validation failed');
   });
 
-  it('returns success status when strict=true and validation passes', () => {
+  it('', async () => {
     const node = makeNode('v8', {
       schema: { type: 'string' },
       strict: true,
     });
     const nodeOutputs = { src: { output: 'ok' } as unknown as NodeResult };
-    const result = executeSchemaValidatorNode(node, nodeOutputs, {});
+    const result = await executeSchemaValidatorNode(node, nodeOutputs, {});
     expect(result.status).toBe('success');
   });
 });
@@ -138,7 +138,7 @@ describe('executeSchemaValidatorNode', () => {
 // --- executeDataStoreNode ---
 
 describe('executeDataStoreNode', () => {
-  it('set and get a value', () => {
+  it('', async () => {
     const setNode = makeNode('set1', {
       operation: 'set',
       key: 'k1',
@@ -155,69 +155,69 @@ describe('executeDataStoreNode', () => {
     expect(getResult.output).toBe('secret');
   });
 
-  it('returns previousValue when overwriting', () => {
+  it('', async () => {
     const set1 = makeNode('s1', { operation: 'set', key: 'counter', value: 10 });
     const set2 = makeNode('s2', { operation: 'set', key: 'counter', value: 20 });
     executeDataStoreNode(set1, {}, {});
-    const result = executeDataStoreNode(set2, {}, {});
+    const result = await executeDataStoreNode(set2, {}, {});
     expect((result.output as { previousValue: number }).previousValue).toBe(10);
   });
 
-  it('delete returns existed=true when key existed', () => {
+  it('', async () => {
     const setNode = makeNode('set2', { operation: 'set', key: 'delkey', value: 1 });
     const delNode = makeNode('del1', { operation: 'delete', key: 'delkey' });
     executeDataStoreNode(setNode, {}, {});
-    const result = executeDataStoreNode(delNode, {}, {});
+    const result = await executeDataStoreNode(delNode, {}, {});
     expect((result.output as { existed: boolean }).existed).toBe(true);
   });
 
-  it('delete returns existed=false when key did not exist', () => {
+  it('', async () => {
     const delNode = makeNode('del2', { operation: 'delete', key: 'notexist' });
-    const result = executeDataStoreNode(delNode, {}, {});
+    const result = await executeDataStoreNode(delNode, {}, {});
     expect((result.output as { existed: boolean }).existed).toBe(false);
   });
 
-  it('list returns all keys in namespace', () => {
+  it('', async () => {
     const set1 = makeNode('l1', { operation: 'set', key: 'a', value: 1, namespace: 'listns' });
     const set2 = makeNode('l2', { operation: 'set', key: 'b', value: 2, namespace: 'listns' });
     executeDataStoreNode(set1, {}, {});
     executeDataStoreNode(set2, {}, {});
     const listNode = makeNode('list1', { operation: 'list', namespace: 'listns' });
-    const result = executeDataStoreNode(listNode, {}, {});
+    const result = await executeDataStoreNode(listNode, {}, {});
     expect(Array.isArray(result.output)).toBe(true);
     expect((result.output as string[]).sort()).toEqual(['a', 'b']);
   });
 
-  it('has returns true when key exists', () => {
+  it('', async () => {
     const setNode = makeNode('h1', { operation: 'set', key: 'exists', value: true });
     const hasNode = makeNode('has1', { operation: 'has', key: 'exists' });
     executeDataStoreNode(setNode, {}, {});
-    const result = executeDataStoreNode(hasNode, {}, {});
+    const result = await executeDataStoreNode(hasNode, {}, {});
     expect(result.output).toBe(true);
   });
 
-  it('has returns false when key does not exist', () => {
+  it('', async () => {
     const hasNode = makeNode('has2', { operation: 'has', key: 'notthere' });
-    const result = executeDataStoreNode(hasNode, {}, {});
+    const result = await executeDataStoreNode(hasNode, {}, {});
     expect(result.output).toBe(false);
   });
 
-  it('returns null when get key does not exist', () => {
+  it('', async () => {
     const getNode = makeNode('get2', { operation: 'get', key: 'missing' });
-    const result = executeDataStoreNode(getNode, {}, {});
+    const result = await executeDataStoreNode(getNode, {}, {});
     expect(result.status).toBe('success');
     expect(result.output).toBeNull();
   });
 
-  it('uses default namespace when none provided', () => {
+  it('', async () => {
     const setNode = makeNode('d1', { operation: 'set', key: 'dk', value: 'default-val' });
     const getNode = makeNode('d2', { operation: 'get', key: 'dk' });
     executeDataStoreNode(setNode, {}, {});
-    const result = executeDataStoreNode(getNode, {}, {});
+    const result = await executeDataStoreNode(getNode, {}, {});
     expect(result.output).toBe('default-val');
   });
 
-  it('namespaces are isolated', () => {
+  it('', async () => {
     const setA = makeNode('na1', { operation: 'set', key: 'k', value: 'ns-a', namespace: 'nsA' });
     const setB = makeNode('nb1', { operation: 'set', key: 'k', value: 'ns-b', namespace: 'nsB' });
     const getA = makeNode('ngA', { operation: 'get', key: 'k', namespace: 'nsA' });
@@ -228,16 +228,16 @@ describe('executeDataStoreNode', () => {
     expect(executeDataStoreNode(getB, {}, {}).output).toBe('ns-b');
   });
 
-  it('clearDataStore removes all namespaces', () => {
+  it('', async () => {
     const set1 = makeNode('c1', { operation: 'set', key: 'x', value: 1 });
     executeDataStoreNode(set1, {}, {});
     clearDataStore();
     const listNode = makeNode('c2', { operation: 'list' });
-    const result = executeDataStoreNode(listNode, {}, {});
+    const result = await executeDataStoreNode(listNode, {}, {});
     expect(result.output).toEqual([]);
   });
 
-  it('clearDataStore removes specific namespace', () => {
+  it('', async () => {
     const set1 = makeNode('cs1', { operation: 'set', key: 'x', value: 1, namespace: 'target' });
     const set2 = makeNode('cs2', { operation: 'set', key: 'x', value: 2, namespace: 'other' });
     executeDataStoreNode(set1, {}, {});

@@ -35,6 +35,12 @@ vi.mock('../api', () => ({
   workflowsApi: { list: (...a: unknown[]) => mockWorkflowsList(...a) },
 }));
 
+// The page calls useToast(), which throws outside a <ToastProvider>. Every
+// other page test in this directory stubs the hook rather than mounting the
+// real provider; do the same so a render failure here means a page defect.
+const mockToast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
+vi.mock('../components/ToastProvider', () => ({ useToast: () => mockToast }));
+
 vi.mock('react-router', async () => {
   const { createElement } = await import('react');
   return {

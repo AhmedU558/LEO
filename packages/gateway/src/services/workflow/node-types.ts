@@ -36,6 +36,8 @@ export const WORKFLOW_NODE_TYPES: ReadonlySet<string> = new Set([
   'aggregateNode',
   'webhookResponseNode',
   'clawNode',
+  'browserNode',
+  'socialPublishNode',
 ]);
 
 /**
@@ -63,4 +65,5 @@ export const SYNC_ONLY_NODE_TYPES: ReadonlySet<string> = new Set([
   'subWorkflowNode',
   // Spawns an autonomous agent via dispatchNode → executeClawNode.
   'clawNode',
+  'socialPublishNode',
 ]);

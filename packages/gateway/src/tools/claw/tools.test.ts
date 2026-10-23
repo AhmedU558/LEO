@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Claw Tools Tests
  */
 
@@ -134,7 +134,7 @@ describe('Claw Tools', () => {
     it('should fail when not inside a Claw context', async () => {
       mockGetClawContext.mockReturnValue(undefined);
 
-      // claw_recall_skill is a context-free read over learned skills — it
+      // claw_recall_skill is a context-free read over learned skills â€” it
       // validates its `query` arg rather than requiring a claw context.
       const contextBound = CLAW_TOOL_NAMES.filter((n) => n !== 'claw_recall_skill');
       for (const toolName of contextBound) {
@@ -276,7 +276,7 @@ describe('Claw Tools', () => {
       const writeMock = fileWorkspace.writeSessionWorkspaceFile as ReturnType<typeof vi.fn>;
       writeMock.mockClear();
 
-      // execFile will fail (not mocked) — we only care that the script was
+      // execFile will fail (not mocked) â€” we only care that the script was
       // written first; uniqueness is what we're verifying.
       await executeClawTool(
         'claw_run_script',
@@ -290,7 +290,7 @@ describe('Claw Tools', () => {
       );
 
       // Either both calls reached writeSessionWorkspaceFile (with distinct
-      // paths) or one fell through earlier — but if both wrote, paths must differ.
+      // paths) or one fell through earlier â€” but if both wrote, paths must differ.
       const writePaths = writeMock.mock.calls
         .map((call) => call[1] as string)
         .filter((p) => p?.startsWith('scripts/script_'));
@@ -315,6 +315,10 @@ describe('Claw Tools', () => {
 
     it('should accept valid tool creation and execute', async () => {
       setClawContext();
+      mockSandboxExecute.mockResolvedValueOnce({
+        success: true,
+        result: { parsed: true, input: 'a,b,c' },
+      });
 
       const result = await executeClawTool(
         'claw_create_tool',
@@ -647,7 +651,10 @@ describe('Claw Tools', () => {
     for (const eventType of reservedExamples) {
       it(`should reject reserved event type "${eventType}"`, async () => {
         setClawContext();
-
+        mockSandboxExecute.mockResolvedValueOnce({
+          success: true,
+          result: { parsed: true, input: 'a,b,c' },
+        });
         const result = await executeClawTool(
           'claw_emit_event',
           { event_type: eventType, payload: {} },
@@ -822,7 +829,7 @@ describe('Claw Tools', () => {
       expect((result.result as { count: number }).count).toBe(2);
       expect(session.tasks).toHaveLength(2);
       // The executor now delegates to manager.replacePlan, which owns
-      // persistence — assert THAT was called rather than the prior direct
+      // persistence â€” assert THAT was called rather than the prior direct
       // flushSession path.
       expect(mockManager.replacePlan).toHaveBeenCalled();
     });
@@ -1196,7 +1203,7 @@ describe('Claw Tools', () => {
       setupSessionWithTasks();
       const result = await executeClawTool(
         'claw_think',
-        { thought: 'The login is failing because the token is stale — rotate before retry.' },
+        { thought: 'The login is failing because the token is stale â€” rotate before retry.' },
         'user-1'
       );
       expect(result.success).toBe(true);
@@ -1271,7 +1278,7 @@ describe('Claw Tools', () => {
       expect(r.parent.evidence).toContain('Split into');
       expect(r.subtasks).toHaveLength(3);
       expect(r.subtasks.map((s) => s.id)).toEqual(['t1.1', 't1.2', 't1.3']);
-      // Subtasks must be inserted right after the parent — preserves reading order.
+      // Subtasks must be inserted right after the parent â€” preserves reading order.
       expect((session.tasks[1] as { id: string }).id).toBe('t1.1');
       expect((session.tasks[3] as { id: string }).id).toBe('t1.3');
       expect((session.tasks[4] as { id: string }).id).toBe('t2');

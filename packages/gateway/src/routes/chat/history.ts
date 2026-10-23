@@ -1,3 +1,4 @@
+﻿import { getUserId } from '../helpers.js';
 /**
  * Chat History & Logs Routes
  *
@@ -5,7 +6,6 @@
  * Separated from chat.ts (AI streaming logic) for maintainability.
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import {
   apiResponse,
@@ -58,7 +58,7 @@ export const chatHistoryRoutes = new Hono();
  * List all conversations (with pagination)
  */
 chatHistoryRoutes.get('/history', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const { limit, offset } = getPaginationParams(c, 50);
   const search = c.req.query('search');
   const agentId = c.req.query('agentId');
@@ -119,7 +119,7 @@ chatHistoryRoutes.get('/history', async (c) => {
  * Body: { ids: string[] } | { all: true } | { olderThanDays: number }
  */
 chatHistoryRoutes.post('/history/bulk-delete', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody<{
     ids?: string[];
     all?: boolean;
@@ -175,7 +175,7 @@ chatHistoryRoutes.post('/history/bulk-delete', async (c) => {
     }
 
     // Clean up the per-conversation prompt-init cache. `lastExecPermHash` is
-    // keyed by userId, not conversationId — see chat.ts DELETE handler.
+    // keyed by userId, not conversationId â€” see chat.ts DELETE handler.
     for (const conversationId of idsToDelete) {
       promptInitializedConversations.delete(conversationId);
     }
@@ -195,7 +195,7 @@ chatHistoryRoutes.post('/history/bulk-delete', async (c) => {
  * Body: { ids: string[], archived: boolean }
  */
 chatHistoryRoutes.post('/history/bulk-archive', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody<{
     ids?: string[];
     all?: boolean;
@@ -238,7 +238,7 @@ chatHistoryRoutes.post('/history/bulk-archive', async (c) => {
  */
 chatHistoryRoutes.get('/history/:id', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   try {
     const chatRepo = new ChatRepository(userId);
@@ -287,14 +287,14 @@ chatHistoryRoutes.get('/history/:id', async (c) => {
 });
 
 /**
- * Get unified conversation detail — merges AI messages with channel messages.
+ * Get unified conversation detail â€” merges AI messages with channel messages.
  * For web conversations: returns standard messages.
  * For channel conversations: merges channel_messages (sender info, direction) with
  * messages (AI content, tool calls) into a single timeline sorted by timestamp.
  */
 chatHistoryRoutes.get('/history/:id/unified', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   try {
     const chatRepo = new ChatRepository(userId);
@@ -308,7 +308,7 @@ chatHistoryRoutes.get('/history/:id/unified', async (c) => {
     const isChannel = meta.source === 'channel';
 
     if (!isChannel) {
-      // Web conversation — return standard messages with source tag
+      // Web conversation â€” return standard messages with source tag
       return apiResponse(c, {
         conversation: {
           id: data.conversation.id,
@@ -340,7 +340,7 @@ chatHistoryRoutes.get('/history/:id/unified', async (c) => {
       });
     }
 
-    // Channel conversation — merge both message sources
+    // Channel conversation â€” merge both message sources
     const channelMessages = await channelMessagesRepo.getByConversation(id, 500);
     const session = await channelSessionsRepo.findByConversation(id);
 
@@ -392,7 +392,7 @@ chatHistoryRoutes.get('/history/:id/unified', async (c) => {
     }
 
     // Add AI messages that don't overlap with channel messages
-    // (tool calls, system messages — things not captured in channel_messages)
+    // (tool calls, system messages â€” things not captured in channel_messages)
     const channelMessageIds = new Set(channelMessages.map((cm) => cm.id));
     for (const msg of data.messages) {
       // Skip user/assistant messages already captured via channel_messages
@@ -475,7 +475,7 @@ chatHistoryRoutes.get('/history/:id/unified', async (c) => {
  */
 chatHistoryRoutes.post('/history/:conversationId/channel-reply', async (c) => {
   const conversationId = c.req.param('conversationId');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody<{ text: string }>(c);
 
   if (!body?.text?.trim()) {
@@ -540,7 +540,7 @@ chatHistoryRoutes.post('/history/:conversationId/channel-reply', async (c) => {
         metadata: { platformChatId: session.platformChatId, sentVia: 'webui' },
       });
     } catch (err) {
-      // Non-fatal — message was already sent
+      // Non-fatal â€” message was already sent
       log.warn('Failed to persist channel message', { error: getErrorMessage(err) });
     }
 
@@ -597,7 +597,7 @@ chatHistoryRoutes.post('/history/:conversationId/channel-reply', async (c) => {
  * Updates flow via existing channel:message WebSocket events.
  */
 chatHistoryRoutes.post('/channel-send', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody<{ text: string; conversationId: string }>(c);
 
   if (!body?.text?.trim() || !body?.conversationId) {
@@ -697,7 +697,7 @@ chatHistoryRoutes.post('/channel-send', async (c) => {
  */
 chatHistoryRoutes.delete('/history/:id', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   try {
     const chatRepo = new ChatRepository(userId);
@@ -708,7 +708,7 @@ chatHistoryRoutes.delete('/history/:id', async (c) => {
     }
 
     // Clean up the per-conversation prompt-init cache. `lastExecPermHash` is
-    // keyed by userId, not conversationId — see chat.ts DELETE handler.
+    // keyed by userId, not conversationId â€” see chat.ts DELETE handler.
     promptInitializedConversations.delete(id);
 
     return apiResponse(c, { deleted: true });
@@ -729,7 +729,7 @@ chatHistoryRoutes.delete('/history/:id', async (c) => {
  */
 chatHistoryRoutes.patch('/history/:id/archive', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody<{ archived: boolean }>(c);
   if (!body) {
     return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Invalid JSON body' }, 400);
@@ -761,7 +761,7 @@ chatHistoryRoutes.patch('/history/:id/archive', async (c) => {
  */
 chatHistoryRoutes.patch('/history/:id', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody<{ title?: string }>(c);
   if (!body) {
     return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Invalid JSON body' }, 400);
@@ -798,7 +798,7 @@ chatHistoryRoutes.patch('/history/:id', async (c) => {
  * Get request logs
  */
 chatHistoryRoutes.get('/logs', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const { limit, offset } = getPaginationParams(c, 100);
   const type = validateQueryEnum(c.req.query('type'), [
     'chat',
@@ -845,7 +845,7 @@ chatHistoryRoutes.get('/logs', async (c) => {
  * Get log statistics
  */
 chatHistoryRoutes.get('/logs/stats', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const days = getIntParam(c, 'days', 7, 1, MAX_DAYS_LOOKBACK);
 
   const startDate = new Date();
@@ -862,7 +862,7 @@ chatHistoryRoutes.get('/logs/stats', async (c) => {
  */
 chatHistoryRoutes.get('/logs/:id', async (c) => {
   const id = c.req.param('id');
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   try {
     const logsRepo = new LogsRepository(userId);
@@ -889,7 +889,7 @@ chatHistoryRoutes.get('/logs/:id', async (c) => {
  * - olderThanDays=N: Clear logs older than N days (default: 30)
  */
 chatHistoryRoutes.delete('/logs', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const clearAll = c.req.query('all') === 'true';
   const days = getIntParam(c, 'olderThanDays', 30, 1);
 
@@ -967,7 +967,7 @@ chatHistoryRoutes.get('/context-detail', async (c) => {
   // Use user-configured context window from AI Models settings if available
   let userContextWindow: number | undefined;
   try {
-    const userConfig = await modelConfigsRepo.getModel(LOCAL_OWNER_ID, provider, model);
+    const userConfig = await modelConfigsRepo.getModel(getUserId(c), provider, model);
     userContextWindow = userConfig?.contextWindow ?? undefined;
   } catch {
     // Fall back to pricing defaults
@@ -1007,7 +1007,7 @@ chatHistoryRoutes.post('/compact', async (c) => {
   // matches what the rest of the chat surface reports.
   let userContextWindow: number | undefined;
   try {
-    const userConfig = await modelConfigsRepo.getModel(LOCAL_OWNER_ID, provider, model);
+    const userConfig = await modelConfigsRepo.getModel(getUserId(c), provider, model);
     userContextWindow = userConfig?.contextWindow ?? undefined;
   } catch {
     /* fall back to pricing defaults */
@@ -1019,7 +1019,7 @@ chatHistoryRoutes.post('/compact', async (c) => {
       model,
       keepRecent,
       userContextWindow,
-      LOCAL_OWNER_ID
+      getUserId(c)
     );
     return apiResponse(c, result);
   } catch (err) {
@@ -1036,7 +1036,7 @@ chatHistoryRoutes.post('/compact', async (c) => {
  * Uses PostgreSQL tsvector/tsquery for natural language search.
  */
 chatHistoryRoutes.post('/search', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody<{ query: string; limit?: number; offset?: number }>(c);
 
   if (!body?.query?.trim()) {

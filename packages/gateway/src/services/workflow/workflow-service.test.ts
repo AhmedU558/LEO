@@ -59,6 +59,12 @@ const mockExecuteWebhookResponseNode = vi.hoisted(() => vi.fn());
 
 const mockApprovalsRepo = vi.hoisted(() => ({
   create: vi.fn(),
+  get: vi.fn(),
+  // cancelExecution() invalidates the workflow's pending approvals through
+  // this repository. Omitting the method made every cancellation in this file
+  // throw inside a background promise chain, which vitest reported as an
+  // unhandled rejection rather than a test failure.
+  rejectByWorkflow: vi.fn(async () => {}),
 }));
 
 // Shared test locks map — used to seed active executions in tests that need to
@@ -1360,7 +1366,17 @@ describe('approvalNode', () => {
     });
     mockRepo.getLog.mockResolvedValue(makeLog({ status: 'awaiting_approval', nodeResults: {} }));
 
-    await service.resumeFromApproval('wf-1', 'user1', 'ap1', 'approved', 'log-1');
+    mockApprovalsRepo.get.mockResolvedValue({
+      id: 'approval-1',
+      workflowId: 'wf-1',
+      workflowLogId: 'log-1',
+      nodeId: 'ap1',
+      status: 'approved',
+      userId: 'user1',
+      expiresAt: null,
+    });
+
+    await service.resumeFromApproval('approval-1', 'user1');
 
     // Resuming past ap1 hits ap2, which must pause again — not fail.
     expect(statuses).not.toContain('failed');
@@ -1387,9 +1403,17 @@ describe('approvalNode', () => {
     // paused workflow is wedged "running" and can never be resumed.
     mockRepo.updateLog.mockRejectedValueOnce(new Error('DB down'));
 
-    await expect(
-      service.resumeFromApproval('wf-1', 'user1', 'ap1', 'approved', 'log-1')
-    ).rejects.toThrow('DB down');
+    mockApprovalsRepo.get.mockResolvedValue({
+      id: 'approval-1',
+      workflowId: 'wf-1',
+      workflowLogId: 'log-1',
+      nodeId: 'ap1',
+      status: 'approved',
+      userId: 'user1',
+      expiresAt: null,
+    });
+
+    await expect(service.resumeFromApproval('approval-1', 'user1')).rejects.toThrow('DB down');
 
     expect(service.isRunning('wf-1')).toBe(false);
   });
@@ -1435,7 +1459,7 @@ describe('subWorkflowNode', () => {
     mockRepo.getLog.mockResolvedValue(makeLog({ status: 'failed' }));
 
     const progressEvents: Array<Record<string, unknown>> = [];
-    await service.executeWorkflow('wf-1', 'user1', (e) => progressEvents.push(e), { depth: 10 });
+    await service.executeWorkflow('wf-1', 'user1', (e) => progressEvents.push(e), { depth: 9 });
 
     const ne = progressEvents.find((e) => e.type === 'node_error');
     expect(ne).toBeDefined();

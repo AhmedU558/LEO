@@ -33,7 +33,7 @@ function shouldBypassRateLimit(ip: string): boolean {
  * ignored and all clients share a single bucket — the safe default.
  */
 function getClientIp(c: Context): string {
-  return getClientIpShared(c.req);
+  return getClientIpShared(c);
 }
 
 interface RateLimitEntry {

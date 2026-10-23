@@ -96,6 +96,7 @@ export {
   Send,
   Server,
   Settings,
+  Share2,
   Settings2,
   Shield,
   ShieldAlert,

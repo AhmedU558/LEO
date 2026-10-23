@@ -17,7 +17,7 @@ const mockTransport = {
 
 const mockRepo = {
   updateStatus: vi.fn(),
-  getByName: vi.fn(),
+  getByName: vi.fn().mockResolvedValue({ enabled: true, user_id: 'default' }),
   getEnabled: vi.fn().mockResolvedValue([]),
 };
 
@@ -785,6 +785,9 @@ describe('McpClientService', () => {
   // ===========================================================================
 
   describe('registered tool executors', () => {
+    beforeEach(() => {
+      mockRepo.getByName.mockResolvedValue({ enabled: true, user_id: 'default' });
+    });
     it('executor returns string content directly', async () => {
       const tools = makeMcpTools(['echo']);
       mockClient.listTools.mockResolvedValue({ tools });
@@ -801,7 +804,10 @@ describe('McpClientService', () => {
         content: [{ type: 'text', text: 'hello' }],
       });
 
-      const result = await executor({ message: 'hello' });
+      const result = await executor(
+        { message: 'hello' },
+        { userId: 'default', callId: '1', conversationId: '1' }
+      );
 
       expect(result).toEqual({ content: 'hello' });
     });
@@ -820,7 +826,7 @@ describe('McpClientService', () => {
 
       mockClient.callTool.mockResolvedValue({ someField: 42 });
 
-      const result = await executor({});
+      const result = await executor({}, { userId: 'default', callId: '1', conversationId: '1' });
 
       expect(result.content).toBe(JSON.stringify({ someField: 42 }, null, 2));
     });
@@ -841,7 +847,7 @@ describe('McpClientService', () => {
       // But easier: make callTool reject
       mockClient.callTool.mockRejectedValue(new Error('tool failed'));
 
-      const result = await executor({});
+      const result = await executor({}, { userId: 'default', callId: '1', conversationId: '1' });
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('MCP tool error: tool failed');
@@ -861,7 +867,7 @@ describe('McpClientService', () => {
 
       mockClient.callTool.mockRejectedValue('string error');
 
-      const result = await executor({});
+      const result = await executor({}, { userId: 'default', callId: '1', conversationId: '1' });
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('MCP tool error: string error');

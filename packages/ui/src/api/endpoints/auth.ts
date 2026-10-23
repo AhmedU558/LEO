@@ -35,8 +35,12 @@ export const authApi = {
   logout: () => apiClient.post<{ message: string }>('/auth/logout'),
 
   /** Set or change password */
-  setPassword: (data: { password: string; currentPassword?: string }) =>
-    apiClient.post<PasswordResponse>('/auth/password', data),
+  setPassword: (data: { password: string; currentPassword?: string }, bootstrapToken?: string) =>
+    bootstrapToken
+      ? apiClient.post<PasswordResponse>('/auth/password', data, {
+          headers: { 'X-Bootstrap-Token': bootstrapToken },
+        })
+      : apiClient.post<PasswordResponse>('/auth/password', data),
 
   /** Remove password */
   removePassword: () => apiClient.delete<{ message: string }>('/auth/password'),

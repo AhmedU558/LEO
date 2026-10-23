@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 /**
  * Browser Service
  *
@@ -7,10 +8,26 @@
  */
 
 import { existsSync } from 'node:fs';
-import type { Browser, Page, SerializedAXNode } from 'puppeteer-core';
+import { createHash } from 'node:crypto';
+import type { Browser, Page, SerializedAXNode, BrowserContext } from 'puppeteer-core';
 import { hasPII, detectPII } from '@ownpilot/core/privacy';
 import { getLog, getConfigCenter } from '@ownpilot/core/services';
 import { isBlockedUrl, isPrivateUrlAsync } from '../utils/ssrf.js';
+import { PolicyEngine } from '@ownpilot/core/security';
+import type {
+  ComputerSessionBinding,
+  ComputerRedactionLayout,
+  ComputerRedactionControl,
+  ComputerControlKind,
+} from '@ownpilot/core/computer';
+import { COMPUTER_SENSITIVE_KINDS, disclosableText } from '@ownpilot/core/computer';
+import {
+  COMPUTER_VIEWPORT,
+  COMPUTER_MAX_SCREENSHOT_BYTES,
+  COMPUTER_KEYS,
+  COMPUTER_HOTKEYS,
+  validateComputerPoint,
+} from '@ownpilot/core/computer';
 
 const log = getLog('BrowserService');
 
@@ -37,8 +54,8 @@ const MAX_NAV_ATTEMPTS = 2;
 const NAV_RETRY_DELAY_MS = 400;
 
 /**
- * Chromium navigation faults that are typically transient — a connection reset,
- * a dropped socket, a network change, or a timeout — where an immediate retry
+ * Chromium navigation faults that are typically transient â€” a connection reset,
+ * a dropped socket, a network change, or a timeout â€” where an immediate retry
  * usually succeeds. Permanent faults (ERR_NAME_NOT_RESOLVED / DNS, ERR_ABORTED,
  * invalid URL, SSRF blocks) are deliberately excluded so they fail fast instead
  * of wasting a retry. Exported for direct unit testing.
@@ -94,7 +111,7 @@ export function renderAxNode(node: SerializedAXNode, depth: number): string {
   return line;
 }
 
-/** Accessibility roles an agent can act on — used to build a recovery hint. */
+/** Accessibility roles an agent can act on â€” used to build a recovery hint. */
 const ACTIONABLE_ROLES = new Set([
   'button',
   'link',
@@ -142,7 +159,7 @@ export async function buildActionableElementsHint(page: Page): Promise<string> {
 
 /**
  * waitForSelector that, on timeout (selector never appeared), throws an error
- * naming the actionable elements that ARE present — turning a dead-end "not
+ * naming the actionable elements that ARE present â€” turning a dead-end "not
  * found" into a self-correction cue. Non-timeout errors pass through unchanged.
  * Exported for unit testing.
  */
@@ -195,6 +212,7 @@ interface BrowserConfigInfo {
 
 interface PageSession {
   page: Page;
+  context: BrowserContext;
   userId: string;
   createdAt: number;
   lastActivity: number;
@@ -239,11 +257,12 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async navigate(
+    sessionId: string,
     userId: string,
     url: string
   ): Promise<{ url: string; title: string; text: string }> {
-    await this.validateUrl(url);
-    const page = await this.getOrCreatePage(userId);
+    await this.validateUrl(url, sessionId);
+    const page = await this.getOrCreatePage(sessionId, userId);
 
     // Two-phase load. Pages with long-lived connections (analytics beacons,
     // websockets, SSE, ad trackers) never reach network-idle, so waiting on
@@ -278,7 +297,7 @@ export class BrowserService {
         timeout: Math.min(DEFAULT_ACTION_TIMEOUT, 5000),
       });
     } catch (err) {
-      // Only tolerate the idle wait timing out — anything else is a real fault.
+      // Only tolerate the idle wait timing out â€” anything else is a real fault.
       if (!(err instanceof Error && /timeout|timed out|waiting for/i.test(err.message))) {
         throw err;
       }
@@ -294,8 +313,8 @@ export class BrowserService {
   // Click
   // --------------------------------------------------------------------------
 
-  async click(userId: string, selector: string): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+  async click(sessionId: string, selector: string): Promise<{ url: string; title: string }> {
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     await page.click(selector);
     // Wait briefly for any navigation or DOM changes
@@ -313,8 +332,27 @@ export class BrowserService {
    * `navigated: false` when there is no history to go back to (the agent then
    * knows to navigate by URL instead of assuming it moved).
    */
-  async goBack(userId: string): Promise<{ url: string; title: string; navigated: boolean }> {
-    const page = await this.getExistingPage(userId);
+
+  async goForward(sessionId: string): Promise<{ url: string; title: string; navigated: boolean }> {
+    const page = await this.getExistingPage(sessionId);
+    const response = await page.goForward({
+      waitUntil: 'domcontentloaded',
+      timeout: DEFAULT_NAVIGATION_TIMEOUT,
+    });
+    return { url: page.url(), title: await page.title(), navigated: response !== null };
+  }
+
+  async reload(sessionId: string): Promise<{ url: string; title: string }> {
+    const page = await this.getExistingPage(sessionId);
+    await page.reload({
+      waitUntil: 'domcontentloaded',
+      timeout: DEFAULT_NAVIGATION_TIMEOUT,
+    });
+    return { url: page.url(), title: await page.title() };
+  }
+
+  async goBack(sessionId: string): Promise<{ url: string; title: string; navigated: boolean }> {
+    const page = await this.getExistingPage(sessionId);
     const response = await page.goBack({
       waitUntil: 'domcontentloaded',
       timeout: DEFAULT_NAVIGATION_TIMEOUT,
@@ -327,11 +365,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   /**
-   * Hover the pointer over an element — reveals dropdown menus, tooltips, and
+   * Hover the pointer over an element â€” reveals dropdown menus, tooltips, and
    * hover-gated controls that must be visible before they can be clicked.
    */
-  async hover(userId: string, selector: string): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+  async hover(sessionId: string, selector: string): Promise<{ url: string; title: string }> {
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     await page.hover(selector);
     // Brief settle so any hover-triggered menu/animation can render.
@@ -344,11 +382,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async type(
-    userId: string,
+    sessionId: string,
     selector: string,
     text: string
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     // Clear existing value first
     await page.click(selector, { count: 3 });
@@ -361,10 +399,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async fillForm(
-    userId: string,
+    sessionId: string,
     fields: FormField[]
   ): Promise<{ url: string; title: string; piiWarnings: string[] }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const piiWarnings: string[] = [];
 
     for (const field of fields) {
@@ -394,10 +432,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async screenshot(
-    userId: string,
+    sessionId: string,
     opts?: ScreenshotOptions
   ): Promise<{ screenshot: string; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     let buffer: Uint8Array;
 
     if (opts?.selector) {
@@ -424,11 +462,41 @@ export class BrowserService {
   // Extract Text
   // --------------------------------------------------------------------------
 
+  async find(
+    sessionId: string,
+    textOrSelector: string
+  ): Promise<{ url: string; title: string; matches: string[] }> {
+    const page = await this.getExistingPage(sessionId);
+    const matches = await page.evaluate((query) => {
+      const results: string[] = [];
+      try {
+        const elements = document.querySelectorAll(query);
+        if (elements.length > 0) {
+          elements.forEach((el) => results.push((el as HTMLElement).innerText || ''));
+          return results.slice(0, 50);
+        }
+      } catch {}
+
+      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+      let n;
+      while ((n = walk.nextNode())) {
+        if (n.textContent && n.textContent.includes(query)) {
+          const parent = n.parentElement;
+          if (parent && parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE') {
+            results.push(parent.innerText || n.textContent);
+          }
+        }
+      }
+      return Array.from(new Set(results)).slice(0, 50);
+    }, textOrSelector);
+    return { url: page.url(), title: await page.title(), matches };
+  }
+
   async extractText(
-    userId: string,
+    sessionId: string,
     selector?: string
   ): Promise<{ text: string; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
 
     let text: string;
     if (selector) {
@@ -450,10 +518,10 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async extractData(
-    userId: string,
+    sessionId: string,
     selectors: Record<string, string>
   ): Promise<{ data: Record<string, string>; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const data: Record<string, string> = {};
 
     for (const [key, selector] of Object.entries(selectors)) {
@@ -471,19 +539,19 @@ export class BrowserService {
   // --------------------------------------------------------------------------
   // Accessibility Tree
   //
-  // Returns the page as a structured accessibility (a11y) outline — role + name
-  // hierarchy — instead of raw HTML. This is the representation Hermes Agent
+  // Returns the page as a structured accessibility (a11y) outline â€” role + name
+  // hierarchy â€” instead of raw HTML. This is the representation Hermes Agent
   // uses: far more compact and easier for an LLM to reason about and navigate
   // than DOM/HTML, since it surfaces the same elements assistive tech exposes.
   // --------------------------------------------------------------------------
 
   async accessibilityTree(
-    userId: string,
+    sessionId: string,
     selector?: string
   ): Promise<{ tree: string; url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
 
-    // Type inferred from page.$ — avoids naming DOM lib types (Element/Node),
+    // Type inferred from page.$ â€” avoids naming DOM lib types (Element/Node),
     // which aren't in the gateway tsconfig's lib set.
     let root = null as Awaited<ReturnType<typeof page.$>>;
     if (selector) {
@@ -507,11 +575,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async wait(
-    userId: string,
+    sessionId: string,
     selector?: string,
     timeout?: number
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const ms = timeout ?? DEFAULT_ACTION_TIMEOUT;
 
     if (selector) {
@@ -528,11 +596,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async scroll(
-    userId: string,
+    sessionId: string,
     direction: 'up' | 'down',
     pixels?: number
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     const amount = pixels ?? 500;
     const y = direction === 'down' ? amount : -amount;
     await page.mouse.wheel({ deltaY: y });
@@ -544,11 +612,11 @@ export class BrowserService {
   // --------------------------------------------------------------------------
 
   async select(
-    userId: string,
+    sessionId: string,
     selector: string,
     value: string
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     await waitForSelectorWithHint(page, selector, DEFAULT_ACTION_TIMEOUT);
     await page.select(selector, value);
     return { url: page.url(), title: await page.title() };
@@ -561,23 +629,23 @@ export class BrowserService {
   /**
    * Press a single keyboard key on the active page. Maps directly to
    * Puppeteer's `keyboard.press`, which supports both single characters
-   * ('a', 'A') and named keys (Enter, Tab, Escape, ArrowDown, …).
+   * ('a', 'A') and named keys (Enter, Tab, Escape, ArrowDown, â€¦).
    *
    * Critical for agent autonomy on real sites: many search bars submit
    * on Enter rather than via a button, and modal dialogs close on Esc.
-   * Without this, agents could only type strings — not actually progress
+   * Without this, agents could only type strings â€” not actually progress
    * through keyboard-driven UIs.
    *
-   * `selector` is optional — when supplied, the element is focused first
+   * `selector` is optional â€” when supplied, the element is focused first
    * so the key targets the right input. Without it, the key fires on
    * whatever currently has focus (useful for global shortcuts).
    */
   async pressKey(
-    userId: string,
+    sessionId: string,
     key: string,
     selector?: string
   ): Promise<{ url: string; title: string }> {
-    const page = await this.getExistingPage(userId);
+    const page = await this.getExistingPage(sessionId);
     if (selector) {
       await page.waitForSelector(selector, { timeout: DEFAULT_ACTION_TIMEOUT });
       await page.focus(selector);
@@ -594,11 +662,11 @@ export class BrowserService {
    *
    * Agents need this to verify that a previous click / form-submit
    * landed where they expected before proceeding. Returns null when the
-   * user has no open page (instead of throwing — letting agents probe
+   * user has no open page (instead of throwing â€” letting agents probe
    * cheaply without exception handling).
    */
-  async getState(userId: string): Promise<{ url: string; title: string } | null> {
-    const session = this.sessions.get(userId);
+  async getState(sessionId: string): Promise<{ url: string; title: string } | null> {
+    const session = this.sessions.get(sessionId);
     if (!session) return null;
     try {
       return { url: session.page.url(), title: await session.page.title() };
@@ -607,23 +675,323 @@ export class BrowserService {
     }
   }
 
-  async closePage(userId: string): Promise<boolean> {
-    const session = this.sessions.get(userId);
+  private computerBindings = new Map<string, ComputerSessionBinding>();
+
+  private computerScope(binding: ComputerSessionBinding): string {
+    return JSON.stringify([
+      binding.userId,
+      binding.workspaceId,
+      binding.executionTaskId,
+      binding.sessionId,
+    ]);
+  }
+
+  hasComputerSession(binding: ComputerSessionBinding): boolean {
+    const stored = this.computerBindings.get(binding.sessionId);
+    return (
+      !!stored &&
+      this.computerScope(stored) === this.computerScope(binding) &&
+      !!this.getPageInfo(binding.sessionId)?.active
+    );
+  }
+
+  async closeComputerSession(binding: ComputerSessionBinding): Promise<void> {
+    const stored = this.computerBindings.get(binding.sessionId);
+    if (stored && this.computerScope(stored) === this.computerScope(binding))
+      await this.closePage(binding.sessionId);
+  }
+
+  /** Fixed CDP inspection; page text/attributes are hashed locally and never sent to the model. */
+  async computerRedactionLayout(binding: ComputerSessionBinding): Promise<ComputerRedactionLayout> {
+    if (!this.hasComputerSession(binding)) throw new Error('Invalid redaction session');
+    const page = this.sessions.get(binding.sessionId)!.page;
+    const cdp = await page.createCDPSession();
+    try {
+      const snapshot = await cdp.send('DOMSnapshot.captureSnapshot', {
+        computedStyles: [],
+        includeDOMRects: true,
+        includePaintOrder: true,
+      });
+      const doc = snapshot.documents[0];
+      const names = doc?.nodes.nodeName;
+      if (
+        !doc ||
+        !names ||
+        snapshot.documents.length !== 1 ||
+        names.length > 5000 ||
+        (doc.nodes.shadowRootType?.index.length ?? 0) > 0
+      )
+        throw new Error('Unsupported redaction layout');
+      const controls: ComputerRedactionControl[] = [];
+      const strings = snapshot.strings;
+      const parents = doc.nodes.parentIndex ?? [];
+      const values = doc.nodes.nodeValue ?? [];
+      const tagOf = (index: number) => (strings[names[index]!] ?? '').toLowerCase();
+      const attributesOf = (index: number) =>
+        (doc.nodes.attributes?.[index] ?? []).map((n) => strings[n] ?? '').join(' ');
+      /** Server-side role assignment. Page strings are matched here, never emitted. */
+      const kindOf = (index: number): ComputerControlKind | undefined => {
+        const tag = tagOf(index);
+        if (!['input', 'textarea', 'select', 'button', 'a'].includes(tag)) return undefined;
+        const attributes = attributesOf(index);
+        if (/password/i.test(attributes)) return 'Password';
+        if (/secret|token|api[-_ ]?key|credential/i.test(attributes)) return 'Secret';
+        if (/auth|otp|one-time|username|email|login/i.test(attributes)) return 'Authentication';
+        if (tag === 'button') return 'Button';
+        if (tag === 'a') return 'Link';
+        if (tag === 'select') return 'Select';
+        return 'Field';
+      };
+      /**
+       * Nearest enclosing control. Depth-bounded so a malformed or cyclic parent
+       * chain cannot spin; returning undefined leaves the text unattached rather
+       * than guessing an owner.
+       */
+      const enclosing = (index: number) => {
+        let node = index;
+        for (let depth = 0; depth < 32; depth++) {
+          const parent = parents[node];
+          if (parent === undefined || parent < 0) return undefined;
+          const kind = kindOf(parent);
+          if (kind) return { index: parent, kind };
+          node = parent;
+        }
+        return undefined;
+      };
+      const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+      const headingAncestor = (index: number) => {
+        let node = index;
+        for (let depth = 0; depth < 8; depth++) {
+          const parent = parents[node];
+          if (parent === undefined || parent < 0) return false;
+          if (HEADINGS.includes(tagOf(parent))) return true;
+          node = parent;
+        }
+        return false;
+      };
+      const rect = (i: number) => {
+        const bounds = doc.layout.bounds[i]!;
+        const x = Math.max(0, bounds[0]! - (doc.scrollOffsetX ?? 0));
+        const y = Math.max(0, bounds[1]! - (doc.scrollOffsetY ?? 0));
+        const right = Math.min(1280, bounds[0]! - (doc.scrollOffsetX ?? 0) + bounds[2]!);
+        const bottom = Math.min(800, bounds[1]! - (doc.scrollOffsetY ?? 0) + bounds[3]!);
+        if (right <= x || bottom <= y) return undefined;
+        return { x, y, width: right - x, height: bottom - y };
+      };
+
+      // Pass 1: controls, as before, plus a server-constant state word.
+      const byNode = new Map<number, ComputerRedactionControl>();
+      for (let i = 0; i < doc.layout.nodeIndex.length; i++) {
+        const index = doc.layout.nodeIndex[i]!;
+        const kind = kindOf(index);
+        if (!kind) continue;
+        const box = rect(i);
+        if (!box) continue;
+        const attributes = attributesOf(index);
+        const state = /(^|\s)disabled(\s|$)/i.test(attributes)
+          ? ('disabled' as const)
+          : /(^|\s)checked(\s|$)/i.test(attributes)
+            ? ('checked' as const)
+            : /(^|\s)selected(\s|$)/i.test(attributes)
+              ? ('selected' as const)
+              : undefined;
+        const control: ComputerRedactionControl = { ...box, kind, ...(state ? { state } : {}) };
+        controls.push(control);
+        byNode.set(index, control);
+      }
+      if (controls.length > 200) throw new Error('Redaction control limit');
+
+      // Pass 2: visible text. Only rendered text nodes are read, never an
+      // attribute, so an input's `value` can never become a label. Text inside a
+      // sensitive control is dropped outright; everything else must pass the
+      // shared disclosure classifier or it stays masked. Overflow past the cap is
+      // dropped rather than raised: less disclosure is always the safe outcome.
+      const regions: ComputerRedactionControl[] = [];
+      for (
+        let i = 0;
+        i < doc.layout.nodeIndex.length && controls.length + regions.length < 200;
+        i++
+      ) {
+        const index = doc.layout.nodeIndex[i]!;
+        if (tagOf(index) !== '#text') continue;
+        const owner = enclosing(index);
+        if (owner && COMPUTER_SENSITIVE_KINDS.includes(owner.kind)) continue;
+        const text = disclosableText(strings[values[index] ?? -1]);
+        if (!text) continue;
+        const existing = owner ? byNode.get(owner.index) : undefined;
+        if (existing) {
+          if (!existing.text) existing.text = text;
+          continue;
+        }
+        const box = rect(i);
+        if (!box) continue;
+        regions.push({ ...box, kind: headingAncestor(index) ? 'Heading' : 'Text', text });
+      }
+      controls.push(...regions);
+      return {
+        revision: createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'),
+        controls,
+      };
+    } finally {
+      await cdp.detach();
+    }
+  }
+
+  async initializeComputerSession(binding: ComputerSessionBinding): Promise<void> {
+    const { sessionId, userId } = binding;
+    if (!sessionId || !userId || !binding.workspaceId || !binding.executionTaskId)
+      throw new Error('Missing computer session scope');
+    const scope = this.computerScope(binding);
+    const bound = this.computerBindings.get(sessionId);
+    if (bound && this.computerScope(bound) !== scope)
+      throw new Error('Computer session scope mismatch');
+    const existing = this.sessions.get(sessionId);
+    if (existing && (!bound || existing.userId !== userId))
+      throw new Error('Computer session owner mismatch');
+    this.computerBindings.set(sessionId, Object.freeze({ ...binding }));
+    try {
+      const page = await this.getOrCreatePage(sessionId, userId);
+      await page.setViewport(COMPUTER_VIEWPORT);
+      const guard = await page.browser().target().createCDPSession();
+      page.once('close', () => {
+        void guard.detach().catch(() => log.warn('Browser target guard cleanup failed'));
+      });
+      guard.on('Target.attachedToTarget', ({ targetInfo, sessionId: attachedId }) => {
+        if (targetInfo.openerId) {
+          // Deny requests before resuming: closing a paused popup can deadlock its opener's input.
+          const popup = guard.connection()?.session(attachedId);
+          void (async () => {
+            if (popup) {
+              popup.on('Fetch.requestPaused', ({ requestId }) => {
+                void popup
+                  .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' })
+                  .catch(() => log.warn('Popup request cleanup failed'));
+              });
+              await popup.send('Fetch.enable', {
+                patterns: [{ urlPattern: '*', requestStage: 'Request' }],
+              });
+              await popup.send('Runtime.runIfWaitingForDebugger');
+            }
+            await guard.send('Target.closeTarget', { targetId: targetInfo.targetId });
+          })().catch(() => log.warn('Popup target cleanup failed'));
+        } else {
+          void guard
+            .connection()
+            ?.session(attachedId)
+            ?.send('Runtime.runIfWaitingForDebugger')
+            .catch(() => log.warn('Browser target activation failed'));
+        }
+      });
+      await guard.send('Target.setAutoAttach', {
+        autoAttach: true,
+        waitForDebuggerOnStart: true,
+        flatten: true,
+        filter: [{ type: 'page', exclude: false }, { exclude: true }],
+      });
+      // New windows are never adopted as another computer session.
+      page.on('popup', (popup) => {
+        void popup?.close().catch(() => log.warn('Browser resource cleanup failed'));
+      });
+    } catch (error) {
+      await this.closePage(sessionId);
+      throw error;
+    }
+  }
+
+  /** Fixed browser primitives only: no scripts, host input or clipboard permissions. */
+  async computerInput(
+    binding: ComputerSessionBinding,
+    type: string,
+    params: Record<string, unknown>
+  ): Promise<unknown> {
+    const { sessionId, userId } = binding;
+    if (!this.hasComputerSession(binding)) throw new Error('Computer session scope mismatch');
+    const session = this.sessions.get(sessionId);
+    if (!session || session.userId !== userId || session.page.isClosed())
+      throw new Error('Closed or stale computer session');
+    const page = session.page;
+    const viewport = page.viewport();
+    if (
+      !viewport ||
+      viewport.width !== COMPUTER_VIEWPORT.width ||
+      viewport.height !== COMPUTER_VIEWPORT.height
+    )
+      throw new Error('Computer viewport changed');
+    session.lastActivity = Date.now();
+    if (['mouseMove', 'click', 'doubleClick', 'mouseDown', 'mouseUp'].includes(type)) {
+      validateComputerPoint(params.x, params.y);
+      const x = params.x,
+        y = params.y as number;
+      await page.mouse.move(x, y);
+      if (type === 'click' || type === 'doubleClick')
+        await page.mouse.click(x, y, { count: type === 'doubleClick' ? 2 : 1 });
+      if (type === 'mouseDown') await page.mouse.down();
+      if (type === 'mouseUp') await page.mouse.up();
+    } else if (type === 'scroll') {
+      const { deltaX, deltaY } = params;
+      if (
+        typeof deltaX !== 'number' ||
+        typeof deltaY !== 'number' ||
+        !Number.isFinite(deltaX) ||
+        !Number.isFinite(deltaY) ||
+        Math.abs(deltaX) > 1280 ||
+        Math.abs(deltaY) > 800
+      )
+        throw new Error('Invalid computer scroll');
+      await page.mouse.wheel({ deltaX, deltaY });
+    } else if (type === 'keyPress') {
+      if (!COMPUTER_KEYS.some((key) => key === params.key))
+        throw new Error('Unsupported computer key');
+      await page.keyboard.press(params.key as (typeof COMPUTER_KEYS)[number]);
+    } else if (type === 'typeText') {
+      if (typeof params.text !== 'string' || params.text.length > MAX_TEXT_LENGTH)
+        throw new Error('Invalid computer text');
+      await page.keyboard.type(params.text);
+    } else if (type === 'hotkey') {
+      if (
+        !Array.isArray(params.keys) ||
+        !COMPUTER_HOTKEYS.some((key) => key === (params.keys as unknown[]).join('+'))
+      )
+        throw new Error('Unsupported computer hotkey');
+      const keys = params.keys as Parameters<typeof page.keyboard.down>[0][];
+      try {
+        for (const key of keys) await page.keyboard.down(key);
+      } finally {
+        for (const key of [...keys].reverse()) await page.keyboard.up(key);
+      }
+    } else if (type === 'screenshot') {
+      const bytes = await page.screenshot({
+        type: 'png',
+        fullPage: false,
+        captureBeyondViewport: false,
+      });
+      if (bytes.byteLength > COMPUTER_MAX_SCREENSHOT_BYTES)
+        throw new Error('Computer screenshot exceeds byte limit');
+      return { screenshot: Buffer.from(bytes).toString('base64'), ...COMPUTER_VIEWPORT };
+    } else throw new Error('Unsupported computer input');
+    return undefined;
+  }
+
+  async closePage(sessionId: string): Promise<boolean> {
+    this.computerBindings.delete(sessionId);
+    const session = this.sessions.get(sessionId);
     if (!session) return false;
 
     try {
       await session.page.close();
     } catch {
       // Page may already be closed
+    } finally {
+      await session.context.close().catch(() => log.warn('Browser resource cleanup failed'));
     }
-    this.sessions.delete(userId);
+    this.sessions.delete(sessionId);
     return true;
   }
 
-  getPageInfo(userId: string): { url: string; active: boolean } | null {
-    const session = this.sessions.get(userId);
+  getPageInfo(sessionId: string): { url: string; active: boolean } | null {
+    const session = this.sessions.get(sessionId);
     if (!session) return null;
-    return { url: session.page.url(), active: true };
+    return { url: session.page.url(), active: !session.page.isClosed() };
   }
 
   async shutdown(): Promise<void> {
@@ -635,11 +1003,13 @@ export class BrowserService {
     for (const [_userId, session] of this.sessions) {
       try {
         await session.page.close();
+        await session.context.close();
       } catch {
         // Ignore
       }
     }
     this.sessions.clear();
+    this.computerBindings.clear();
 
     if (this.browser) {
       try {
@@ -655,8 +1025,8 @@ export class BrowserService {
   // Internal: Page Management
   // --------------------------------------------------------------------------
 
-  private async getOrCreatePage(userId: string): Promise<Page> {
-    const existing = this.sessions.get(userId);
+  private async getOrCreatePage(sessionId: string, userId: string): Promise<Page> {
+    const existing = this.sessions.get(sessionId);
     if (existing) {
       existing.lastActivity = Date.now();
       return existing.page;
@@ -669,43 +1039,55 @@ export class BrowserService {
     }
 
     const browser = await this.ensureBrowser();
-    const page = await browser.newPage();
+    const context = await browser.createBrowserContext({ downloadBehavior: { policy: 'deny' } });
+    try {
+      const page = await context.newPage();
 
-    // Set reasonable viewport
-    await page.setViewport({ width: 1280, height: 800 });
+      // Set reasonable viewport
+      await page.setViewport({ width: 1280, height: 800 });
 
-    // Block unnecessary resource types and SSRF targets
-    await page.setRequestInterception(true);
-    page.on('request', async (req) => {
-      const type = req.resourceType();
-      if (type === 'media' || type === 'font') {
-        req.abort();
-        return;
-      }
+      // Block unnecessary resource types and SSRF targets
+      await page.setRequestInterception(true);
+      page.on('request', async (req) => {
+        const type = req.resourceType();
+        if (type === 'media' || type === 'font') {
+          req.abort();
+          return;
+        }
 
-      // SSRF protection: abort redirects to private/internal addresses
-      const url = req.url();
-      if (isBlockedUrl(url) || (await isPrivateUrlAsync(url))) {
-        req.abort();
-        return;
-      }
+        // SSRF protection and domain allowlist for all subresources and redirects
+        const url = req.url();
+        if (url.startsWith('data:') || url.startsWith('blob:')) {
+          req.continue();
+          return;
+        }
+        try {
+          await this.validateUrl(url, sessionId);
+          req.continue();
+        } catch {
+          log.warn('Aborting browser request due to policy/SSRF');
+          req.abort();
+        }
+      });
 
-      req.continue();
-    });
+      const session: PageSession = {
+        page,
+        context,
+        userId,
+        createdAt: Date.now(),
+        lastActivity: Date.now(),
+      };
+      this.sessions.set(sessionId, session);
 
-    const session: PageSession = {
-      page,
-      userId,
-      createdAt: Date.now(),
-      lastActivity: Date.now(),
-    };
-    this.sessions.set(userId, session);
-
-    return page;
+      return page;
+    } catch (error) {
+      await context.close().catch(() => log.warn('Browser resource cleanup failed'));
+      throw error;
+    }
   }
 
-  private async getExistingPage(userId: string): Promise<Page> {
-    const session = this.sessions.get(userId);
+  private async getExistingPage(sessionId: string): Promise<Page> {
+    const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('No active browser session. Use browse_web to navigate to a page first.');
     }
@@ -718,7 +1100,7 @@ export class BrowserService {
 
     // Single-flight: concurrent cold-starts must share ONE launch. Without
     // this, two overlapping callers both pass the connected check while
-    // this.browser is still null and both launch — the loser's assignment is
+    // this.browser is still null and both launch â€” the loser's assignment is
     // overwritten, orphaning a Chromium instance that is never closed, while
     // its 'disconnected' handler stays registered on `this` and later evicts
     // the LIVE browser's sessions (round 71).
@@ -761,6 +1143,7 @@ export class BrowserService {
       log.info('Browser disconnected');
       this.browser = null;
       this.sessions.clear();
+      this.computerBindings.clear();
     });
 
     log.info('Browser launched', { executablePath: execPath });
@@ -784,7 +1167,7 @@ export class BrowserService {
   // Internal: URL Validation
   // --------------------------------------------------------------------------
 
-  private async validateUrl(url: string): Promise<void> {
+  private async validateUrl(url: string, sessionId: string): Promise<void> {
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -805,6 +1188,26 @@ export class BrowserService {
       throw new Error('URL resolves to a private or blocked network address.');
     }
 
+    const parsedSession = this.parseSessionId(sessionId);
+    const policyEngine = new PolicyEngine();
+    const policyResult = policyEngine.evaluate({
+      identity: {
+        userId: parsedSession.userId || 'system',
+        workspaceId: parsedSession.workspaceId || 'system',
+        roles: [],
+      },
+      action: 'browse_web',
+      resource: url || '',
+      capability: 'browser.navigate',
+      risk: 'LOW',
+      environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      autonomous: false,
+      requestedParameters: { url },
+    });
+    if (policyResult.decision === 'DENY') {
+      throw new Error(`Domain policy denied navigation to ${url}: ${policyResult.reason}`);
+    }
+
     const allowedDomains = this.getAllowedDomains();
     if (allowedDomains.length > 0) {
       const hostname = parsed.hostname.toLowerCase();
@@ -818,6 +1221,21 @@ export class BrowserService {
         );
       }
     }
+  }
+
+  private parseSessionId(sessionId: string) {
+    const binding = this.computerBindings.get(sessionId);
+    if (binding)
+      return {
+        userId: binding.userId,
+        workspaceId: binding.workspaceId,
+        executionId: binding.executionTaskId,
+      };
+    const parts = sessionId.split(':');
+    if (parts.length >= 3) {
+      return { userId: parts[0], workspaceId: parts[1], executionId: parts[2] };
+    }
+    return { userId: sessionId, workspaceId: 'default', executionId: 'default' };
   }
 
   private getAllowedDomains(): string[] {
@@ -882,15 +1300,16 @@ export class BrowserService {
 
   private async cleanupStaleSessions(): Promise<void> {
     const now = Date.now();
-    for (const [userId, session] of this.sessions) {
+    for (const [sessionId, session] of this.sessions) {
       if (now - session.lastActivity > SESSION_TIMEOUT_MS) {
-        log.debug('Closing stale browser session', { userId });
+        log.debug('Closing stale browser session', { sessionId });
         try {
           await session.page.close();
+          await session.context.close();
         } catch {
           // Ignore
         }
-        this.sessions.delete(userId);
+        this.sessions.delete(sessionId);
       }
     }
 

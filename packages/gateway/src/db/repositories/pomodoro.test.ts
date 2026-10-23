@@ -591,7 +591,15 @@ describe('PomodoroRepository', () => {
       await repo.getDailyStats();
 
       const params = mockAdapter.queryOne.mock.calls[0]![1] as unknown[];
-      const todayStr = new Date().toISOString().split('T')[0]!;
+      // The repository derives "today" as the LOCAL calendar day (its private
+      // localDayString, matching the repo-wide day-key convention). Deriving it
+      // here with toISOString() takes the UTC day instead, so this assertion
+      // failed for the hours each day when the two differ — five hours in
+      // UTC+5, and the whole evening in UTC-N zones.
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+        now.getDate()
+      ).padStart(2, '0')}`;
       expect(params[1]).toBe(todayStr);
     });
   });

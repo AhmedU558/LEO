@@ -144,6 +144,7 @@ export class WorkerSandbox {
 
         this.worker = new Worker(workerUrl, {
           workerData: { config: this.config },
+          env: {}, // QA-008: Do not inherit host process.env (credentials)
           resourceLimits: {
             maxOldGenerationSizeMb:
               (this.config.limits?.maxMemory ?? DEFAULT_RESOURCE_LIMITS.maxMemory) / (1024 * 1024),

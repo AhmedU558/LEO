@@ -12,6 +12,7 @@ import {
   getDefaultProvider,
   isDemoModeFromSettings,
 } from '@ownpilot/gateway/config';
+import { closeAdapter, stopScheduler } from '@ownpilot/gateway';
 import { replaceShutdownSignalHandlers } from './shutdown-signals.js';
 
 interface StartOptions {
@@ -87,8 +88,15 @@ export async function startAll(options: StartOptions): Promise<void> {
   console.log('Press Ctrl+C to stop');
 
   // Handle shutdown signals
-  const shutdown = () => {
-    console.log('\n\n🛑 Shutting down...');
+  const shutdown = async () => {
+    console.log('\n\nShutting down gracefully...');
+    try {
+      await stopScheduler();
+      await closeAdapter();
+      console.log('Services stopped successfully.');
+    } catch (err) {
+      console.error('Error during shutdown:', err);
+    }
     process.exit(0);
   };
   replaceShutdownSignalHandlers('start', shutdown);

@@ -1,9 +1,11 @@
+﻿import { toToolResult } from './utils.js';
+import { checkToolPermission } from '../../services/tool/permission.js';
 /**
  * External Tool Registration
  *
- *  - registerPluginTools     — channel/feature plugins (Telegram, weather, etc.)
- *  - registerExtensionTools  — user-installed extensions (.skill / ext.*)
- *  - registerMcpTools        — tools surfaced by connected MCP servers
+ *  - registerPluginTools     â€” channel/feature plugins (Telegram, weather, etc.)
+ *  - registerExtensionTools  â€” user-installed extensions (.skill / ext.*)
+ *  - registerMcpTools        â€” tools surfaced by connected MCP servers
  *
  * All three pull their source-of-truth registries (plugin service, extension
  * service, shared MCP registry) and copy/wrap into the per-request
@@ -40,7 +42,7 @@ export function registerPluginTools(tools: ToolRegistry, trace: boolean): ToolDe
   const pluginTools = pluginService.getAllTools();
   const pluginToolDefs: ToolDefinition[] = [];
 
-  // Collect core-category plugin IDs — their tools are already registered by registerAllTools()
+  // Collect core-category plugin IDs â€” their tools are already registered by registerAllTools()
   // as core.* (same logic as tool-executor.ts line 132)
   const corePluginIds = new Set(
     pluginService
@@ -50,7 +52,7 @@ export function registerPluginTools(tools: ToolRegistry, trace: boolean): ToolDe
   );
 
   for (const { pluginId, definition, executor } of pluginTools) {
-    // Skip core-category plugins — their tools are already registered by registerAllTools()
+    // Skip core-category plugins â€” their tools are already registered by registerAllTools()
     if (corePluginIds.has(pluginId)) continue;
 
     const qName = qualifyToolName(definition.name, 'plugin', pluginId);
@@ -62,6 +64,18 @@ export function registerPluginTools(tools: ToolRegistry, trace: boolean): ToolDe
       const startTime = trace
         ? traceToolCallStart(definition.name, args as Record<string, unknown>)
         : 0;
+
+      const perm = await checkToolPermission(context.userId ?? 'default', definition.name, {
+        source: 'chat',
+        executionPermissions: context.executionPermissions,
+      });
+      if (!perm.allowed) {
+        return toToolResult({
+          success: false,
+          error: `Tool '${definition.name}' blocked: ${perm.reason}`,
+        });
+      }
+
       try {
         const result = await executor(args as Record<string, unknown>, context);
         if (trace)
@@ -140,7 +154,7 @@ export function registerExtensionTools(
       }
     }
 
-    // Choose namespace based on format: ownpilot → ext.*, agentskills → skill.*
+    // Choose namespace based on format: ownpilot â†’ ext.*, agentskills â†’ skill.*
     const nsPrefix = def.format === 'agentskills' ? 'skill' : 'ext';
     const qName = qualifyToolName(def.name, nsPrefix, def.extensionId);
     const toolDef: ToolDefinition = {
@@ -155,6 +169,18 @@ export function registerExtensionTools(
       { ...toolDef, name: qName },
       async (args, context): Promise<CoreToolResult> => {
         const startTime = trace ? traceToolCallStart(def.name, args as Record<string, unknown>) : 0;
+
+        const perm = await checkToolPermission(context.userId || 'system', def.name, {
+          source: 'chat',
+          executionPermissions: context.executionPermissions,
+        });
+        if (!perm.allowed) {
+          return toToolResult({
+            success: false,
+            error: `Tool '${def.name}' blocked: ${perm.reason}`,
+          });
+        }
+
         try {
           const execResult = await dynamicRegistry.execute(
             def.name,
@@ -221,6 +247,22 @@ export function registerMcpTools(tools: ToolRegistry, trace: boolean): ToolDefin
       const startTime = trace
         ? traceToolCallStart(getBaseName(definition.name), args as Record<string, unknown>)
         : 0;
+
+      const perm = await checkToolPermission(
+        context.userId ?? 'default',
+        getBaseName(definition.name),
+        {
+          source: 'chat',
+          executionPermissions: context.executionPermissions,
+        }
+      );
+      if (!perm.allowed) {
+        return toToolResult({
+          success: false,
+          error: `Tool '${getBaseName(definition.name)}' blocked: ${perm.reason}`,
+        });
+      }
+
       try {
         const result = await executor(args as Record<string, unknown>, context);
         if (trace)

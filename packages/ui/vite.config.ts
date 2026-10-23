@@ -156,7 +156,8 @@ export default defineConfig(({ mode }) => {
             proxy: {
               '/api': {
                 target: apiTarget,
-                changeOrigin: true,
+                // Preserve the browser-facing host for cookie-session origin checks.
+                changeOrigin: false,
               },
               '/ws': {
                 target: wsTarget,

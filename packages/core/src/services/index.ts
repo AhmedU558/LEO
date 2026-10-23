@@ -478,3 +478,4 @@ export { safeCost, safeDuration } from '../utils/safe-value.js';
 
 // Scheduler Utilities
 export { getNextRunTime } from '../scheduler/index.js';
+export * from './execution-task.js';

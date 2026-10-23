@@ -764,7 +764,7 @@ export class PlanExecutor extends EventEmitter {
 
   private registerDefaultHandlers(): void {
     // Tool call handler - executes tools via shared tool executor
-    this.registerHandler('tool_call', async (config, _context) => {
+    this.registerHandler('tool_call', async (config, context) => {
       if (!config.toolName) {
         return { success: false, error: 'No tool name specified' };
       }
@@ -782,6 +782,8 @@ export class PlanExecutor extends EventEmitter {
       const planPerms = downgradePromptToBlocked(userPerms);
       const result = await executeTool(toolName, toolArgs, this.config.userId, planPerms, {
         source: 'plan',
+        operationId: `plan:${context.plan.id}:step:${context.step.id}`,
+        signal: context.abortSignal,
         executionPermissions: planPerms,
       });
 
@@ -907,7 +909,7 @@ export class PlanExecutor extends EventEmitter {
     });
 
     // Parallel handler - executes multiple tool calls concurrently (respects maxConcurrent)
-    this.registerHandler('parallel', async (config, _context) => {
+    this.registerHandler('parallel', async (config, context) => {
       const rawSteps = (config.steps ?? []) as unknown[];
       const steps = rawSteps.map((s) => {
         if (typeof s === 'object' && s !== null) {
@@ -943,10 +945,12 @@ export class PlanExecutor extends EventEmitter {
       // Process in batches to respect maxConcurrent
       for (let i = 0; i < steps.length; i += batchSize) {
         const batch = steps.slice(i, i + batchSize);
-        const promises = batch.map(async (step) => {
+        const promises = batch.map(async (step, batchIndex) => {
           if (step.toolName && (await hasTool(step.toolName))) {
             return executeTool(step.toolName, step.toolArgs ?? {}, this.config.userId, planPerms, {
               source: 'plan',
+              operationId: `plan:${context.plan.id}:step:${context.step.id}:parallel:${i + batchIndex}`,
+              signal: context.abortSignal,
               executionPermissions: planPerms,
             });
           }
@@ -996,7 +1000,12 @@ export class PlanExecutor extends EventEmitter {
           { ...toolArgs, iteration: i },
           this.config.userId,
           planPerms,
-          { source: 'plan', executionPermissions: planPerms }
+          {
+            source: 'plan',
+            executionPermissions: planPerms,
+            operationId: `plan:${context.plan.id}:step:${context.step.id}:iteration:${i}`,
+            signal: context.abortSignal,
+          }
         );
         iterationResults.push(result.result);
 
@@ -1011,7 +1020,7 @@ export class PlanExecutor extends EventEmitter {
         // Check abort signal
         if (context.abortSignal?.aborted) {
           return {
-            success: true,
+            success: false,
             data: { type: 'loop', iterations: i + 1, results: iterationResults, aborted: true },
           };
         }

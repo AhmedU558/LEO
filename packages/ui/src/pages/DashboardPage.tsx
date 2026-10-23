@@ -528,10 +528,10 @@ export function DashboardPage() {
       <header className="flex items-center justify-between px-6 py-4 border-b border-border dark:border-dark-border">
         <div>
           <h2 className="text-lg font-semibold text-text-primary dark:text-dark-text-primary">
-            Dashboard
+            LEO Dashboard
           </h2>
           <p className="text-sm text-text-muted dark:text-dark-text-muted">
-            Your personal assistant overview
+            LEO Autonomous AI Operating System
           </p>
         </div>
         {lastUpdated && (

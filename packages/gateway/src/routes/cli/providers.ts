@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * CLI Providers Routes
  *
@@ -5,7 +6,6 @@
  * These appear in the coding agents system as 'custom:{name}'.
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { execFileSync } from 'node:child_process';
 import { Hono } from 'hono';
 import { cliProvidersRepo } from '../../db/repositories/cli/providers.js';
@@ -33,7 +33,7 @@ async function getOwnedProvider(id: string, ownerUserId: string) {
 // =============================================================================
 
 cliProvidersRoutes.get('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   try {
     const providers = await cliProvidersRepo.list(userId);
     return apiResponse(c, providers);
@@ -47,7 +47,7 @@ cliProvidersRoutes.get('/', async (c) => {
 // =============================================================================
 
 cliProvidersRoutes.post('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   const body = await parseJsonBody(c);
   if (!body) {
@@ -129,7 +129,7 @@ cliProvidersRoutes.post('/', async (c) => {
 // =============================================================================
 
 cliProvidersRoutes.put('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const body = await parseJsonBody(c);
@@ -197,7 +197,7 @@ cliProvidersRoutes.put('/:id', async (c) => {
 // =============================================================================
 
 cliProvidersRoutes.delete('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   try {
@@ -220,7 +220,7 @@ cliProvidersRoutes.delete('/:id', async (c) => {
 // =============================================================================
 
 cliProvidersRoutes.post('/:id/test', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   try {

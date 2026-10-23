@@ -1305,7 +1305,10 @@ describe('Dashboard Service', () => {
         'gpt-4o',
         undefined,
         null,
-        'dashboard-briefing'
+        'dashboard-briefing',
+        undefined,
+        'user-1',
+        'default'
       );
     });
 
@@ -1360,7 +1363,10 @@ describe('Dashboard Service', () => {
         'claude-3-haiku',
         undefined,
         null,
-        'dashboard-briefing'
+        'dashboard-briefing',
+        undefined,
+        'user-1',
+        'default'
       );
     });
 

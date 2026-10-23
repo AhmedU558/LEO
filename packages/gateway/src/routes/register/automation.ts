@@ -6,6 +6,7 @@
  */
 
 import type { Hono } from 'hono';
+import { executionTaskRoutes } from '../execution-tasks.js';
 import {
   triggersRoutes,
   plansRoutes,
@@ -16,6 +17,7 @@ import {
 } from '../index.js';
 
 export function registerAutomationRoutes(app: Hono): void {
+  app.route('/api/v1/execution-tasks', executionTaskRoutes);
   // Triggers routes (proactive automation)
   app.route('/api/v1/triggers', triggersRoutes);
 

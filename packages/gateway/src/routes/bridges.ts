@@ -1,10 +1,10 @@
+import { getUserId } from './helpers.js';
 /**
  * Channel Bridge Routes
  *
  * REST API for managing cross-channel message bridges (UCP).
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import { ChannelBridgesRepository } from '../db/repositories/channels/bridges.js';
 import { apiResponse, apiError, ERROR_CODES, getErrorMessage } from './helpers.js';
@@ -24,7 +24,7 @@ function getRepo(): ChannelBridgesRepository {
 bridgeRoutes.get('/', async (c) => {
   try {
     const repo = getRepo();
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const channelId = c.req.query('channelId');
 
     // Scope to the requesting user — getAll() would leak every user's bridges.
@@ -49,7 +49,7 @@ bridgeRoutes.get('/', async (c) => {
 bridgeRoutes.get('/:id', async (c) => {
   try {
     const repo = getRepo();
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = c.req.param('id');
 
     const bridge = await repo.getById(id);
@@ -73,7 +73,7 @@ bridgeRoutes.get('/:id', async (c) => {
 
 bridgeRoutes.post('/', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     // IDOR-017: Reject unauthenticated requests
     if (userId === 'default' && !c.get('sessionAuthenticated')) {
       return apiError(
@@ -119,7 +119,7 @@ bridgeRoutes.post('/', async (c) => {
 bridgeRoutes.patch('/:id', async (c) => {
   try {
     const repo = getRepo();
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = c.req.param('id');
 
     const existing = await repo.getById(id);
@@ -159,7 +159,7 @@ bridgeRoutes.patch('/:id', async (c) => {
 bridgeRoutes.delete('/:id', async (c) => {
   try {
     const repo = getRepo();
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = c.req.param('id');
 
     const existing = await repo.getById(id);

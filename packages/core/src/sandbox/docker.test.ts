@@ -28,27 +28,38 @@ const mocks = vi.hoisted(() => {
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
-vi.mock('child_process', () => ({
+// Each factory spreads the real module before overriding. An enumerated mock
+// breaks the moment the module under test imports one more binding from the
+// same specifier — `docker.ts` adding `execFile` took all 96 tests in this file
+// down at import time, because `promisify(execFile)` runs at module scope.
+// Spreading keeps that from recurring while still controlling what we assert on.
+vi.mock('child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('child_process')>()),
   exec: vi.fn(),
+  execFile: vi.fn(),
   spawn: mocks.spawnMock,
 }));
 
-vi.mock('util', () => ({
+vi.mock('util', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('util')>()),
   promisify: () => mocks.execAsyncMock,
 }));
 
-vi.mock('fs/promises', () => ({
+vi.mock('fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('fs/promises')>()),
   writeFile: mocks.writeFileMock,
   unlink: mocks.unlinkMock,
   mkdtemp: mocks.mkdtempMock,
   rm: mocks.rmMock,
 }));
 
-vi.mock('os', () => ({
+vi.mock('os', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('os')>()),
   tmpdir: mocks.tmpdirMock,
 }));
 
-vi.mock('path', () => ({
+vi.mock('path', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('path')>()),
   join: mocks.joinMock,
 }));
 
@@ -157,11 +168,17 @@ function setupSpawnResult(opts: {
  * mkdtemp, writeFile, and rm.
  */
 function setupExecMocks(tempDir = '/tmp/sandbox-test') {
+  // Fallback for any call not explicitly queued below — notably the
+  // post-run `docker rm --force <name>` cleanup. Without a fallback, an
+  // unqueued call consumes nothing and later tests read a desynchronised
+  // queue, which is how a stale temp dir from a previous test leaks into an
+  // assertion.
+  mocks.execAsyncMock.mockResolvedValue({ stdout: '', stderr: '' });
   // isDockerAvailable
   mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' });
-  // testSecurityFlags
-  mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' });
-  // ensureImage (docker images -q)
+  // ensureImage (docker images -q). executeInSandbox no longer probes
+  // testSecurityFlags — security flags are unconditional now, so there is no
+  // capability probe to answer here.
   mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'abc123', stderr: '' });
   // fs mocks
   mocks.mkdtempMock.mockResolvedValueOnce(tempDir);
@@ -186,6 +203,18 @@ async function importFreshModule(): Promise<DockerModule> {
 describe('docker sandbox', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks clears recorded calls but NOT queued *Once implementations.
+    // A queued spawn/exec value that a test never consumed would otherwise be
+    // served to the next test, so reset the two mocks that carry queues and
+    // re-establish their defaults.
+    mocks.execAsyncMock.mockReset();
+    mocks.spawnMock.mockReset();
+    mocks.mkdtempMock.mockReset();
+    mocks.writeFileMock.mockReset();
+    mocks.unlinkMock.mockReset();
+    mocks.rmMock.mockReset();
+    mocks.tmpdirMock.mockReturnValue('/tmp');
+    mocks.joinMock.mockImplementation((...args: string[]) => args.join('/'));
   });
 
   // =========================================================================
@@ -219,7 +248,7 @@ describe('docker sandbox', () => {
       expect(mocks.execAsyncMock).toHaveBeenCalledTimes(1);
     });
 
-    it('caches false result across calls', async () => {
+    it('caches false result across calls within the retry window', async () => {
       const mod = await importFreshModule();
       mocks.execAsyncMock.mockRejectedValueOnce(new Error('fail'));
 
@@ -229,6 +258,36 @@ describe('docker sandbox', () => {
       expect(r1).toBe(false);
       expect(r2).toBe(false);
       expect(mocks.execAsyncMock).toHaveBeenCalledTimes(1);
+    });
+
+    // QA-009: unavailability is fail-closed but must be RECOVERABLE. `docker
+    // info` has a 5s timeout and gets slow under load, so a single busy moment
+    // used to latch false for the life of the process and every later isolated
+    // execution failed with "Docker is not available" until restart.
+    it('re-probes after the negative window and recovers without a restart', async () => {
+      vi.useFakeTimers();
+      try {
+        const mod = await importFreshModule();
+        mocks.execAsyncMock.mockRejectedValueOnce(new Error('timeout'));
+        expect(await mod.isDockerAvailable()).toBe(false);
+
+        // Still inside the window: no second probe.
+        vi.advanceTimersByTime(1_000);
+        expect(await mod.isDockerAvailable()).toBe(false);
+        expect(mocks.execAsyncMock).toHaveBeenCalledTimes(1);
+
+        // Past the window: probe again, and a healthy daemon is picked up.
+        vi.advanceTimersByTime(30_000);
+        mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' });
+        expect(await mod.isDockerAvailable()).toBe(true);
+        expect(mocks.execAsyncMock).toHaveBeenCalledTimes(2);
+
+        // A positive answer stays cached.
+        expect(await mod.isDockerAvailable()).toBe(true);
+        expect(mocks.execAsyncMock).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('passes timeout of 5000 to exec', async () => {
@@ -695,7 +754,6 @@ describe('docker sandbox', () => {
     it('returns error when image cannot be prepared', async () => {
       const mod = await importFreshModule();
       mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' }); // docker info
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' }); // security
       mocks.execAsyncMock.mockResolvedValueOnce({ stdout: '', stderr: '' }); // image check
       mocks.execAsyncMock.mockRejectedValueOnce(new Error('pull failed')); // pull
 
@@ -879,48 +937,39 @@ describe('docker sandbox', () => {
       await mod.executeInSandbox('print("hello")', 'python');
 
       const args = mocks.spawnMock.mock.calls[0][1] as string[];
-      expect(args).toContain('--no-new-privileges');
       expect(args).toContain('--cap-drop=ALL');
       expect(args).toContain('--security-opt=no-new-privileges:true');
     });
 
-    it('uses relaxed security flags when security flags are not supported', async () => {
+    // QA-009: the sandbox must never downgrade its own isolation. The three
+    // cases below used to assert the opposite — that a failed capability probe,
+    // a cached probe failure, or a caller-supplied `relaxedSecurity: true` each
+    // swapped `--cap-drop=ALL` for a partial `SYS_ADMIN`/`NET_ADMIN` drop. That
+    // is a self-service privilege escalation for untrusted code, so the flags
+    // are now unconditional and these tests pin that.
+    it('keeps strict security flags even when a capability probe failed', async () => {
       const mod = await importFreshModule();
-      // isDockerAvailable
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' });
-      // testSecurityFlags fails
+      // Poison the module-level probe cache first: testSecurityFlags() rejects,
+      // so securityFlagsSupported caches as false. executeInSandbox no longer
+      // consults that cache at all, and must still run strict.
       mocks.execAsyncMock.mockRejectedValueOnce(new Error('unknown flag'));
-      // ensureImage
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'img', stderr: '' });
-      // fs
-      mocks.mkdtempMock.mockResolvedValueOnce('/tmp/sandbox-relaxed');
-      mocks.writeFileMock.mockResolvedValueOnce(undefined);
-      mocks.rmMock.mockResolvedValueOnce(undefined);
+      expect(await mod.testSecurityFlags()).toBe(false);
 
+      setupExecMocks('/tmp/sandbox-relaxed');
       setupSpawnResult({ exitCode: 0 });
 
       await mod.executeInSandbox('print("hello")', 'python');
 
       const args = mocks.spawnMock.mock.calls[0][1] as string[];
-      expect(args).not.toContain('--no-new-privileges');
-      expect(args).not.toContain('--cap-drop=ALL');
-      expect(args).toContain('--cap-drop=SYS_ADMIN');
-      expect(args).toContain('--cap-drop=NET_ADMIN');
+      expect(args).toContain('--cap-drop=ALL');
+      expect(args).toContain('--security-opt=no-new-privileges:true');
+      expect(args).not.toContain('--cap-drop=SYS_ADMIN');
+      expect(args).not.toContain('--cap-drop=NET_ADMIN');
     });
 
-    it('uses relaxed security when config.relaxedSecurity is true', async () => {
+    it('ignores a caller-supplied relaxedSecurity request', async () => {
       const mod = await importFreshModule();
-      // isDockerAvailable
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' });
-      // When relaxedSecurity is explicitly true, securityFlagsSupported is null
-      // but useRelaxedSecurity starts as true, so testSecurityFlags is NOT called.
-      // ensureImage
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'img', stderr: '' });
-      // fs
-      mocks.mkdtempMock.mockResolvedValueOnce('/tmp/sandbox-explicit');
-      mocks.writeFileMock.mockResolvedValueOnce(undefined);
-      mocks.rmMock.mockResolvedValueOnce(undefined);
-
+      setupExecMocks('/tmp/sandbox-explicit');
       setupSpawnResult({ exitCode: 0 });
 
       await mod.executeInSandbox('print("hello")', 'python', {
@@ -928,9 +977,10 @@ describe('docker sandbox', () => {
       });
 
       const args = mocks.spawnMock.mock.calls[0][1] as string[];
-      expect(args).toContain('--cap-drop=SYS_ADMIN');
-      expect(args).toContain('--cap-drop=NET_ADMIN');
-      expect(args).not.toContain('--no-new-privileges');
+      expect(args).toContain('--cap-drop=ALL');
+      expect(args).toContain('--security-opt=no-new-privileges:true');
+      expect(args).not.toContain('--cap-drop=SYS_ADMIN');
+      expect(args).not.toContain('--cap-drop=NET_ADMIN');
     });
 
     it('disables network by default', async () => {
@@ -1148,31 +1198,27 @@ describe('docker sandbox', () => {
       expect(result.stderr).toBe('warning');
     });
 
-    it('auto-enables relaxed security when security flags cached as false', async () => {
+    // QA-009: a cached probe failure must not become a persistent downgrade for
+    // every subsequent execution in the process. Previously the second run here
+    // was expected to come back relaxed; it must stay strict.
+    it('does not let a cached capability-probe failure relax later runs', async () => {
       const mod = await importFreshModule();
-      // First call: security flags fail
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' }); // docker
-      mocks.execAsyncMock.mockRejectedValueOnce(new Error('unknown flag')); // security
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'img', stderr: '' }); // ensure
-      mocks.mkdtempMock.mockResolvedValueOnce('/tmp/sandbox-auto1');
-      mocks.writeFileMock.mockResolvedValueOnce(undefined);
-      mocks.rmMock.mockResolvedValueOnce(undefined);
-      setupSpawnResult({ exitCode: 0 });
+      // Cache the probe as unsupported, then run twice in the same process.
+      mocks.execAsyncMock.mockRejectedValueOnce(new Error('unknown flag'));
+      expect(await mod.testSecurityFlags()).toBe(false);
 
+      setupExecMocks('/tmp/sandbox-auto1');
+      setupSpawnResult({ exitCode: 0 });
       await mod.executeInSandbox('print("first")', 'python');
 
-      // Second call: security flags cached as false, auto-relaxed
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'img', stderr: '' }); // ensure only
-      mocks.mkdtempMock.mockResolvedValueOnce('/tmp/sandbox-auto2');
-      mocks.writeFileMock.mockResolvedValueOnce(undefined);
-      mocks.rmMock.mockResolvedValueOnce(undefined);
+      setupExecMocks('/tmp/sandbox-auto2');
       setupSpawnResult({ exitCode: 0 });
-
       await mod.executeInSandbox('print("second")', 'python');
 
       const args2 = mocks.spawnMock.mock.calls[1][1] as string[];
-      expect(args2).not.toContain('--no-new-privileges');
-      expect(args2).toContain('--cap-drop=SYS_ADMIN');
+      expect(args2).toContain('--cap-drop=ALL');
+      expect(args2).toContain('--security-opt=no-new-privileges:true');
+      expect(args2).not.toContain('--cap-drop=SYS_ADMIN');
     });
 
     it('includes default working directory /sandbox', async () => {
@@ -1446,7 +1492,6 @@ describe('docker sandbox', () => {
     it('image preparation failure has correct shape', async () => {
       const mod = await importFreshModule();
       mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' }); // docker
-      mocks.execAsyncMock.mockResolvedValueOnce({ stdout: 'ok', stderr: '' }); // security
       mocks.execAsyncMock.mockResolvedValueOnce({ stdout: '', stderr: '' }); // no image
       mocks.execAsyncMock.mockRejectedValueOnce(new Error('fail')); // pull fail
 

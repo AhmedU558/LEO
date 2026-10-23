@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions File Editor Routes
  *
@@ -7,7 +8,6 @@
  * DELETE /:id/files/*path  — Delete a file
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import {
   existsSync,
   readFileSync,
@@ -102,7 +102,7 @@ function scanDir(dir: string, basePath: string, depth = 0): FileEntry[] {
  * GET /:id/files — List all files in the skill directory as a tree
  */
 fileRoutes.get('/:id/files', (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();
@@ -137,7 +137,7 @@ fileRoutes.get('/:id/files', (c) => {
  * GET /:id/files/* — Read a single file
  */
 fileRoutes.get('/:id/files/:path{.+}', (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const filePath = c.req.param('path');
 
@@ -212,7 +212,7 @@ fileRoutes.get('/:id/files/:path{.+}', (c) => {
  * PUT /:id/files/* — Write/create a file
  */
 fileRoutes.put('/:id/files/:path{.+}', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const filePath = c.req.param('path');
 
@@ -278,7 +278,7 @@ fileRoutes.put('/:id/files/:path{.+}', async (c) => {
  * DELETE /:id/files/* — Delete a file
  */
 fileRoutes.delete('/:id/files/:path{.+}', (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const filePath = c.req.param('path');
 

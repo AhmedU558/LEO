@@ -4,7 +4,7 @@
 
 export const CORE_TABLES_SQL = `
 -- Enable pgvector extension for vector similarity search
-CREATE EXTENSION IF NOT EXISTS vector;
+-- CREATE EXTENSION IF NOT EXISTS vector;
 
 -- =====================================================
 -- CORE TABLES
@@ -196,6 +196,13 @@ CREATE TABLE IF NOT EXISTS provider_metrics (
 `;
 
 export const CORE_MIGRATIONS_SQL = `
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS lease_token TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+UPDATE jobs SET status = 'failed', result = COALESCE(result, '{}'::jsonb) ||
+  '{"outcome":"unknown","error":"Legacy active job requires reconciliation"}'::jsonb
+WHERE status = 'active' AND lease_token IS NULL;
+CREATE INDEX IF NOT EXISTS idx_jobs_queue_lease ON jobs(queue, lease_expires_at)
+  WHERE status = 'active';
 -- =====================================================
 -- CONVERSATIONS TABLE MIGRATIONS
 -- =====================================================

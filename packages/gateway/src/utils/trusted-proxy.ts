@@ -12,12 +12,8 @@
  *   - UI session cookie Secure flag — protocol detection
  */
 
-import { isProxyAwareConfigured } from './client-ip.js';
-
-interface RequestLike {
-  url: string;
-  header: (name: string) => string | undefined;
-}
+import type { Context } from 'hono';
+import { isRequestFromTrustedProxy } from './client-ip.js';
 
 /**
  * Resolve the canonical external request origin (scheme + host[:port]).
@@ -26,11 +22,11 @@ interface RequestLike {
  * `X-Forwarded-Host`. Otherwise falls back to the URL the request was
  * received on.
  */
-export function getRequestOrigin(req: RequestLike): string {
-  const url = new URL(req.url);
-  if (isProxyAwareConfigured()) {
-    const forwardedProto = req.header('X-Forwarded-Proto');
-    const forwardedHost = req.header('X-Forwarded-Host');
+export function getRequestOrigin(c: Context): string {
+  const url = new URL(c.req.url);
+  if (isRequestFromTrustedProxy(c)) {
+    const forwardedProto = c.req.header('X-Forwarded-Proto');
+    const forwardedHost = c.req.header('X-Forwarded-Host');
     if (forwardedProto && forwardedHost) {
       return `${forwardedProto}://${forwardedHost}`;
     }
@@ -44,18 +40,18 @@ export function getRequestOrigin(req: RequestLike): string {
  * Used by webhook signature verification where the external URL is part of
  * the signed payload (e.g., Twilio).
  */
-export function getRequestUrl(req: RequestLike, path: string): string {
-  return `${getRequestOrigin(req)}${path}`;
+export function getRequestUrl(c: Context, path: string): string {
+  return `${getRequestOrigin(c)}${path}`;
 }
 
 /**
  * Determine whether the request was received over HTTPS, taking into account
  * a trusted reverse proxy that may be terminating TLS.
  */
-export function isSecureRequest(req: RequestLike): boolean {
-  if (req.url.startsWith('https://')) return true;
-  const forwardedScheme = req.header('X-Forwarded-Proto') ?? req.header('X-Forwarded-Scheme');
-  if (isProxyAwareConfigured() && forwardedScheme?.toLowerCase() === 'https') {
+export function isSecureRequest(c: Context): boolean {
+  if (c.req.url.startsWith('https://')) return true;
+  const forwardedScheme = c.req.header('X-Forwarded-Proto') ?? c.req.header('X-Forwarded-Scheme');
+  if (isRequestFromTrustedProxy(c) && forwardedScheme?.toLowerCase() === 'https') {
     return true;
   }
   return false;

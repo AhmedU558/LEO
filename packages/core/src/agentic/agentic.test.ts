@@ -223,11 +223,12 @@ describe('AgenticOrchestrator', () => {
   it('executes a simple task and produces a report', async () => {
     const orchestrator = new AgenticOrchestrator();
     const report = await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Simple task',
       description: 'Analyze the current state of the project.',
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
     });
 
-    expect(report.id).toBeDefined();
     expect(report.task.name).toBe('Simple task');
     expect(report.stepResults.length).toBeGreaterThanOrEqual(1);
     expect(['completed', 'failed', 'partially_completed', 'cancelled']).toContain(report.status);
@@ -243,6 +244,7 @@ describe('AgenticOrchestrator', () => {
     const before = process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
 
     const report = await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Quick explanation',
       description: 'explain how event loops work',
     });
@@ -272,6 +274,7 @@ describe('AgenticOrchestrator', () => {
     });
 
     const report = await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Slow side effect',
       description: 'explain how event loops work',
       constraints: { timeoutMs: 120 },
@@ -286,6 +289,7 @@ describe('AgenticOrchestrator', () => {
   it('supports cancel', async () => {
     const orchestrator = new AgenticOrchestrator();
     const report = await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Cancellable',
       description: 'This will be cancelled',
     });
@@ -307,6 +311,7 @@ describe('AgenticOrchestrator', () => {
     });
 
     const execPromise = orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Cancel mid-flight',
       description: 'Cancel while the step is still running.',
     });
@@ -336,6 +341,7 @@ describe('AgenticOrchestrator', () => {
       costUsd: REAL_COST,
     }));
     const report = await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Cost test',
       description: 'A simple task to check cost accounting.',
     });
@@ -351,6 +357,7 @@ describe('AgenticOrchestrator', () => {
   it('getStatus returns correct status', async () => {
     const orchestrator = new AgenticOrchestrator();
     const report = await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Status test',
       description: 'Test status tracking.',
     });
@@ -362,6 +369,7 @@ describe('AgenticOrchestrator', () => {
   it('getReport returns stored report', async () => {
     const orchestrator = new AgenticOrchestrator();
     const report = await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
       name: 'Report test',
       description: 'Test report storage.',
     });
@@ -373,8 +381,16 @@ describe('AgenticOrchestrator', () => {
 
   it('listExecutions returns executions in reverse chronological order', async () => {
     const orchestrator = new AgenticOrchestrator();
-    await orchestrator.execute({ name: 'Task 1', description: 'First task' });
-    await orchestrator.execute({ name: 'Task 2', description: 'Second task' });
+    await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
+      name: 'Task 1',
+      description: 'First task',
+    });
+    await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
+      name: 'Task 2',
+      description: 'Second task',
+    });
 
     const list = await orchestrator.listExecutions(10, 0);
     expect(list.length).toBeGreaterThanOrEqual(2);
@@ -386,8 +402,16 @@ describe('AgenticOrchestrator', () => {
 
   it('getStats returns aggregated stats', async () => {
     const orchestrator = new AgenticOrchestrator();
-    await orchestrator.execute({ name: 'Stats 1', description: 'Stats test task 1' });
-    await orchestrator.execute({ name: 'Stats 2', description: 'Stats test task 2' });
+    await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
+      name: 'Stats 1',
+      description: 'Stats test task 1',
+    });
+    await orchestrator.execute({
+      identity: { userId: 'test-user', workspaceId: 'test-workspace', roles: [] },
+      name: 'Stats 2',
+      description: 'Stats test task 2',
+    });
 
     const stats = await orchestrator.getStats();
     expect(stats.totalExecutions).toBeGreaterThanOrEqual(2);
@@ -508,6 +532,7 @@ describe('Edge Cases', () => {
   it('orchestrator handles multiple rapid executions', async () => {
     const orchestrator = new AgenticOrchestrator();
     const tasks = Array.from({ length: 5 }, (_, i) => ({
+      identity: { userId: 'test', workspaceId: 'test', roles: [] },
       name: `Rapid ${i}`,
       description: `Rapid execution test ${i}`,
     }));

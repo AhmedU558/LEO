@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Plans Routes
  *
@@ -6,7 +7,6 @@
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import {
   type CreatePlanInput,
@@ -63,7 +63,7 @@ function toCreatePlanStepInput(body: ValidatedCreatePlanStepBody): CreateStepInp
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/', pagination(), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const status = validateQueryEnum(c.req.query('status'), [
     'pending',
     'running',
@@ -97,7 +97,7 @@ plansRoutes.get('/', pagination(), async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const rawBody = await parseJsonBody(c);
   const { validateBody, createPlanSchema } = await import('../middleware/validation.js');
   const body = validateBody(createPlanSchema, rawBody) satisfies CreatePlanInput;
@@ -123,7 +123,7 @@ plansRoutes.post('/', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/stats', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const service = getPlanService();
   const stats = await service.getStats(userId);
 
@@ -136,7 +136,7 @@ plansRoutes.get('/stats', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/active', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const service = getPlanService();
   const plans = await service.getActive(userId);
 
@@ -152,7 +152,7 @@ plansRoutes.get('/active', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/pending', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const service = getPlanService();
   const plans = await service.getPending(userId);
 
@@ -168,7 +168,7 @@ plansRoutes.get('/pending', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getPlanService();
@@ -195,7 +195,7 @@ plansRoutes.get('/:id', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.patch('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const rawBody = await parseJsonBody(c);
   const { validateBody, updatePlanSchema } = await import('../middleware/validation.js');
@@ -236,7 +236,7 @@ plansRoutes.route('/', planCrudRoutes);
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/execute', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const waveExecution = c.req.query('waveExecution') === 'true';
   const maxConcurrent = getIntParam(c, 'maxConcurrent', 5, 1, 20);
@@ -298,7 +298,7 @@ plansRoutes.post('/:id/execute', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/pause', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getPlanService();
@@ -330,7 +330,7 @@ plansRoutes.post('/:id/pause', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/resume', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getPlanService();
@@ -377,7 +377,7 @@ plansRoutes.post('/:id/resume', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/abort', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getPlanService();
@@ -409,7 +409,7 @@ plansRoutes.post('/:id/abort', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/checkpoint', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const body = await c.req.json<{ data?: unknown }>().catch((): { data?: unknown } => ({}));
 
@@ -453,7 +453,7 @@ plansRoutes.post('/:id/checkpoint', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/start', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getPlanService();
@@ -512,7 +512,7 @@ plansRoutes.post('/:id/start', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/rollback', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getPlanService();
@@ -583,7 +583,7 @@ plansRoutes.post('/:id/rollback', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/:id/steps', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getPlanService();
@@ -608,7 +608,7 @@ plansRoutes.get('/:id/steps', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.post('/:id/steps', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const rawBody = await parseJsonBody(c);
   const { validateBody, createPlanStepSchema } = await import('../middleware/validation.js');
@@ -640,7 +640,7 @@ plansRoutes.post('/:id/steps', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/:id/steps/:stepId', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const stepId = c.req.param('stepId');
 
   const service = getPlanService();
@@ -659,7 +659,7 @@ plansRoutes.get('/:id/steps/:stepId', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.patch('/:id/steps/:stepId', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const stepId = c.req.param('stepId');
   const rawBody = await parseJsonBody(c);
 
@@ -689,7 +689,7 @@ plansRoutes.patch('/:id/steps/:stepId', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/:id/history', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const limit = getIntParam(c, 'limit', 50, 1, 200);
 
@@ -719,7 +719,7 @@ plansRoutes.get('/:id/history', async (c) => {
  * Trust boundary: Plan step records are stored as a flexible JSON blob; the casts below read typed fields off the blob after the request body has been parsed and validated. The DB row is the source of truth.
  */
 plansRoutes.get('/executor/status', (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const executor = getPlanExecutor({ userId });
 
   return apiResponse(c, {

@@ -178,8 +178,6 @@ export function apiResponse<T>(c: Context, data: T, status?: ContentfulStatusCod
  * (only do this in dev/staging — raw error messages routinely leak SQL,
  * paths, internal IDs, and provider URLs).
  */
-const REDACT_5XX =
-  process.env.NODE_ENV === 'production' && process.env.EXPOSE_INTERNAL_ERRORS !== 'true';
 
 export function apiError(
   c: Context,
@@ -193,7 +191,12 @@ export function apiError(
   // leaks pg SQL text, file paths, hostnames, and provider error bodies.
   // Keep the original detail in the server logs (operators can correlate via
   // requestId) but never ship it to the client outside dev.
-  if (REDACT_5XX && status >= 500 && status < 600) {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.EXPOSE_INTERNAL_ERRORS !== 'true' &&
+    status >= 500 &&
+    status < 600
+  ) {
     const requestId = c.get('requestId') ?? 'unknown';
     // Surface the detail to operators but not the client.
 
@@ -348,4 +351,19 @@ export async function parseJsonBody<T = unknown>(
       ) && null
     );
   }
+}
+
+export function getUserId(c: Context): string {
+  const userId = c.get('userId');
+  if (!userId) {
+    throw new Error(
+      'Authentication required: Missing userId in context. Middleware failed to block unauthenticated request.'
+    );
+  }
+  return userId;
+}
+
+export function getWorkspaceId(c: Context): string {
+  const workspaceId = c.req.header('X-Workspace-ID') || 'default';
+  return workspaceId;
 }

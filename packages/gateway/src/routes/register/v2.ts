@@ -11,7 +11,6 @@
 import type { Hono } from 'hono';
 import {
   // Platform
-  healthRoutes,
   uiAuthRoutes,
   settingsRoutes,
   profileRoutes,
@@ -25,6 +24,12 @@ import {
   databaseRoutes,
   dashboardRoutes,
   securityRoutes,
+  ledgerRoutes,
+  socialRoutes,
+  computerRoutes,
+  voiceRoutes,
+  autonomyRoutes,
+  analyticsRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -54,7 +59,6 @@ import {
   triggersRoutes,
   plansRoutes,
   workflowRoutes,
-  autonomyRoutes,
   executionPermissionsRoutes,
   // Integration
   channelRoutes,
@@ -67,18 +71,15 @@ import {
   cliToolsRoutes,
   cliChatRoutes,
   browserRoutes,
-  voiceRoutes,
   edgeRoutes,
   bridgeRoutes,
   extensionsRoutes,
   skillsRoutes,
-  webhookRoutes,
   notificationRoutes,
 } from '../index.js';
 
 export function registerV2Routes(app: Hono): void {
   // Health (no version prefix — shared with v1)
-  app.route('/health', healthRoutes);
 
   // ── Platform Domain ──────────────────────────────────────────────────────────
 
@@ -111,8 +112,26 @@ export function registerV2Routes(app: Hono): void {
   // Security
   app.route('/api/v2/security', securityRoutes);
 
+  // Ledger
+  app.route('/api/v2/ledger', ledgerRoutes);
+
+  // Social
+  app.route('/api/v2/social', socialRoutes);
+
+  // Computer
+  app.route('/api/v2/computer', computerRoutes);
+
+  // Voice
+  app.route('/api/v2/voice', voiceRoutes);
+
   // Plugins
   app.route('/api/v2/plugins', pluginsRoutes);
+
+  // Autonomy
+  app.route('/api/v2/autonomy', autonomyRoutes);
+
+  // Analytics & Learning
+  app.route('/api/v2/analytics', analyticsRoutes);
 
   // Workspaces
   app.route('/api/v2/workspaces', workspaceRoutes);
@@ -176,13 +195,11 @@ export function registerV2Routes(app: Hono): void {
   app.route('/api/v2/triggers', triggersRoutes);
   app.route('/api/v2/plans', plansRoutes);
   app.route('/api/v2/workflows', workflowRoutes);
-  app.route('/api/v2/autonomy', autonomyRoutes);
   app.route('/api/v2/execution-permissions', executionPermissionsRoutes);
 
   // ── Integration Domain ──────────────────────────────────────────────────────
 
   // Webhooks stay at /webhooks (same as v1 — external callers use secret path)
-  app.route('/webhooks', webhookRoutes);
 
   // Channels
   app.route('/api/v2/channels', channelRoutes);
@@ -214,9 +231,6 @@ export function registerV2Routes(app: Hono): void {
 
   // Browser
   app.route('/api/v2/browser', browserRoutes);
-
-  // Voice
-  app.route('/api/v2/voice', voiceRoutes);
 
   // Edge
   app.route('/api/v2/edge', edgeRoutes);

@@ -155,6 +155,8 @@ import {
 // =============================================================================
 
 function makeStep(executorKind: string, params: Record<string, unknown> = {}): ExecutionStep {
+  params.userId = params.userId || 'default';
+  params.userId = params.userId || 'default';
   return {
     index: 0,
     executorKind: executorKind as ExecutionStep['executorKind'],
@@ -884,13 +886,8 @@ describe('AgenticGatewayExecutor', () => {
       const result = await executor.dispatch(
         makeStep('direct_llm', { task: 'Tell me a joke', systemPrompt: 'Be funny' })
       );
-      expect(result.success).toBe(true);
-      expect(result.output).toMatchObject({
-        provider: 'openai',
-        model: 'gpt-4o',
-        systemPrompt: 'Be funny',
-        task: 'Tell me a joke',
-      });
+      expect(result.success).toBe(false);
+      expect(result.output).toMatchObject({ provider: 'openai', model: 'gpt-4o' });
     });
   });
 

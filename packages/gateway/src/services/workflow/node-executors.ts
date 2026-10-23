@@ -1,19 +1,19 @@
 /**
- * Node executors — Barrel re-export.
+ * Node executors â€” Barrel re-export.
  *
  * Implementations live under `./executors/`:
  *
- *   utils.ts          — safeVmEval, toToolExecResult, resolveWorkflowToolName,
+ *   utils.ts          â€” safeVmEval, toToolExecResult, resolveWorkflowToolName,
  *                       MAX_ARRAY_EVAL_SIZE, log
- *   tool-llm-code.ts  — executeNode, executeLlmNode, executeCodeNode,
+ *   tool-llm-code.ts  â€” executeNode, executeLlmNode, executeCodeNode,
  *                       executeTransformerNode
- *   control-flow.ts   — executeConditionNode, executeSwitchNode, executeMergeNode
- *   io.ts             — executeHttpRequestNode, executeDelayNode,
+ *   control-flow.ts   â€” executeConditionNode, executeSwitchNode, executeMergeNode
+ *   io.ts             â€” executeHttpRequestNode, executeDelayNode,
  *                       executeNotificationNode, executeWebhookResponseNode
- *   data.ts           — executeDataStoreNode, clearDataStore,
+ *   data.ts           â€” executeDataStoreNode, clearDataStore,
  *                       executeSchemaValidatorNode, executeFilterNode,
  *                       executeMapNode, executeAggregateNode
- *   claw.ts           — executeClawNode
+ *   claw.ts           â€” executeClawNode
  *
  * Consumers (`workflow-service.ts`, `foreach-executor.ts`, `index.ts`,
  * `workflow-node-job-handler.ts`, tests) import from this barrel unchanged.
@@ -45,4 +45,6 @@ export {
   executeMapNode,
   executeAggregateNode,
 } from './executors/data.js';
+export { executeSocialPublishNode } from './executors/social.js';
 export { executeClawNode } from './executors/claw.js';
+export { executeBrowserNode } from './executors/browser.js';

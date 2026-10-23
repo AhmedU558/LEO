@@ -1,3 +1,4 @@
+import { checkToolPermission } from '../../services/tool/permission.js';
 /**
  * Core Tool Registration
  *
@@ -192,21 +193,40 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
   for (const group of groups) {
     for (const toolDef of group.definitions) {
       const qName = qualifyToolName(toolDef.name, 'core');
-      tools.register({ ...toolDef, name: qName }, async (args): Promise<CoreToolResult> => {
-        const startTime = trace
-          ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
-          : 0;
+      tools.register(
+        { ...toolDef, name: qName },
+        async (args, context): Promise<CoreToolResult> => {
+          const startTime = trace
+            ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
+            : 0;
 
-        const result = group.needsUserId
-          ? await group.executor(toolDef.name, args as Record<string, unknown>, userId)
-          : await group.executor(toolDef.name, args as Record<string, unknown>);
+          const perm = await checkToolPermission(context?.userId ?? userId, toolDef.name, {
+            source: 'chat',
+            executionPermissions: context?.executionPermissions,
+          });
+          if (!perm.allowed) {
+            return toToolResult({
+              success: false,
+              error: `Tool '${toolDef.name}' blocked: ${perm.reason}`,
+            });
+          }
 
-        if (trace) {
-          traceToolCallEnd(toolDef.name, startTime, result.success, result.result, result.error);
+          const result = group.needsUserId
+            ? await group.executor(toolDef.name, args as Record<string, unknown>, userId, context)
+            : await group.executor(
+                toolDef.name,
+                args as Record<string, unknown>,
+                undefined,
+                context
+              );
+
+          if (trace) {
+            traceToolCallEnd(toolDef.name, startTime, result.success, result.result, result.error);
+          }
+
+          return toToolResult(result);
         }
-
-        return toToolResult(result);
-      });
+      );
     }
   }
 
@@ -217,6 +237,17 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
       const startTime = trace
         ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
         : 0;
+
+      const perm = await checkToolPermission(context?.userId ?? userId, toolDef.name, {
+        source: 'chat',
+        executionPermissions: context?.executionPermissions,
+      });
+      if (!perm.allowed) {
+        return toToolResult({
+          success: false,
+          error: `Tool '${toolDef.name}' blocked: ${perm.reason}`,
+        });
+      }
 
       const result = await executeArtifactTool(
         toolDef.name,
@@ -258,6 +289,18 @@ export async function registerDynamicTools(
       const startTime = trace
         ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
         : 0;
+
+      const perm = await checkToolPermission(_context?.userId ?? userId, toolDef.name, {
+        source: 'chat',
+        executionPermissions: _context?.executionPermissions,
+      });
+      if (!perm.allowed) {
+        return toToolResult({
+          success: false,
+          error: `Tool '${toolDef.name}' blocked: ${perm.reason}`,
+        });
+      }
+
       const result = await executeCustomToolTool(
         toolDef.name,
         args as Record<string, unknown>,
@@ -322,6 +365,17 @@ export async function registerDynamicTools(
       const startTime = trace
         ? traceToolCallStart(toolDef.name, args as Record<string, unknown>)
         : 0;
+
+      const perm = await checkToolPermission(_context?.userId ?? userId, toolDef.name, {
+        source: 'chat',
+        executionPermissions: _context?.executionPermissions,
+      });
+      if (!perm.allowed) {
+        return toToolResult({
+          success: false,
+          error: `Tool '${toolDef.name}' blocked: ${perm.reason}`,
+        });
+      }
 
       const result = await executeActiveCustomTool(
         toolDef.name,

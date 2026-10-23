@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Skills Routes
  *
@@ -7,7 +8,6 @@
  * Trust boundary: Skill discovery results (npm registry responses) are typed loosely; the casts below narrow them to the skill DTO. The npm registry is the trust boundary; the cast documents the expected shape.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { apiResponse, apiError, ERROR_CODES, getIntParam } from './helpers.js';
@@ -35,7 +35,7 @@ const grantPermissionsSchema = z.object({
 export const skillsRoutes = new Hono();
 
 async function uninstallSkill(c: Context) {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   if (!id) {
@@ -102,7 +102,7 @@ skillsRoutes.get('/featured', async (c) => {
 
 skillsRoutes.post('/install-npm', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const body = validateBody(installNpmSchema, await c.req.json());
     const { packageName } = body;
 
@@ -156,7 +156,7 @@ skillsRoutes.get('/npm/:name', async (c) => {
 
 skillsRoutes.post('/check-updates', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const allExtensions = extensionsRepo.getAll().filter((e) => e.userId === userId);
     const installer = getNpmInstaller();
 
@@ -200,7 +200,7 @@ skillsRoutes.get('/permissions', (_c) => {
 
 skillsRoutes.get('/permissions/:id', (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = c.req.param('id');
     const ext = extensionsRepo.getById(id);
 
@@ -225,7 +225,7 @@ skillsRoutes.get('/permissions/:id', (c) => {
 
 skillsRoutes.post('/permissions/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const id = c.req.param('id');
     const body = validateBody(grantPermissionsSchema, await c.req.json());
     const grantedPermissions = body.grantedPermissions as SkillPermission[];

@@ -40,6 +40,17 @@ vi.mock('@ownpilot/gateway/config', () => ({
   isDemoModeFromSettings: mockIsDemoModeFromSettings,
 }));
 
+// The shutdown path drains real services before exiting. Stub them so the
+// signal-handler tests assert on the handler, not on scheduler/DB teardown.
+const mockStopScheduler = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockCloseAdapter = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
+vi.mock('@ownpilot/gateway', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@ownpilot/gateway')>()),
+  stopScheduler: mockStopScheduler,
+  closeAdapter: mockCloseAdapter,
+}));
+
 // ============================================================================
 // Import after mocks
 // ============================================================================
@@ -189,11 +200,17 @@ describe('Start CLI Command', () => {
         const sigintCall = processOnSpy.mock.calls.find((c) => c[0] === 'SIGINT');
         expect(sigintCall).toBeDefined();
 
+        // The registered listener is synchronous and kicks off the async
+        // shutdown fire-and-forget, so process.exit(0) lands a few microtasks
+        // later — after the scheduler stop and adapter close resolve. Poll for
+        // it rather than asserting on the first tick.
         const shutdownFn = sigintCall![1] as () => void;
         shutdownFn();
 
+        await vi.waitFor(() => {
+          expect(exitSpy).toHaveBeenCalledWith(0);
+        });
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Shutting down'));
-        expect(exitSpy).toHaveBeenCalledWith(0);
 
         processOnSpy.mockRestore();
       });
@@ -210,7 +227,9 @@ describe('Start CLI Command', () => {
         const shutdownFn = sigtermCall![1] as () => void;
         shutdownFn();
 
-        expect(exitSpy).toHaveBeenCalledWith(0);
+        await vi.waitFor(() => {
+          expect(exitSpy).toHaveBeenCalledWith(0);
+        });
 
         processOnSpy.mockRestore();
       });

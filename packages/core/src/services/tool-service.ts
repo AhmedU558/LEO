@@ -35,7 +35,13 @@ export interface IToolService {
   execute(
     name: string,
     args: Record<string, unknown>,
-    context?: { conversationId?: string; userId?: string; execSource?: string }
+    context?: {
+      conversationId?: string;
+      userId?: string;
+      execSource?: string;
+      signal?: AbortSignal;
+      job?: { jobId: string; leaseToken: string; effectIndex: number };
+    }
   ): Promise<ToolServiceResult>;
 
   /**

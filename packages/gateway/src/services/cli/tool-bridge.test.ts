@@ -13,6 +13,27 @@ vi.mock('../log.js', () => ({
   }),
 }));
 
+// The bridge now executes through executeTool(), which enforces tool
+// permissions (QA-007) and claims a durable operation identity before any
+// effect (QA-016). Both are real production behaviour; here they would make
+// these loop tests assert on default tool-group settings and on the
+// idempotency store instead of on the bridge, so stub them.
+// `permission-and-idempotency.test.ts` covers the enforcement itself.
+vi.mock('../tool/permission.js', () => ({
+  checkToolPermission: vi.fn(async () => ({ allowed: true })),
+}));
+
+vi.mock('../../db/repositories/idempotency-keys.js', () => ({
+  getIdempotencyKeysRepository: () => ({
+    claimOperation: vi.fn(async (_u: string, _o: string, requestHash: string) => ({
+      claimed: true,
+      state: 'pending',
+      requestHash,
+    })),
+    finishOperation: vi.fn(async () => {}),
+  }),
+}));
+
 import {
   buildToolPromptSection,
   formatToolResults,

@@ -7,13 +7,27 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage } from '@ownpilot/core/services';
 import { getLog } from './log.js';
 import { getJobsRepository, type CreateJobInput, type JobRecord } from '../db/repositories/jobs.js';
+import { getIdempotencyKeysRepository } from '../db/repositories/idempotency-keys.js';
+
+export const jobExecutionContext = new AsyncLocalStorage<{
+  jobId: string;
+  leaseToken: string;
+  signal: AbortSignal;
+  effectIndex: number;
+  depth?: number;
+}>();
 
 const log = getLog('JobQueueService');
 
 const DEFAULT_QUEUE = 'default';
+const MAX_ATTEMPTS_LIMIT = 10;
+const MAX_CONCURRENCY_LIMIT = 50;
+const MAX_EXECUTION_TIME_MS = 60 * 60 * 1000; // 1 hour
+const MAX_JOB_DEPTH_LIMIT = 50;
 const SYSTEM_QUEUE = 'system';
 
 interface EnqueueOptions {
@@ -21,9 +35,10 @@ interface EnqueueOptions {
   priority?: number;
   maxAttempts?: number;
   runAfter?: Date;
+  id?: string;
 }
 
-type JobHandler = (job: JobRecord) => Promise<Record<string, unknown>>;
+type JobHandler = (job: JobRecord, signal: AbortSignal) => Promise<Record<string, unknown>>;
 
 interface WorkerOptions {
   queue?: string;
@@ -69,6 +84,10 @@ export class JobQueueService {
   private workers: Map<string, RunningWorker> = new Map();
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private repo = getJobsRepository();
+  private executions = new Map<
+    string,
+    { workerId: string; controller: AbortController; done: Promise<void> }
+  >();
 
   static getInstance(): JobQueueService {
     if (!JobQueueService._instance) {
@@ -85,18 +104,42 @@ export class JobQueueService {
     payload: Record<string, unknown> = {},
     options: EnqueueOptions = {}
   ): Promise<string> {
+    const jobId = options.id ?? randomUUID();
+    const context = jobExecutionContext.getStore();
+    const currentDepth = context?.depth ?? 0;
+    if (currentDepth >= MAX_JOB_DEPTH_LIMIT) {
+      throw new Error(
+        `Job execution blocked: MAX_JOB_DEPTH_LIMIT (${MAX_JOB_DEPTH_LIMIT}) exceeded (recursive autonomous loop)`
+      );
+    }
+    const payloadWithDepth = { ...payload, _depth: currentDepth + 1 } as Record<string, unknown>;
     const jobInput: CreateJobInput = {
-      id: randomUUID(),
+      id: jobId,
       name,
       queue: options.queue ?? DEFAULT_QUEUE,
       priority: options.priority ?? 0,
-      payload,
-      maxAttempts: options.maxAttempts ?? 3,
+      payload: payloadWithDepth,
+      maxAttempts: Math.min(options.maxAttempts ?? 3, MAX_ATTEMPTS_LIMIT),
       runAfter: options.runAfter ?? new Date(),
     };
-    const job = await this.repo.create(jobInput);
-    log.debug('Job enqueued', { jobId: job.id, name, queue: job.queue });
-    return job.id;
+    try {
+      const job = await this.repo.create(jobInput);
+      log.debug('Job enqueued', { jobId: job.id, name, queue: job.queue });
+      return job.id;
+    } catch (error: unknown) {
+      // Catch PostgreSQL UNIQUE constraint violation (23505) for idempotent enqueues
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code?: string }).code === '23505' &&
+        options.id
+      ) {
+        log.debug('Job already enqueued, returning existing id', { jobId: options.id, name });
+        return options.id;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -111,7 +154,7 @@ export class JobQueueService {
    */
   startWorker(handler: JobHandler, options: WorkerOptions = {}): () => void {
     const queue = options.queue ?? DEFAULT_QUEUE;
-    const concurrency = options.concurrency ?? 4;
+    const concurrency = Math.min(Math.max(1, options.concurrency ?? 4), MAX_CONCURRENCY_LIMIT);
     const workerId = options.name ?? `worker_${randomUUID().slice(0, 8)}`;
 
     const worker: RunningWorker = {
@@ -145,6 +188,9 @@ export class JobQueueService {
     const worker = this.workers.get(workerId);
     if (!worker) return;
     worker.stopped = true;
+    for (const execution of this.executions.values()) {
+      if (execution.workerId === workerId) execution.controller.abort();
+    }
     this.workers.delete(workerId);
     log.info('Worker stopped', { workerId });
     if (this.workers.size === 0 && this.pollInterval) {
@@ -186,29 +232,107 @@ export class JobQueueService {
       const availableSlots = worker.concurrency - worker.activeJobs.size;
       for (let i = 0; i < availableSlots; i++) {
         if (worker.stopped) break;
-        const job = await this.repo.claimJob(worker.queue, 0);
+        const job = await this.repo.claimJob(worker.queue);
         if (!job) break;
+
+        if (worker.stopped) {
+          await this.repo.fail(job.id, 'Worker stopped before execution', job.leaseToken!);
+          break;
+        }
 
         worker.activeJobs.add(job.id);
         // executeJob is guaranteed not to reject (it swallows + logs its own
         // errors); the finally frees the slot and re-polls via safePoll.
-        this.executeJob(worker, job).finally(() => {
+        const controller = new AbortController();
+        const done = this.executeJob(worker, job, controller).finally(() => {
           worker.activeJobs.delete(job.id);
+          this.executions.delete(job.id);
           this.safePoll(worker);
         });
+        this.executions.set(job.id, { workerId: worker.id, controller, done });
       }
     } finally {
       worker.polling = false;
     }
   }
 
-  private async executeJob(worker: RunningWorker, job: JobRecord): Promise<void> {
+  private async executeJob(
+    worker: RunningWorker,
+    job: JobRecord,
+    controller = new AbortController()
+  ): Promise<void> {
     const logCtx = { workerId: worker.id, jobId: job.id, name: job.name };
     log.debug('Job started', logCtx);
 
+    let renewing = false;
+    const heartbeat = setInterval(async () => {
+      if (renewing || controller.signal.aborted) return;
+      renewing = true;
+      try {
+        if (!(await this.repo.renewLease(job.id, job.leaseToken!))) controller.abort();
+      } catch {
+        controller.abort();
+      } finally {
+        renewing = false;
+      }
+    }, 1000);
+    heartbeat.unref?.();
+
+    const timeoutId = setTimeout(() => {
+      if (!controller.signal.aborted) {
+        log.warn('Job exceeded max execution time', logCtx);
+        controller.abort(
+          new Error(`Job exceeded MAX_EXECUTION_TIME_MS (${MAX_EXECUTION_TIME_MS}ms)`)
+        );
+      }
+    }, MAX_EXECUTION_TIME_MS);
+    timeoutId.unref?.();
     try {
-      const result = await worker.handler(job);
-      await this.repo.complete(job.id, result);
+      controller.signal.throwIfAborted();
+      const result = await jobExecutionContext.run(
+        {
+          jobId: job.id,
+          leaseToken: job.leaseToken!,
+          signal: controller.signal,
+          effectIndex: 0,
+          depth:
+            typeof job.payload === 'object' && job.payload !== null && '_depth' in job.payload
+              ? (job.payload as { _depth: number })._depth
+              : 0,
+        },
+        async () => {
+          const operations = getIdempotencyKeysRepository();
+          const operationId = `job:${job.id}`;
+          const owner = job.leaseToken!;
+          const claim = await this.repo.withLease(job.id, owner, () =>
+            operations.claimOperation('job-queue', operationId, job.name, owner)
+          );
+          if (!claim.claimed) {
+            if (claim.state === 'success') return claim.result as Record<string, unknown>;
+            throw new Error(`Job outcome ${claim.state}; reconciliation required before replay`);
+          }
+          try {
+            controller.signal.throwIfAborted();
+            const value = await worker.handler(job, controller.signal);
+            controller.signal.throwIfAborted();
+            await operations.finishOperation('job-queue', operationId, owner, 'success', value);
+            return value;
+          } catch (error) {
+            await operations.finishOperation(
+              'job-queue',
+              operationId,
+              owner,
+              controller.signal.aborted ? 'cancelled' : 'unknown',
+              { error: getErrorMessage(error) }
+            );
+            throw error;
+          }
+        }
+      );
+      controller.signal.throwIfAborted();
+      if (!(await this.repo.complete(job.id, result, job.leaseToken!))) {
+        throw new Error('Job lease lost before completion');
+      }
       log.debug('Job completed', { ...logCtx });
     } catch (err) {
       const error = getErrorMessage(err);
@@ -219,14 +343,26 @@ export class JobQueueService {
       // executeJob never rejects and the slot is still freed by the caller's
       // finally.
       try {
-        await this.repo.fail(job.id, error);
+        if (controller.signal.aborted) {
+          // Stop local execution without cancelling a newer owner's claim.
+          await this.repo.cancelClaim(job.id, job.leaseToken!);
+        } else {
+          await this.repo.fail(job.id, error, job.leaseToken!);
+        }
       } catch (failErr) {
         log.error('Failed to persist job failure', {
           ...logCtx,
           error: getErrorMessage(failErr),
         });
       }
+    } finally {
+      clearInterval(heartbeat);
     }
+  }
+
+  async cancel(jobId: string): Promise<void> {
+    await this.repo.cancel(jobId);
+    this.executions.get(jobId)?.controller.abort();
   }
 
   /**
@@ -247,6 +383,15 @@ export class JobQueueService {
     for (const [id] of this.workers) {
       this.stopWorker(id);
     }
+    // Bound shutdown even if a trusted handler ignores cancellation.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.allSettled([...this.executions.values()].map((entry) => entry.done)),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 5000);
+      }),
+    ]);
+    clearTimeout(timer);
     log.info('JobQueueService shut down');
   }
 }

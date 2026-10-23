@@ -29,6 +29,18 @@ const DashboardPage = lazy(() =>
 const AnalyticsPage = lazy(() =>
   import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage }))
 );
+// nav-items.ts links /autonomy. The duplicate-declaration fix that unblocked
+// the app boot removed both copies of this lazy import along with its route,
+// which left that nav entry pointing at nothing.
+const AutonomyPage = lazy(() =>
+  import('./pages/AutonomyPage').then((m) => ({ default: m.AutonomyPage }))
+);
+// The LEO usage/learning-recommendation view. It shipped by overwriting the
+// cost/token analytics dashboard at /analytics; it is a different feature, so
+// it gets its own route instead of displacing that one.
+const LearningPage = lazy(() =>
+  import('./pages/LearningPage').then((m) => ({ default: m.LearningPage }))
+);
 const TasksPage = lazy(() => import('./pages/TasksPage').then((m) => ({ default: m.TasksPage })));
 const NotesPage = lazy(() => import('./pages/NotesPage').then((m) => ({ default: m.NotesPage })));
 const CalendarPage = lazy(() =>
@@ -54,9 +66,6 @@ const TriggersPage = lazy(() =>
   import('./pages/TriggersPage').then((m) => ({ default: m.TriggersPage }))
 );
 const PlansPage = lazy(() => import('./pages/PlansPage').then((m) => ({ default: m.PlansPage })));
-const AutonomyPage = lazy(() =>
-  import('./pages/AutonomyPage').then((m) => ({ default: m.AutonomyPage }))
-);
 const PluginsPage = lazy(() =>
   import('./pages/PluginsPage').then((m) => ({ default: m.PluginsPage }))
 );
@@ -151,6 +160,16 @@ const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default:
 const SecurityPage = lazy(() =>
   import('./pages/SecurityPage').then((m) => ({ default: m.SecurityPage }))
 );
+const ActionLedgerPage = lazy(() =>
+  import('./pages/ActionLedgerPage').then((m) => ({ default: m.ActionLedgerPage }))
+);
+const VoicePage = lazy(() => import('./pages/VoicePage').then((m) => ({ default: m.VoicePage })));
+const ComputerControlPage = lazy(() =>
+  import('./pages/ComputerControlPage').then((m) => ({ default: m.ComputerControlPage }))
+);
+const SocialPage = lazy(() =>
+  import('./pages/SocialPage').then((m) => ({ default: m.SocialPage }))
+);
 const SecurityDashboardPage = lazy(() =>
   import('./pages/SecurityDashboardPage').then((m) => ({ default: m.SecurityDashboardPage }))
 );
@@ -237,13 +256,14 @@ export function App() {
         <Route index element={page(<ChatPage />)} />
         <Route path="dashboard" element={page(<DashboardPage />)} />
         <Route path="analytics" element={page(<AnalyticsPage />)} />
+        <Route path="autonomy" element={page(<AutonomyPage />)} />
+        <Route path="learning" element={page(<LearningPage />)} />
         <Route path="wizards" element={page(<WizardsPage />)} />
         <Route path="wizards/:wizardId" element={page(<WizardRouter />)} />
         <Route path="memories" element={page(<MemoriesPage />)} />
         <Route path="goals" element={page(<GoalsPage />)} />
         <Route path="triggers" element={page(<TriggersPage />)} />
         <Route path="plans" element={page(<PlansPage />)} />
-        <Route path="autonomy" element={page(<AutonomyPage />)} />
         <Route path="workflows" element={page(<WorkflowsPage />)} />
         <Route path="workflows/:id" element={page(<WorkflowEditorPage />)} />
         <Route path="workflows/logs/:logId" element={page(<WorkflowLogViewerPage />)} />
@@ -285,6 +305,9 @@ export function App() {
         <Route path="history" element={page(<ChatHistoryPage />)} />
         <Route path="agents" element={page(<AgentsPage />)} />
         <Route path="tools" element={page(<ToolsPage />)} />
+        <Route path="social" element={page(<SocialPage />)} />
+        <Route path="computer" element={page(<ComputerControlPage />)} />
+        <Route path="voice" element={page(<VoicePage />)} />
         <Route path="custom-tools" element={page(<CustomToolsPage />)} />
         <Route path="plugins" element={page(<PluginsPage />)} />
         <Route
@@ -311,6 +334,7 @@ export function App() {
         <Route path="settings/workflow-tools" element={page(<WorkflowToolSettingsPage />)} />
         <Route path="settings/security" element={page(<SecurityPage />)} />
         <Route path="settings/security-scanner" element={page(<SecurityDashboardPage />)} />
+        <Route path="settings/action-ledger" element={page(<ActionLedgerPage />)} />
         <Route path="settings/system" element={page(<SystemPage />)} />
         <Route path="settings/layout" element={page(<LayoutConfigPage />)} />
         <Route path="about" element={page(<AboutPage />)} />

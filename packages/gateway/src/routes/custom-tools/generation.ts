@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Custom Tools Execution & Generation Routes
  *
@@ -6,7 +7,6 @@
  * Exports: executeCustomToolTool, executeActiveCustomTool, getActiveCustomToolDefinitions
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import {
   createCustomToolsRepo,
@@ -52,7 +52,7 @@ generationRoutes.post('/:id/execute', async (c) => {
     return apiError(c, { code: ERROR_CODES.INVALID_INPUT, message: 'Invalid JSON body' }, 400);
   }
 
-  const repo = createCustomToolsRepo(LOCAL_OWNER_ID);
+  const repo = createCustomToolsRepo(getUserId(c));
   const tool = await repo.get(id);
 
   if (!tool) {
@@ -87,7 +87,7 @@ generationRoutes.post('/:id/execute', async (c) => {
   try {
     const result = await executeCustomToolUnified(tool.name, body.arguments ?? {}, {
       conversationId: 'direct-execution',
-      userId: LOCAL_OWNER_ID,
+      userId: getUserId(c),
     });
     const duration = Date.now() - startTime;
 
@@ -129,7 +129,7 @@ generationRoutes.post('/:id/execute', async (c) => {
  */
 generationRoutes.get('/:id/executions', async (c) => {
   const id = c.req.param('id');
-  const repo = createCustomToolsRepo(LOCAL_OWNER_ID);
+  const repo = createCustomToolsRepo(getUserId(c));
 
   const tool = await repo.get(id);
   if (!tool) {
@@ -207,7 +207,7 @@ generationRoutes.post('/test', async (c) => {
     const result = await testRegistry.execute(body.name, body.testArguments ?? {}, {
       callId: `test_${Date.now()}`,
       conversationId: 'test-execution',
-      userId: LOCAL_OWNER_ID,
+      userId: getUserId(c),
     });
     const duration = Date.now() - startTime;
 

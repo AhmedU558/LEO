@@ -6,8 +6,9 @@
 import type React from 'react';
 import {
   MessageSquare,
-  History,
+  Share2,
   Bot,
+  History,
   Wrench,
   Cpu,
   DollarSign,
@@ -104,12 +105,14 @@ export const navGroups: NavGroup[] = [
       { to: '/agentic', icon: Brain, label: 'Agentic Center' },
       { to: '/autonomous', icon: Bot, label: 'Soul & Crew Hub' },
       { to: '/mission-control', icon: Activity, label: 'Mission Control' },
+      { to: '/social', icon: Share2, label: 'Social' },
       { to: '/claws', icon: Zap, label: 'Claw Runners' },
       { to: '/coding-agents', icon: Terminal, label: 'Code Runners (CLI)' },
       { to: '/artifacts', icon: LayoutTemplate, label: 'Artifacts' },
       { to: '/canvas', icon: LayoutTemplate, label: 'Live Canvas' },
       { to: '/approvals', icon: ShieldCheck, label: 'Approvals' },
       { to: '/autonomy', icon: Shield, label: 'Autonomy' },
+      { to: '/learning', icon: Brain, label: 'Learning' },
     ],
   },
   {
@@ -152,6 +155,7 @@ export const navGroups: NavGroup[] = [
       // Security & access
       { to: '/settings/security', icon: Lock, label: 'Auth & Password' },
       { to: '/settings/security-scanner', icon: Shield, label: 'Security Scanner' },
+      { to: '/settings/action-ledger', icon: Activity, label: 'Action Ledger' },
       { to: '/settings/tool-groups', icon: Wrench, label: 'Tool Groups' },
       // Tools & integrations
       { to: '/settings/cli-tools', icon: Code, label: 'CLI Tools' },

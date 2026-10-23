@@ -134,6 +134,48 @@ const mockSharedToolRegistry = {
 };
 vi.mock('../services/tool/executor.js', () => ({
   getSharedToolRegistry: vi.fn(() => mockSharedToolRegistry),
+  // use_tool / batch_use_tool are effect boundaries, so they now dispatch
+  // through executeTool() (permission check + atomic idempotency claim + audit)
+  // rather than calling the registry directly. They hand it the registry to
+  // execute against in `execContext.registry`, because a chat agent runs its
+  // own ToolRegistry instance rather than the shared one. This stub honours
+  // that contract so these tests keep asserting on the meta-tool behaviour;
+  // `services/tool/executor.test.ts` covers the admission protocol itself.
+  executeTool: vi.fn(
+    async (
+      name: string,
+      args: Record<string, unknown>,
+      userId: string,
+      _perms: unknown,
+      execContext?: {
+        registry?: {
+          execute: (
+            n: string,
+            a: unknown,
+            c: unknown
+          ) => Promise<{
+            ok: boolean;
+            value?: { content?: unknown; isError?: boolean };
+            error?: { message?: string };
+          }>;
+        };
+        parentContext?: Record<string, unknown>;
+      }
+    ) => {
+      try {
+        const result = await execContext?.registry?.execute(name, args, {
+          ...execContext?.parentContext,
+          userId,
+        });
+        if (result?.ok) {
+          return { success: !result.value?.isError, result: result.value?.content };
+        }
+        return { success: false, error: result?.error?.message ?? 'Tool execution failed' };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    }
+  ),
 }));
 
 const mockCustomToolsRepo = {

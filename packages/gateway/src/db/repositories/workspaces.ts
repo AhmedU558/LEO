@@ -276,8 +276,8 @@ export class WorkspacesRepository extends BaseRepository {
    */
   async countExecutions(workspaceId: string): Promise<number> {
     const result = await this.queryOne<{ count: string }>(
-      `SELECT COUNT(*) as count FROM code_executions WHERE workspace_id = $1`,
-      [workspaceId]
+      `SELECT COUNT(*) as count FROM code_executions WHERE workspace_id = $1 AND user_id = $2`,
+      [workspaceId, this.userId]
     );
     return parseInt(result?.count ?? '0', 10);
   }
@@ -322,7 +322,7 @@ export class WorkspacesRepository extends BaseRepository {
     const result = await this.execute(
       `UPDATE code_executions
        SET status = $1, stdout = $2, stderr = $3, exit_code = $4, execution_time_ms = $5
-       WHERE id = $6`,
+       WHERE id = $6 AND user_id = $7`,
       [
         status,
         stdout || null,
@@ -330,6 +330,7 @@ export class WorkspacesRepository extends BaseRepository {
         exitCode ?? null,
         executionTimeMs ?? null,
         executionId,
+        this.userId,
       ]
     );
     return result.changes > 0;
@@ -341,10 +342,10 @@ export class WorkspacesRepository extends BaseRepository {
   async listExecutions(workspaceId: string, limit = 10): Promise<CodeExecution[]> {
     const rows = await this.query<ExecutionRow>(
       `SELECT * FROM code_executions
-       WHERE workspace_id = $1
+       WHERE workspace_id = $1 AND user_id = $3
        ORDER BY created_at DESC
        LIMIT $2`,
-      [workspaceId, limit]
+      [workspaceId, limit, this.userId]
     );
     return rows.map(rowToExecution);
   }

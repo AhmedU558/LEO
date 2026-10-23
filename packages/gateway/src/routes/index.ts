@@ -1,3 +1,5 @@
+export { mediaRoutes } from './media.js';
+export { contentRoutes } from './content.js';
 /**
  * Route exports
  */
@@ -66,3 +68,7 @@ export { clawRoutes } from './claws.js';
 export { agenticRoutes } from './agentic.js';
 export { pulseRoutes } from './pulse.js';
 export { tunnelRoutes } from './tunnel.js';
+export { ledgerRoutes } from './ledger.js';
+export { socialRoutes } from './social.js';
+export { computerRoutes } from './computer.js';
+export { analyticsRoutes } from './analytics.js';

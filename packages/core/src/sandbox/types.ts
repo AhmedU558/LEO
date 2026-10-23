@@ -80,6 +80,7 @@ export const DEFAULT_PERMISSIONS: Required<SandboxPermissions> = {
  * Sandbox configuration
  */
 export interface SandboxConfig {
+  signal?: AbortSignal;
   /** Plugin ID for logging/auditing */
   pluginId: PluginId;
   /** Resource limits */

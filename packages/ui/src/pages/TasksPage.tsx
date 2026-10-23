@@ -26,6 +26,7 @@ import { tasksApi } from '../api';
 import type { Task } from '../types';
 import { localDayString } from '../utils/formatters';
 import { PageHomeTab } from '../components/PageHomeTab';
+import { ExecutionTasksPanel } from './ExecutionTasksPanel';
 
 const priorityColors = {
   low: 'text-text-muted dark:text-dark-text-muted',
@@ -276,6 +277,7 @@ export function TasksPage() {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6 animate-fade-in-up">
+            <ExecutionTasksPanel />
             {isLoading ? (
               <SkeletonCard count={5} />
             ) : error ? (

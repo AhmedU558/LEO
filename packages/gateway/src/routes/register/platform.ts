@@ -23,6 +23,12 @@ import {
   databaseRoutes,
   dashboardRoutes,
   securityRoutes,
+  ledgerRoutes,
+  socialRoutes,
+  mediaRoutes,
+  contentRoutes,
+  computerRoutes,
+  analyticsRoutes,
   pluginsRoutes,
   workspaceRoutes,
   fileWorkspaceRoutes,
@@ -63,6 +69,24 @@ export function registerPlatformRoutes(app: Hono): void {
 
   // Security Scanner (unified vulnerability analysis)
   app.route('/api/v1/security', securityRoutes);
+
+  // Action Ledger (audit logging)
+  app.route('/api/v1/ledger', ledgerRoutes);
+
+  // Social Automation
+  app.route('/api/v1/social', socialRoutes);
+  app.route('/api/v1/media', mediaRoutes);
+  app.route('/api/v1/content', contentRoutes);
+
+  // Computer Use
+  app.route('/api/v1/computer', computerRoutes);
+
+  // Voice Foundation
+
+  // Advanced Autonomy
+
+  // Analytics & Learning
+  app.route('/api/v1/analytics', analyticsRoutes);
 
   // Plugins (extensible plugin system)
   app.route('/api/v1/plugins', pluginsRoutes);

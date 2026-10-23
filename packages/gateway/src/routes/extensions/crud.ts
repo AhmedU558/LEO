@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions CRUD Routes
  *
@@ -7,7 +8,6 @@
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono, type Context } from 'hono';
 import { ExtensionError } from '../../services/extension/service.js';
 import {
@@ -35,7 +35,7 @@ export const crudRoutes = new Hono();
 const getExtService = getGatewayExtensionService;
 
 async function uninstallExtension(c: Context) {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   if (!id) {
@@ -57,7 +57,7 @@ async function uninstallExtension(c: Context) {
   // Audit extension uninstall — removes code, triggers, granted
   // permissions, and any DB state the extension owned.
   getEventSystem().emit('audit.extension.uninstalled', 'extensions', {
-    ip: getClientIp(c.req),
+    ip: getClientIp(c),
     extensionId: id,
     userId,
   });
@@ -75,7 +75,7 @@ async function uninstallExtension(c: Context) {
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.get('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const status = c.req.query('status');
   const category = c.req.query('category');
   const format = c.req.query('format'); // 'ownpilot' | 'agentskills'
@@ -115,7 +115,7 @@ crudRoutes.get('/gate-status', async (c) => {
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.post('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await parseJsonBody(c);
 
   if (!body || !(body as { manifest?: unknown }).manifest) {
@@ -160,7 +160,7 @@ crudRoutes.post('/', async (c) => {
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.get('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();
@@ -198,7 +198,7 @@ crudRoutes.post('/:id/remove', async (c) => uninstallExtension(c));
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.patch('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();
@@ -277,7 +277,7 @@ crudRoutes.patch('/:id', async (c) => {
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.post('/:id/enable', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   try {
@@ -292,7 +292,7 @@ crudRoutes.post('/:id/enable', async (c) => {
     // Audit extension enable — re-activates tools, triggers, and any
     // granted permissions the extension holds.
     getEventSystem().emit('audit.extension.enabled', 'extensions', {
-      ip: getClientIp(c.req),
+      ip: getClientIp(c),
       extensionId: id,
       userId,
     });
@@ -315,7 +315,7 @@ crudRoutes.post('/:id/enable', async (c) => {
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.post('/:id/disable', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   try {
@@ -330,7 +330,7 @@ crudRoutes.post('/:id/disable', async (c) => {
     // Audit extension disable — silences tools/triggers but does not
     // remove the extension or its DB state.
     getEventSystem().emit('audit.extension.disabled', 'extensions', {
-      ip: getClientIp(c.req),
+      ip: getClientIp(c),
       extensionId: id,
       userId,
     });
@@ -353,7 +353,7 @@ crudRoutes.post('/:id/disable', async (c) => {
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.post('/:id/recover', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   try {
@@ -387,7 +387,7 @@ crudRoutes.post('/:id/recover', async (c) => {
  * Trust boundary: Extension record updates carry a flexible config payload; the casts below read typed fields off the validated body. The Zod schema is the trust boundary.
  */
 crudRoutes.post('/:id/reload', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   try {

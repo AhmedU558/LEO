@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Custom Tools Approval Routes
  *
@@ -5,7 +6,6 @@
  * Endpoints: POST /:id/approve, POST /:id/reject
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import { createCustomToolsRepo } from '../../db/repositories/custom/tools.js';
 import { invalidateAgentCache } from '../agents/index.js';
@@ -20,7 +20,7 @@ export const approvalRoutes = new Hono();
  */
 approvalRoutes.post('/:id/approve', async (c) => {
   const id = c.req.param('id');
-  const repo = createCustomToolsRepo(LOCAL_OWNER_ID);
+  const repo = createCustomToolsRepo(getUserId(c));
 
   const tool = await repo.get(id);
   if (!tool) {
@@ -54,7 +54,7 @@ approvalRoutes.post('/:id/approve', async (c) => {
  */
 approvalRoutes.post('/:id/reject', async (c) => {
   const id = c.req.param('id');
-  const repo = createCustomToolsRepo(LOCAL_OWNER_ID);
+  const repo = createCustomToolsRepo(getUserId(c));
 
   const tool = await repo.get(id);
   if (!tool) {

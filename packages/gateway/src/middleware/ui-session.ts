@@ -21,13 +21,13 @@ import { getRequestOrigin } from '../utils/trusted-proxy.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+import type { Context } from 'hono';
+
 // H-S8: requestOrigin only honors X-Forwarded-* when TRUSTED_PROXY is set.
 // Otherwise an attacker could spoof those headers to make their origin match
 // our canonical origin and bypass the CSRF same-origin check.
-function requestOrigin(c: {
-  req: { url: string; header: (name: string) => string | undefined };
-}): string {
-  return getRequestOrigin(c.req);
+function requestOrigin(c: Context): string {
+  return getRequestOrigin(c);
 }
 
 function configuredOrigins(): Set<string> {
@@ -40,9 +40,7 @@ function configuredOrigins(): Set<string> {
   );
 }
 
-function isTrustedBrowserOrigin(c: {
-  req: { url: string; header: (name: string) => string | undefined };
-}): boolean {
+function isTrustedBrowserOrigin(c: Context): boolean {
   const origin = c.req.header('Origin');
   const referer = c.req.header('Referer');
   let candidate = origin;
@@ -65,22 +63,21 @@ function shouldEnforceCsrf(method: string, source: string): boolean {
 export interface UiSessionMiddlewareOptions {
   /**
    * Preserve the passwordless single-user flow only when the gateway is local
-   * or API authentication is explicitly disabled. Exposed gateways with
-   * api-key/JWT auth must defer to the API auth middleware instead of silently
-   * marking every request as authenticated.
+   * or API authentication is explicitly disabled.
    */
   allowImplicitOwnerWithoutPassword?: boolean;
+  /**
+   * Indicates if downstream API auth is enabled. If false, we must not
+   * defer header validation to it.
+   */
+  apiAuthEnabled?: boolean;
 }
 
 export function createUiSessionMiddleware(options: UiSessionMiddlewareOptions = {}) {
-  const { allowImplicitOwnerWithoutPassword = true } = options;
+  const { allowImplicitOwnerWithoutPassword = true, apiAuthEnabled = true } = options;
 
   return createMiddleware(async (c, next) => {
     const fullPath = c.req.path;
-    // Strip ANY versioned API prefix (/api/v1, /api/v2, …) so the /auth/ and
-    // /mcp/serve allowances below match identically on every API version. A
-    // hardcoded /api/v1 left the v2 mirror with the un-stripped prefix, so those
-    // session/MCP allowances silently never matched on v2 (fail-closed parity bug).
     const relativePath = fullPath.replace(/^\/api\/v\d+/, '');
     const allowMcpSessionHeader = relativePath.startsWith('/mcp/serve');
     const sessionAuth = getUiSessionAuth(c, { allowHeader: allowMcpSessionHeader });
@@ -113,8 +110,8 @@ export function createUiSessionMiddleware(options: UiSessionMiddlewareOptions = 
     }
 
     if (isPasswordConfigured()) {
-      const hasAuthHeader = c.req.header('Authorization');
-      const hasApiKey = c.req.header('X-API-Key');
+      const hasAuthHeader = !!c.req.header('Authorization');
+      const hasApiKey = !!c.req.header('X-API-Key');
 
       if (!hasAuthHeader && !hasApiKey) {
         return apiError(
@@ -124,15 +121,19 @@ export function createUiSessionMiddleware(options: UiSessionMiddlewareOptions = 
         );
       }
 
-      // Password configured + Authorization/X-API-Key present: let the API auth
-      // middleware validate the credential.
+      // If API authentication is disabled, we cannot defer to it. The presence
+      // of headers does not grant access when there is no validator installed.
+      if (!apiAuthEnabled) {
+        return apiError(c, { code: ERROR_CODES.UNAUTHORIZED, message: 'Invalid credentials' }, 401);
+      }
+
+      // Password configured + Authorization/X-API-Key present + downstream API auth enabled:
+      // let the API auth middleware validate the credential.
       return next();
     }
 
     // No UI password configured. Local or explicitly open deployments retain
-    // the single-user implicit-owner flow. On an exposed gateway with API auth
-    // configured, leave the request unauthenticated so createAuthMiddleware()
-    // can enforce the configured API key or JWT.
+    // the single-user implicit-owner flow.
     if (allowImplicitOwnerWithoutPassword) {
       c.set('sessionAuthenticated', true);
       c.set('userId', 'default');

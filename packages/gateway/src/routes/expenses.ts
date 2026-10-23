@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Expenses API Routes
  *
@@ -5,7 +6,6 @@
  * Backed by PostgreSQL via ExpensesRepository (migrated from file-based JSON).
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import {
   apiResponse,
@@ -120,7 +120,7 @@ export const expensesRoutes = new Hono();
  */
 expensesRoutes.get('/', pagination({ defaultLimit: 100, maxLimit: 1000 }), async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const repo = new ExpensesRepository(userId);
     const { limit, offset } = c.get('pagination')!;
 
@@ -158,7 +158,7 @@ expensesRoutes.get('/', pagination({ defaultLimit: 100, maxLimit: 1000 }), async
  */
 expensesRoutes.get('/summary', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const repo = new ExpensesRepository(userId);
 
     const period = c.req.query('period') ?? 'this_month';
@@ -217,7 +217,7 @@ expensesRoutes.get('/summary', async (c) => {
  */
 expensesRoutes.get('/monthly', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const repo = new ExpensesRepository(userId);
     const year = c.req.query('year') ?? String(new Date().getFullYear());
 
@@ -258,7 +258,7 @@ expensesRoutes.get('/monthly', async (c) => {
  */
 expensesRoutes.get('/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const repo = new ExpensesRepository(userId);
     const expense = await repo.get(c.req.param('id'));
     if (!expense) return notFoundError(c, 'Expense', c.req.param('id'));
@@ -273,7 +273,7 @@ expensesRoutes.get('/:id', async (c) => {
  */
 expensesRoutes.post('/', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const repo = new ExpensesRepository(userId);
     const body = await parseJsonBody(c);
     if (!body)
@@ -355,7 +355,7 @@ expensesRoutes.post('/', async (c) => {
  */
 expensesRoutes.put('/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const repo = new ExpensesRepository(userId);
     const body = await parseJsonBody(c);
     if (!body)
@@ -409,7 +409,7 @@ expensesRoutes.put('/:id', async (c) => {
  */
 expensesRoutes.delete('/:id', async (c) => {
   try {
-    const userId = LOCAL_OWNER_ID;
+    const userId = getUserId(c);
     const repo = new ExpensesRepository(userId);
     const id = c.req.param('id');
     const deleted = await repo.delete(id);

@@ -1,3 +1,4 @@
+import { getUserId } from './helpers.js';
 /**
  * Triggers Routes
  *
@@ -6,7 +7,6 @@
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 
-import { LOCAL_OWNER_ID } from '../config/defaults.js';
 import { Hono } from 'hono';
 import {
   type CreateTriggerInput,
@@ -109,7 +109,7 @@ function toCreateTriggerInput(body: ValidatedCreateTriggerBody): CreateTriggerIn
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.get('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const type = validateQueryEnum(c.req.query('type'), [
     'schedule',
     'event',
@@ -138,7 +138,7 @@ triggersRoutes.get('/', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.post('/', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const rawBody = await parseJsonBody(c);
   const { validateBody, createTriggerSchema } = await import('../middleware/validation.js');
   const body = toCreateTriggerInput(validateBody(createTriggerSchema, rawBody));
@@ -200,7 +200,7 @@ triggersRoutes.post('/', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.get('/stats', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const service = getTriggerService();
   const stats = await service.getStats(userId);
 
@@ -213,7 +213,7 @@ triggersRoutes.get('/stats', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.get('/history', pagination({ defaultLimit: 25, maxLimit: 200 }), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const { limit, offset } = c.get('pagination')!;
   const status = validateQueryEnum(c.req.query('status'), [
     'success',
@@ -248,7 +248,7 @@ triggersRoutes.get('/history', pagination({ defaultLimit: 25, maxLimit: 200 }), 
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.get('/due', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
 
   const service = getTriggerService();
   const triggers = await service.getDueTriggers(userId);
@@ -265,7 +265,7 @@ triggersRoutes.get('/due', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.get('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getTriggerService();
@@ -290,7 +290,7 @@ triggersRoutes.get('/:id', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.patch('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const body = await parseJsonBody<UpdateTriggerInput>(c);
   if (!body) {
@@ -337,7 +337,7 @@ triggersRoutes.patch('/:id', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.post('/:id/enable', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getTriggerService();
@@ -361,7 +361,7 @@ triggersRoutes.post('/:id/enable', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.post('/:id/disable', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getTriggerService();
@@ -385,7 +385,7 @@ triggersRoutes.post('/:id/disable', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.post('/:id/fire', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getTriggerService();
@@ -425,7 +425,7 @@ triggersRoutes.post('/:id/fire', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.delete('/:id', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getTriggerService();
@@ -448,7 +448,7 @@ triggersRoutes.delete('/:id', async (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.get('/:id/history', pagination({ defaultLimit: 25, maxLimit: 200 }), async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
   const { limit, offset } = c.get('pagination')!;
   const status = validateQueryEnum(c.req.query('status'), [
@@ -490,7 +490,7 @@ triggersRoutes.get('/:id/history', pagination({ defaultLimit: 25, maxLimit: 200 
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.post('/cleanup', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = await c.req
     .json<{ maxAgeDays?: number }>()
     .catch((): { maxAgeDays?: number } => ({}));
@@ -564,7 +564,7 @@ triggersRoutes.post('/engine/stop', (c) => {
  * Trust boundary: Trigger action payloads are read from the request body after Zod validation; the casts below adapt the validated shape to the trigger-engine's expected input. The Zod schema is the trust boundary.
  */
 triggersRoutes.post('/from-natural-language', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const rawBody = (await parseJsonBody<Record<string, unknown>>(c)) ?? {};
 
   if (

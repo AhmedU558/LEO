@@ -142,7 +142,7 @@ export async function enqueueWorkflowLevel(
           userId,
           orchestrateDownstream: false,
         } satisfies WorkflowNodePayload,
-        { queue: 'workflow_nodes' }
+        { queue: 'workflow_nodes', id: `wfnode:${workflowRunId}:${node.id}` }
       )
     )
   );
@@ -186,7 +186,14 @@ async function executeWorkflowNodeJob(job: JobRecord): Promise<Record<string, un
   // Build the execution context for dispatchNode
   // The real dispatchNode in WorkflowService does the full routing.
   // Here we inline the minimal dispatch for this node.
-  const result = await executeNodeInline(node, nodeOutputs, workflowSnapshot, userId, toolService);
+  const result = await executeNodeInline(
+    node,
+    nodeOutputs,
+    workflowSnapshot,
+    userId,
+    toolService,
+    job.leaseToken ? { jobId: job.id, leaseToken: job.leaseToken, effectIndex: 0 } : undefined
+  );
 
   // Persist node output to workflow log (enables crash recovery). Merge with
   // the latest log state so parallel nodes in the same level do not clobber
@@ -239,7 +246,8 @@ export async function executeNodeInline(
     variables: Record<string, unknown>;
   },
   userId: string,
-  toolService: IToolService
+  toolService: IToolService,
+  execContextJob?: { jobId: string; leaseToken: string; effectIndex: number }
 ): Promise<NodeResult> {
   const nodeExecutors = await import('./node-executors.js');
 
@@ -259,7 +267,8 @@ export async function executeNodeInline(
         nodeOutputs,
         workflowSnapshot.variables,
         userId,
-        toolService
+        toolService,
+        execContextJob
       );
 
     case 'toolNode':
@@ -268,7 +277,8 @@ export async function executeNodeInline(
         nodeOutputs,
         workflowSnapshot.variables,
         userId,
-        toolService
+        toolService,
+        execContextJob
       );
 
     case 'httpRequestNode':
@@ -319,6 +329,14 @@ export async function executeNodeInline(
         node,
         nodeOutputs,
         workflowSnapshot.variables
+      );
+
+    case 'browserNode':
+      return nodeExecutors.executeBrowserNode(
+        node,
+        nodeOutputs,
+        workflowSnapshot.variables,
+        userId
       );
 
     // errorHandlerNode / stickyNoteNode / approvalNode / parallelNode /
@@ -428,7 +446,7 @@ async function enqueueUnblockedDownstream(
         userId,
         orchestrateDownstream: true,
       } satisfies WorkflowNodePayload,
-      { queue: 'workflow_nodes' }
+      { queue: 'workflow_nodes', id: `wfnode:${workflowRunId}:${downId}` }
     );
     log.debug('Enqueued unblocked downstream node', {
       nodeId: downId,
@@ -507,7 +525,7 @@ export async function resumeWorkflowFromRecovery(
           userId,
           orchestrateDownstream: true,
         } satisfies WorkflowNodePayload,
-        { queue: 'workflow_nodes' }
+        { queue: 'workflow_nodes', id: `wfnode:${workflowRunId}:${nodeId}` }
       )
     )
   );

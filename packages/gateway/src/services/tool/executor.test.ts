@@ -156,6 +156,12 @@ vi.mock('../../tools/overrides/audio.js', () => ({
 vi.mock('../../tools/overrides/expense.js', () => ({ registerExpenseOverrides: vi.fn() }));
 
 const mockIdempotencyRepo = {
+  claimOperation: vi.fn(async (_user: string, _operation: string, requestHash: string) => ({
+    claimed: true,
+    state: 'pending',
+    requestHash,
+  })),
+  finishOperation: vi.fn(async () => {}),
   getRecord: vi.fn(async () => null),
   setRecord: vi.fn(async () => {}),
 };
@@ -425,8 +431,169 @@ describe('Tool Executor', () => {
           conversationId: 'system-execution',
           userId: 'user-1',
           executionPermissions: undefined,
+          signal: undefined,
         }
       );
+    });
+
+    // =======================================================================
+    // QA-016 — every effect is admitted through the atomic claim
+    // =======================================================================
+
+    describe('operation identity (QA-016)', () => {
+      beforeEach(() => {
+        mockToolRegistry.has.mockReturnValue(true);
+        mockToolRegistry.execute.mockResolvedValue({
+          ok: true,
+          value: { content: 'ok', isError: false },
+        });
+      });
+
+      it('claims an operation even when the caller supplies no operationId', async () => {
+        await executeTool('send_email', { to: 'a@example.com' }, 'user-1');
+
+        expect(mockIdempotencyRepo.claimOperation).toHaveBeenCalledTimes(1);
+        // The legacy result cache must not be consulted at all — it was the
+        // path that executed effects without a claim.
+        expect(mockIdempotencyRepo.getRecord).not.toHaveBeenCalled();
+        expect(mockIdempotencyRepo.setRecord).not.toHaveBeenCalled();
+      });
+
+      it('gives two identical un-identified calls independent identities', async () => {
+        await executeTool('send_email', { to: 'a@example.com' }, 'user-1');
+        await executeTool('send_email', { to: 'a@example.com' }, 'user-1');
+
+        const ids = mockIdempotencyRepo.claimOperation.mock.calls.map((c) => c[1]);
+        expect(ids).toHaveLength(2);
+        expect(ids[0]).not.toBe(ids[1]);
+        // Both ran: intentionally repeating an operation is not a retry.
+        expect(mockToolRegistry.execute).toHaveBeenCalledTimes(2);
+      });
+
+      it('reuses the caller operationId so a retry is admitted once', async () => {
+        await executeTool('send_email', { to: 'a@example.com' }, 'user-1', undefined, {
+          source: 'plan',
+          operationId: 'op-fixed',
+        });
+        expect(mockIdempotencyRepo.claimOperation.mock.calls[0]![1]).toBe('op-fixed');
+
+        // The second attempt loses the claim and replays the stored success.
+        mockIdempotencyRepo.claimOperation.mockResolvedValueOnce({
+          claimed: false,
+          state: 'success',
+          requestHash: mockIdempotencyRepo.claimOperation.mock.calls[0]![2],
+          result: { success: true, result: 'ok' },
+        });
+        const replay = await executeTool(
+          'send_email',
+          { to: 'a@example.com' },
+          'user-1',
+          undefined,
+          { source: 'plan', operationId: 'op-fixed' }
+        );
+
+        expect(replay).toEqual({ success: true, result: 'ok' });
+        // One admission, one effect.
+        expect(mockToolRegistry.execute).toHaveBeenCalledTimes(1);
+      });
+
+      it.each(['failed', 'cancelled', 'unknown'] as const)(
+        'never turns a recorded %s outcome into a success',
+        async (state) => {
+          // Echo back the fingerprint the executor computed, so this exercises
+          // the terminal-state branch rather than the argument-mismatch one.
+          mockIdempotencyRepo.claimOperation.mockImplementationOnce(
+            async (_user: string, _op: string, requestHash: string) => ({
+              claimed: false,
+              state,
+              requestHash,
+              result: { success: true, result: 'stale success' },
+            })
+          );
+
+          const result = await executeTool('send_email', {}, 'user-1', undefined, {
+            source: 'plan',
+            operationId: 'op-terminal',
+          });
+
+          expect(result.success).toBe(false);
+          expect(result.outcome).toBe(state);
+          expect(mockToolRegistry.execute).not.toHaveBeenCalled();
+        }
+      );
+
+      it('refuses to run when the same identity carries different arguments', async () => {
+        mockIdempotencyRepo.claimOperation.mockResolvedValueOnce({
+          claimed: false,
+          state: 'success',
+          requestHash: 'hash-of-other-arguments',
+          result: { success: true, result: 'other' },
+        });
+
+        const result = await executeTool(
+          'send_email',
+          { to: 'b@example.com' },
+          'user-1',
+          undefined,
+          {
+            source: 'plan',
+            operationId: 'op-reused',
+          }
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('different arguments');
+        expect(mockToolRegistry.execute).not.toHaveBeenCalled();
+      });
+
+      it('fails closed, without executing, when the claim cannot be persisted', async () => {
+        mockIdempotencyRepo.claimOperation.mockRejectedValueOnce(new Error('db down'));
+
+        const result = await executeTool('send_email', {}, 'user-1');
+
+        expect(result.success).toBe(false);
+        expect(result.outcome).toBe('unknown');
+        expect(mockToolRegistry.execute).not.toHaveBeenCalled();
+      });
+
+      it('records a cancelled outcome and never reports success when aborted', async () => {
+        const controller = new AbortController();
+        mockToolRegistry.execute.mockImplementation(async () => {
+          controller.abort();
+          return { ok: true, value: { content: 'ok', isError: false } };
+        });
+
+        const result = await executeTool('send_email', {}, 'user-1', undefined, {
+          source: 'plan',
+          operationId: 'op-cancel',
+          signal: controller.signal,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.outcome).toBe('cancelled');
+        expect(mockIdempotencyRepo.finishOperation).toHaveBeenCalledWith(
+          'user-1',
+          'op-cancel',
+          expect.any(String),
+          'cancelled',
+          expect.objectContaining({ outcome: 'cancelled' })
+        );
+      });
+
+      it('passes the abort signal down to the tool so cancellation reaches the effect', async () => {
+        const controller = new AbortController();
+        await executeTool('send_email', {}, 'user-1', undefined, {
+          source: 'plan',
+          operationId: 'op-signal',
+          signal: controller.signal,
+        });
+
+        expect(mockToolRegistry.execute).toHaveBeenCalledWith(
+          'send_email',
+          {},
+          expect.objectContaining({ signal: controller.signal })
+        );
+      });
     });
 
     it('returns error when registry tool execution returns isError', async () => {

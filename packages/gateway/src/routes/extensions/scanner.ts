@@ -1,10 +1,10 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions Scanner Routes
  *
  * POST /scan
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import { getGatewayExtensionService } from '../../services/extension/accessor.js';
 import { apiResponse, apiError, ERROR_CODES, getErrorMessage, parseJsonBody } from '../helpers.js';
@@ -18,7 +18,7 @@ const getExtService = getGatewayExtensionService;
  * POST /scan - Scan directory for packages
  */
 scannerRoutes.post('/scan', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const body = ((await parseJsonBody(c)) ?? {}) as { directory?: string };
 
   try {

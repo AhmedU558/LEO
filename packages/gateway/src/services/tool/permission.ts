@@ -14,6 +14,51 @@
  */
 
 import type { ExecutionPermissions } from '@ownpilot/core/tools';
+import { PolicyEngine, RiskEngine } from '@ownpilot/core/security';
+import type { Capability } from '@ownpilot/core/security';
+
+export function determineCapabilityForTool(toolName: string): Capability {
+  switch (toolName) {
+    case 'execute_shell':
+      return 'shell.execute';
+    case 'execute_python':
+      return 'computer.control';
+    case 'execute_javascript':
+      return 'computer.control';
+    case 'compile_code':
+      return 'computer.control';
+    case 'package_manager':
+      return 'computer.control';
+    case 'read_file':
+      return 'filesystem.read';
+    case 'write_file':
+      return 'filesystem.write';
+    case 'send_email':
+      return 'email.send';
+    case 'read_email':
+      return 'email.read';
+    case 'browse_web':
+    case 'browser_navigate':
+      return 'browser.navigate';
+    case 'browser_click':
+    case 'browser_type':
+    case 'browser_scroll':
+    case 'browser_wait_for':
+    case 'browser_select':
+    case 'browser_press_key':
+    case 'browser_hover':
+    case 'browser_fill_form':
+    case 'browser_extract':
+    case 'browser_extract_data':
+    case 'browser_screenshot':
+    case 'browser_accessibility_tree':
+    case 'browser_get_state':
+      return 'browser.read';
+    default:
+      return 'agent.execute';
+  }
+}
+
 import { getGroupForTool, getBaseName as coreGetBaseName } from '@ownpilot/core/tools';
 import { getLog } from '../log.js';
 import type { ToolExecContext } from '../permission/utils.js';
@@ -223,6 +268,41 @@ export async function checkToolPermission(
         code: 'REQUIRES_APPROVAL',
       };
     }
+  }
+
+  // =========================================================================
+  // 6. PolicyEngine Enforcement (QA-006)
+  // =========================================================================
+  const policyEngine = new PolicyEngine();
+  const riskEngine = new RiskEngine();
+  const capability = determineCapabilityForTool(baseName);
+  const risk = riskEngine.classify(capability, baseName);
+
+  const policyResult = policyEngine.evaluate({
+    identity: { userId, workspaceId: 'default', roles: [] },
+    action: baseName,
+    resource: 'tool_execution',
+    capability,
+    risk,
+    environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+    autonomous: isNonInteractiveContext(context.source),
+    requestedParameters: {},
+  });
+
+  if (policyResult.decision === 'DENY') {
+    return {
+      allowed: false,
+      reason: `PolicyEngine DENY: ${policyResult.reason}`,
+      code: 'EXECUTION_BLOCKED',
+    };
+  }
+
+  if (policyResult.decision === 'REQUIRE_APPROVAL' && isNonInteractiveContext(context.source)) {
+    return {
+      allowed: false,
+      reason: `PolicyEngine REQUIRES_APPROVAL: ${policyResult.reason}`,
+      code: 'REQUIRES_APPROVAL',
+    };
   }
 
   return { allowed: true };

@@ -1,5 +1,5 @@
 /**
- * Workflow Service — DAG Execution Engine
+ * Workflow Service â€” DAG Execution Engine
  *
  * Executes visual workflows as Directed Acyclic Graphs.
  * Uses topological sort for execution order, parallel execution within levels,
@@ -14,6 +14,7 @@ import {
   type WorkflowLog,
   type WorkflowLogStatus,
 } from '../../db/repositories/workflows/index.js';
+import { createWorkflowApprovalsRepository } from '../../db/repositories/workflows/approvals.js';
 import {
   getToolService as getCoreToolService,
   type IWorkflowService,
@@ -38,6 +39,11 @@ import {
   type DispatchCallbacks,
 } from './workflow-dispatch.js';
 import { WorkflowExecutionLocks } from './execution-locks.js';
+import {
+  executionTaskContext,
+  bindExecutionTaskRun,
+  assertExecutionTaskActive,
+} from '../execution-task-context.js';
 
 interface WorkflowServiceOptions {
   /** Poll interval for the jobified-level wait loop (ms). */
@@ -49,7 +55,7 @@ interface WorkflowServiceOptions {
    */
   jobifiedMaxWaitMs?: number;
   /**
-   * If true, every node executes inline via dispatchNode — the persistent job
+   * If true, every node executes inline via dispatchNode â€” the persistent job
    * queue is bypassed entirely. Intended for tests and deployments without a
    * running job worker. Production defaults to false so workflows get crash
    * recovery via the job queue. Controlled via WORKFLOW_INLINE_EXECUTION env.
@@ -112,10 +118,12 @@ export class WorkflowService implements IWorkflowService {
   ): Promise<WorkflowLog> {
     const dryRun = options?.dryRun ?? false;
     const depth = options?.depth ?? 0;
+    if (depth >= 10) throw new Error('Maximum workflow recursion depth exceeded');
     const repo = createWorkflowsRepository(userId);
     const workflow = await repo.get(workflowId);
     if (!workflow) throw new Error('Workflow not found');
     if (workflow.nodes.length === 0) throw new Error('Workflow has no nodes');
+    if (workflow.nodes.length > 1000) throw new Error('Maximum workflow node limit exceeded');
 
     // Merge input parameters into variables under __inputs namespace
     if (options?.inputs) {
@@ -132,13 +140,14 @@ export class WorkflowService implements IWorkflowService {
 
     // The execution lock is already held (tryAcquireExecutionLock above). Log
     // creation and the 'started' callback run before the main try/finally, so a
-    // throw here — a DB error in createLog, or a throwing onProgress consumer —
+    // throw here â€” a DB error in createLog, or a throwing onProgress consumer â€”
     // would leak the lock and wedge the workflow as permanently "running"
     // ("Workflow is already running" on every later run until the gateway
     // restarts). Release the lock explicitly on that setup path.
     let wfLog: WorkflowLog;
     try {
       wfLog = await repo.createLog(workflowId, workflow.name);
+      await bindExecutionTaskRun(workflowId, wfLog.id);
       // Emit started event so consumers (e.g. API endpoint) can capture the logId
       onProgress?.({ type: 'started', logId: wfLog.id });
     } catch (setupError) {
@@ -155,7 +164,7 @@ export class WorkflowService implements IWorkflowService {
       const nodeMap = new Map(executableNodes.map((n) => [n.id, n]));
       const nodeOutputs: Record<string, NodeResult> = {};
 
-      // Pre-compute ForEach body nodes — these are handled internally by executeForEachNode
+      // Pre-compute ForEach body nodes â€” these are handled internally by executeForEachNode
       const forEachBodyNodeSet = new Set<string>();
       for (const node of executableNodes) {
         if (node.type === 'forEachNode') {
@@ -164,7 +173,7 @@ export class WorkflowService implements IWorkflowService {
         }
       }
 
-      // Build alias map: nodeId → alias name (from outputAlias field on any node)
+      // Build alias map: nodeId â†’ alias name (from outputAlias field on any node)
       const aliasToNodeId = new Map<string, string>();
       for (const node of executableNodes) {
         const alias = nodeDataField(node, 'outputAlias') as string | undefined;
@@ -182,7 +191,7 @@ export class WorkflowService implements IWorkflowService {
 
       // Node types that must stay synchronous (not yet jobified).
       // Defined in node-types.ts so its parity with executeNodeInline's switch
-      // is enforced by node-types.test.ts — a type in neither falls through to
+      // is enforced by node-types.test.ts â€” a type in neither falls through to
       // the jobified handler's default branch.
       const SYNC_ONLY_TYPES = SYNC_ONLY_NODE_TYPES;
 
@@ -201,6 +210,7 @@ export class WorkflowService implements IWorkflowService {
           if (!node) throw new Error(`Node ${nodeId} not found`);
           if (
             this.inlineExecution ||
+            executionTaskContext.getStore() !== undefined ||
             nodeOutputs[nodeId]?.status === 'skipped' ||
             forEachBodyNodeSet.has(nodeId) ||
             SYNC_ONLY_TYPES.has(node.type)
@@ -323,7 +333,7 @@ export class WorkflowService implements IWorkflowService {
             // Promise.allSettled captures it as a rejected result, so we must
             // re-throw it (below, after the rest of the level is captured).
             // Otherwise it is recorded as a failed node and the finalize step
-            // overwrites the 'awaiting_approval' status with 'failed' — leaving
+            // overwrites the 'awaiting_approval' status with 'failed' â€” leaving
             // the workflow un-resumable. Keep the node's persisted 'running'
             // state rather than marking it an error.
             approvalPause = settled.reason;
@@ -513,7 +523,7 @@ export class WorkflowService implements IWorkflowService {
       const finalLog = await repo.getLog(wfLog.id);
       return finalLog ?? wfLog;
     } catch (error) {
-      // Approval pause — not a failure, workflow is waiting for approval
+      // Approval pause â€” not a failure, workflow is waiting for approval
       if (error instanceof ApprovalPauseError) {
         const finalLog = await repo.getLog(wfLog.id);
         return finalLog ?? wfLog;
@@ -550,13 +560,27 @@ export class WorkflowService implements IWorkflowService {
    * from where it left off (skipping already-completed nodes).
    */
   async resumeFromApproval(
-    workflowId: string,
+    approvalId: string,
     userId: string,
-    approvalNodeId: string,
-    approvalResult: 'approved' | 'rejected',
-    logId: string,
     onProgress?: (event: WorkflowProgressEvent) => void
   ): Promise<WorkflowLog> {
+    const approvalRepo = createWorkflowApprovalsRepository(userId);
+    const approval = await approvalRepo.get(approvalId);
+
+    if (!approval) throw new Error('Approval not found');
+    if (
+      ((approval.context || {}) as any).executionTaskId &&
+      ((approval.context || {}) as any).executionTaskId !== executionTaskContext.getStore()?.taskId
+    )
+      throw new Error('Managed approval requires its execution task worker');
+    if (approval.status === 'rejected') throw new Error('Approval was rejected');
+    if (approval.status === 'pending') throw new Error('Approval is still pending');
+    if (approval.expiresAt && approval.expiresAt.getTime() < Date.now()) {
+      throw new Error('Approval has expired');
+    }
+
+    const { workflowId, workflowLogId: logId, nodeId: approvalNodeId } = approval;
+
     const repo = createWorkflowsRepository(userId);
     const workflow = await repo.get(workflowId);
     if (!workflow) throw new Error('Workflow not found');
@@ -570,25 +594,17 @@ export class WorkflowService implements IWorkflowService {
     // Restore node outputs from the paused log
     const savedNodeOutputs = pausedLog.nodeResults ?? {};
 
-    // Mark the approval node as completed with the decision
-    savedNodeOutputs[approvalNodeId] = {
-      nodeId: approvalNodeId,
-      status: 'success',
-      output: { approved: approvalResult === 'approved', decision: approvalResult },
-      startedAt: savedNodeOutputs[approvalNodeId]?.startedAt ?? new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    };
-
-    // If rejected, mark the workflow as failed
-    if (approvalResult === 'rejected') {
-      await repo.updateLog(logId, {
-        status: 'failed',
-        error: 'Approval rejected',
-        nodeResults: savedNodeOutputs,
+    // If this was an explicit approval node, mark it completed so we don't pause again.
+    // Otherwise (e.g. policy pause on a codeNode), leave it uncompleted so it re-executes
+    // and the dispatch layer sees the 'approved' record and allows it to proceed.
+    if (approval.action === 'workflow.approve') {
+      savedNodeOutputs[approvalNodeId] = {
+        nodeId: approvalNodeId,
+        status: 'success',
+        output: { approved: true, decision: 'approved' },
+        startedAt: savedNodeOutputs[approvalNodeId]?.startedAt ?? new Date().toISOString(),
         completedAt: new Date().toISOString(),
-      });
-      const finalLog = await repo.getLog(logId);
-      return finalLog ?? pausedLog;
+      };
     }
 
     // Atomically acquire execution lock to prevent race conditions
@@ -601,7 +617,7 @@ export class WorkflowService implements IWorkflowService {
     // The execution lock is already held (tryAcquireExecutionLock above). The
     // status update and 'started' callback run before the main try/finally, so
     // a throw here would leak the lock and wedge the workflow as permanently
-    // "running" — and it would be stuck un-resumable. Release on the setup path.
+    // "running" â€” and it would be stuck un-resumable. Release on the setup path.
     try {
       // Update log status to running for resume
       await repo.updateLog(logId, { status: 'running', nodeResults: savedNodeOutputs });
@@ -740,7 +756,7 @@ export class WorkflowService implements IWorkflowService {
           if (settled.status === 'fulfilled') {
             nodeOutputs[nodeId] = settled.value;
           } else if (settled.reason instanceof ApprovalPauseError) {
-            // A second approval node hit during resume — re-throw (after the
+            // A second approval node hit during resume â€” re-throw (after the
             // level) so the workflow pauses again rather than being marked
             // failed. See the matching note in executeWorkflow.
             approvalPause = settled.reason;
@@ -946,7 +962,25 @@ export class WorkflowService implements IWorkflowService {
    * Cancel a running workflow execution.
    */
   cancelExecution(workflowId: string): boolean {
-    return this.locks.cancel(workflowId);
+    const cancelled = this.locks.cancel(workflowId);
+    if (cancelled) {
+      // Invalidate pending approvals in background.
+      //
+      // The catch must sit on the END of the chain, not on the inner call: a
+      // synchronous throw inside the .then() callback (a missing export, a
+      // repository constructor that fails) rejects the import promise before
+      // the inner .catch() is ever attached, which surfaced as an unhandled
+      // rejection that can take the process down under
+      // --unhandled-rejections=strict.
+      void import('../../db/repositories/workflows/approvals.js')
+        .then(({ createWorkflowApprovalsRepository }) =>
+          createWorkflowApprovalsRepository('system').rejectByWorkflow(workflowId)
+        )
+        .catch((err: unknown) => {
+          console.error('Failed to invalidate approvals for cancelled workflow', err);
+        });
+    }
+    return cancelled;
   }
 
   /**
@@ -957,19 +991,20 @@ export class WorkflowService implements IWorkflowService {
   }
 
   // ==========================================================================
-  // Centralized node dispatch — eliminates duplicate if/else chains
+  // Centralized node dispatch â€” eliminates duplicate if/else chains
   // ==========================================================================
 
   /**
    * Dispatch execution of a single node by type.
    * Used by both executeWorkflow() and resumeFromApproval().
    */
-  /** Dispatch node to its executor — delegates to workflow-dispatch.ts. */
+  /** Dispatch node to its executor â€” delegates to workflow-dispatch.ts. */
   private async dispatchNode(ctx: Parameters<typeof dispatchNodeImpl>[0]): Promise<NodeResult> {
+    await assertExecutionTaskActive();
     return dispatchNodeImpl(ctx, this.dispatchCallbacks);
   }
 
-  /** Wrap node execution with retry/timeout — delegates to workflow-dispatch.ts. */
+  /** Wrap node execution with retry/timeout â€” delegates to workflow-dispatch.ts. */
   private async executeWithRetryAndTimeout(
     node: WorkflowNode,
     executeFn: () => Promise<NodeResult>,

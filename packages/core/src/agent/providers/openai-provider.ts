@@ -30,6 +30,7 @@ import { getErrorMessage } from '../../services/error-utils.js';
 import { desanitizeToolName } from '../tool-namespace.js';
 import { getAuthHeader, type ResolvedAuth } from './configs/types.js';
 import { readSseData, runProviderHealthCheck } from './shared.js';
+import { silentCatch } from '../../utils/ignore-error.js';
 
 /**
  * Build the Authorization header from either the new `resolvedAuth`
@@ -148,6 +149,8 @@ export class OpenAIProvider extends BaseProvider {
 
     const endpoint = `${this.config.baseUrl}/chat/completions`;
 
+    if (request.transient) return this.completeTransient(request, body, endpoint);
+
     // Log request with payload breakdown
     const debugInfo = buildRequestDebugInfo(
       'openai',
@@ -244,6 +247,80 @@ export class OpenAIProvider extends BaseProvider {
 
     // Cast result to expected type (withRetry only returns our specific error types)
     return result as Result<CompletionResponse, InternalError | TimeoutError | ValidationError>;
+  }
+
+  private async completeTransient(
+    request: CompletionRequest,
+    body: unknown,
+    endpoint: string
+  ): Promise<Result<CompletionResponse, InternalError | TimeoutError>> {
+    const options = request.transient!;
+    const limit = options.maxResponseBytes;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 65536)
+      return err(new InternalError('Invalid transient response limit'));
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.min(this.config.timeout ?? 30000, 30000)
+    );
+    const signal = AbortSignal.any([options.signal, controller.signal]);
+    try {
+      signal.throwIfAborted();
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader(this.config) },
+        body: JSON.stringify(body),
+        signal,
+      });
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        throw new Error('Unavailable provider');
+      }
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let bytes = 0;
+      try {
+        for (;;) {
+          signal.throwIfAborted();
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > limit) throw new Error('Oversized model response');
+          chunks.push(chunk.value);
+        }
+      } finally {
+        await reader.cancel().catch(silentCatch('transient-model-reader-cancel'));
+        reader.releaseLock();
+      }
+      signal.throwIfAborted();
+      const data = JSON.parse(Buffer.concat(chunks).toString('utf8')) as OpenAIResponse;
+      const choice = data.choices?.[0];
+      if (
+        data.choices?.length !== 1 ||
+        choice?.finish_reason !== 'stop' ||
+        typeof choice.message?.content !== 'string' ||
+        !choice.message.content.trim() ||
+        (choice.message.tool_calls?.length ?? 0) > 0
+      )
+        throw new Error('Unverified model response');
+      return ok({
+        id: '',
+        content: choice.message.content,
+        model: request.model.model,
+        finishReason: 'stop',
+        createdAt: new Date(),
+      });
+    } catch {
+      if (controller.signal.aborted)
+        return err(
+          new TimeoutError('Transient model request', Math.min(this.config.timeout ?? 30000, 30000))
+        );
+      return err(new InternalError('Transient model request failed'));
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
   }
 
   async *stream(

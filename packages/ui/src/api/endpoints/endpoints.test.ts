@@ -2352,6 +2352,14 @@ describe('simple passthrough endpoints', () => {
       currentPassword: 'old',
     });
 
+    const bootstrapToken = 'b'.repeat(64);
+    await authApi.setPassword({ password: 'new' }, bootstrapToken);
+    expect(mockPost).toHaveBeenLastCalledWith(
+      '/auth/password',
+      { password: 'new' },
+      { headers: { 'X-Bootstrap-Token': bootstrapToken } }
+    );
+
     await authApi.removePassword();
     expect(mockDelete).toHaveBeenLastCalledWith('/auth/password');
 

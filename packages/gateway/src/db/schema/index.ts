@@ -1,3 +1,5 @@
+export * from './media.js';
+export * from './content.js';
 /**
  * PostgreSQL Schema Definition
  *
@@ -6,6 +8,10 @@
  */
 
 import { getLog } from '../../services/log.js';
+import { EXECUTION_TASKS_SQL } from './execution-tasks.js';
+import { ACTION_LEDGER_SQL } from './action-ledger.js';
+import { SOCIAL_SQL } from './social.js';
+import { MEDIA_CONTENT_SQL } from './media-sql.js';
 
 import { CORE_TABLES_SQL, CORE_MIGRATIONS_SQL, CORE_INDEXES_SQL } from './core.js';
 import {
@@ -86,6 +92,10 @@ export const MIGRATIONS_SQL = [
   CHANNELS_MIGRATIONS_SQL,
   CLAW_MIGRATIONS_SQL,
   UI_SESSIONS_MIGRATIONS_SQL,
+  EXECUTION_TASKS_SQL,
+  ACTION_LEDGER_SQL,
+  SOCIAL_SQL,
+  MEDIA_CONTENT_SQL,
 ].join('\n');
 
 /**

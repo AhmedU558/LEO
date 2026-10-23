@@ -173,7 +173,7 @@ export function createApp(config: Partial<GatewayConfig> = {}): Hono {
   // (HTTPS_ONLY) controls both — they're always paired.
   if (process.env.HTTPS_ONLY === 'true') {
     app.use('*', async (c, next) => {
-      if (isSecureRequest(c.req)) return next();
+      if (isSecureRequest(c)) return next();
 
       const url = new URL(c.req.url);
       if (url.protocol === 'http:') {
@@ -277,17 +277,13 @@ export function createApp(config: Partial<GatewayConfig> = {}): Hono {
   // mirror (registerV2Routes) is covered too. The unprefixed /health route is
   // not under /api/* and stays public for container health checks.
   const authType = fullConfig.auth?.type ?? 'none';
-  const bindHost = (fullConfig.host ?? '127.0.0.1').trim().toLowerCase();
-  const isLoopbackBind =
-    bindHost === '' ||
-    bindHost === 'localhost' ||
-    bindHost === '::1' ||
-    bindHost === '[::1]' ||
-    /^127(?:\.\d{1,3}){3}$/.test(bindHost);
+  // QA-001: Disable implicit owner fallback in production unless explicitly requested.
+  // We can't rely on loopback bindings because production nodes often bind to 127.0.0.1 behind a proxy.
   app.use(
     '/api/*',
     createUiSessionMiddleware({
-      allowImplicitOwnerWithoutPassword: authType === 'none' || isLoopbackBind,
+      allowImplicitOwnerWithoutPassword: authType === 'none',
+      apiAuthEnabled: authType !== 'none',
     })
   );
 

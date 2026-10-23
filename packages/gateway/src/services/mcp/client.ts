@@ -41,7 +41,7 @@ interface McpConnection {
 // SERVICE
 // =============================================================================
 
-class McpClientService implements IMcpClientService {
+export class McpClientService implements IMcpClientService {
   private connections = new Map<string, McpConnection>();
 
   /**
@@ -69,9 +69,9 @@ class McpClientService implements IMcpClientService {
       await client.connect(transport);
 
       // Handle post-connection transport/client errors gracefully
-      // Without these, a dying MCP server causes unhandled rejections → process crash
+      // Without these, a dying MCP server causes unhandled rejections â†’ process crash
       const handleTransportError = (err: unknown) => {
-        log.warn(`MCP server "${server.displayName}" transport error — disconnecting`, {
+        log.warn(`MCP server "${server.displayName}" transport error â€” disconnecting`, {
           error: err instanceof Error ? err.message : String(err),
         });
         this.handleUnexpectedDisconnect(server.name, server.id).catch((e) =>
@@ -118,7 +118,7 @@ class McpClientService implements IMcpClientService {
         tools: mcpTools.map((t) => ({ name: t.name, description: t.description })),
       });
 
-      log.info(`Connected to MCP server "${server.displayName}" — ${mcpTools.length} tools`);
+      log.info(`Connected to MCP server "${server.displayName}" â€” ${mcpTools.length} tools`);
 
       return mcpTools;
     } catch (err) {
@@ -301,11 +301,26 @@ class McpClientService implements IMcpClientService {
           throw new Error('stdio transport requires a command');
         }
 
+        const baseEnv = {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          USER: process.env.USER,
+          APPDATA: process.env.APPDATA,
+          LOCALAPPDATA: process.env.LOCALAPPDATA,
+          TEMP: process.env.TEMP,
+          TMP: process.env.TMP,
+          LANG: process.env.LANG,
+        };
+        // Remove undefined values
+        const cleanEnv = Object.fromEntries(
+          Object.entries(baseEnv).filter(([_, v]) => v !== undefined)
+        ) as Record<string, string>;
+
         return new StdioClientTransport({
           command: server.command,
           args: server.args,
           env: {
-            ...(process.env as Record<string, string>),
+            ...cleanEnv,
             ...server.env,
           },
           stderr: 'pipe',
@@ -374,7 +389,35 @@ class McpClientService implements IMcpClientService {
           overrides?.workflowUsable !== undefined ? overrides.workflowUsable : undefined,
       };
 
-      const executor = async (args: Record<string, unknown>): Promise<ToolExecutionResult> => {
+      const executor = async (
+        args: Record<string, unknown>,
+        context?: import('@ownpilot/core/tools').ToolContext
+      ): Promise<ToolExecutionResult> => {
+        // QA-025/QA-026: Workspace/User Isolation
+        const userId = context?.userId || (context as any)?.metadata?.userId;
+        if (!userId) {
+          return {
+            content: 'PolicyEngine DENY: Missing execution context (userId) for MCP tool execution',
+            isError: true,
+          };
+        }
+
+        // Verify provider ownership
+        const repo = getMcpServersRepo();
+        const serverRecord = await repo.getByName(serverName, userId as string);
+        if (!serverRecord) {
+          return {
+            content: `PolicyEngine DENY: MCP server "${serverName}" is not authorized or not found for user ${userId}`,
+            isError: true,
+          };
+        }
+        if (!serverRecord.enabled) {
+          return {
+            content: `PolicyEngine DENY: MCP server "${serverName}" is disabled`,
+            isError: true,
+          };
+        }
+
         try {
           const result = await this.callTool(serverName, tool.name, args);
           let content: string;

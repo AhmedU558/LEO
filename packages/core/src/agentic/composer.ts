@@ -29,6 +29,10 @@ import type {
 } from './types.js';
 import { getCapabilityRegistry, type CapabilityRegistry } from './capability-registry.js';
 import { AgenticRouter } from './router.js';
+import { PolicyEngine } from '../security/policy-engine.js';
+import { RiskEngine } from '../security/risk-engine.js';
+import { ActionLedger } from '../security/action-ledger.js';
+import type { Capability } from '../security/capabilities.js';
 
 // ============================================================================
 // Execution Context
@@ -160,6 +164,8 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
   private readonly router: AgenticRouter;
   private readonly registry: CapabilityRegistry;
   private readonly stepHandler: StepDispatchFn | null;
+  private readonly policyEngine = new PolicyEngine();
+  private readonly riskEngine = new RiskEngine();
 
   /**
    * Shared static store across orchestrator instances — enables
@@ -354,7 +360,16 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
     const failed = new Set<number>();
     const signal = state.abortController?.signal;
 
+    let _orchestratorLoopCount = 0;
+    const MAX_ORCHESTRATOR_STEPS = 100;
     while (completed.size + failed.size < steps.length) {
+      if (++_orchestratorLoopCount > MAX_ORCHESTRATOR_STEPS) {
+        state.status = 'failed';
+        this.recordStepResult(state, steps[0]!, 'failed', null, {
+          error: 'Maximum autonomous step limit exceeded',
+        });
+        break;
+      }
       if (signal?.aborted) {
         state.status = 'cancelled';
         return;
@@ -428,7 +443,7 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
       const startTime = Date.now();
 
       try {
-        const { output, costUsd } = await this.executeStepWithTimeout(step, signal);
+        const { output, costUsd } = await this.executeStepWithTimeout(step, state, signal);
 
         const durationMs = Date.now() - startTime;
         this.recordStepResult(state, step, 'completed', output, {
@@ -467,6 +482,7 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
    */
   private async executeStepWithTimeout(
     step: ExecutionStep,
+    state: ExecutionState,
     signal?: AbortSignal
   ): Promise<{ output: unknown; costUsd?: number }> {
     const timeoutMs = step.timeoutMs ?? 60_000;
@@ -490,7 +506,7 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
     let timer: NodeJS.Timeout | undefined;
     try {
       return await Promise.race([
-        this.dispatchStep(step, stepAbort.signal),
+        this.dispatchStep(step, state, stepAbort.signal),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
             stepAbort.abort(new Error(`Step ${step.index} timed out after ${timeoutMs}ms`));
@@ -516,28 +532,123 @@ export class AgenticOrchestrator implements IAgenticOrchestrator {
    */
   private async dispatchStep(
     step: ExecutionStep,
+    state: ExecutionState,
     signal?: AbortSignal
   ): Promise<{ output: unknown; costUsd?: number }> {
-    if (this.stepHandler) {
-      const result = await this.stepHandler(step, signal);
-      if (!result.success) {
-        throw new Error(result.error ?? `Step ${step.index} (${step.executorKind}) failed`);
-      }
-      // Carry the executor's real cost through so executeStep records it instead
-      // of the per-kind estimate (the previous code dropped result.costUsd).
-      return { output: result.output, costUsd: result.costUsd };
+    // Map legacy OwnPilot capability IDs to LEO formal capabilities
+    let capabilityId: Capability = 'agent.execute';
+    if (step.capabilityId.startsWith('sandbox:')) capabilityId = 'shell.execute';
+    else if (step.capabilityId.startsWith('tools:')) capabilityId = 'task.execute';
+    else if (step.capabilityId.startsWith('channel:')) capabilityId = 'email.send';
+
+    const action = 'execute';
+
+    // 1. Calculate Risk
+    const risk = this.riskEngine.classify(capabilityId, action);
+
+    // 2. Evaluate Policy
+    const decision = this.policyEngine.evaluate({
+      identity: state.task.identity,
+      action,
+      resource: step.providerId,
+      capability: capabilityId,
+      risk,
+      environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      autonomous: true, // currently all composed tasks are autonomous
+      requestedParameters: step.params,
+    });
+
+    // 3. Approval Flow (simulated for Phase 2)
+    if (decision.decision === 'REQUIRE_APPROVAL') {
+      // In phase 2 we fail closed if approval is required but not handled
+      // In future phases this would pause execution and notify the user
+      throw new Error(`Step ${step.index} requires explicit approval: ${decision.reason}`);
     }
 
-    // Default placeholder — no gateway handler wired
-    return {
-      output: {
-        executorKind: step.executorKind,
-        capabilityId: step.capabilityId,
-        params: step.params,
-        dispatched: true,
-        timestamp: new Date().toISOString(),
-      },
-    };
+    if (decision.decision === 'DENY') {
+      // 4. Log Denial to Ledger
+      await ActionLedger.record({
+        userId: state.task.identity?.userId ?? 'unknown',
+        workspaceId: state.task.identity?.workspaceId ?? 'unknown',
+        taskId: state.task.id,
+        tool: step.executorKind,
+        action,
+        resource: step.providerId,
+        resourceType: 'tool',
+        capability: capabilityId,
+        policyDecision: decision.decision,
+        riskLevel: risk,
+        executionEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+        error: decision.reason,
+        durationMs: 0,
+        costUsd: 0,
+      });
+      throw new Error(`Step ${step.index} denied by Policy Engine: ${decision.reason}`);
+    }
+
+    const startMs = Date.now();
+    let resultOutput: unknown = null;
+    let resultCost: number | undefined = undefined;
+    let resultError: Error | undefined = undefined;
+
+    // 5. Pre-execution Action Ledger Recording (Transaction Boundary Start)
+    const ledgerEntry = await ActionLedger.record({
+      userId: state.task.identity?.userId ?? 'unknown',
+      workspaceId: state.task.identity?.workspaceId ?? 'unknown',
+      taskId: state.task.id,
+      tool: step.executorKind,
+      action,
+      resource: step.providerId,
+      resourceType: 'tool',
+      capability: capabilityId,
+      policyDecision: decision.decision,
+      riskLevel: risk,
+      executionEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      durationMs: 0,
+      costUsd: 0,
+    });
+
+    // 6. Tool Executor
+    try {
+      if (this.stepHandler) {
+        const result = await this.stepHandler(step, signal);
+        if (!result.success) {
+          throw new Error(result.error ?? `Step ${step.index} (${step.executorKind}) failed`);
+        }
+        resultOutput = result.output;
+        resultCost = result.costUsd;
+      } else {
+        // Default placeholder — no gateway handler wired
+        resultOutput = {
+          executorKind: step.executorKind,
+          capabilityId: step.capabilityId,
+          params: step.params,
+          dispatched: true,
+          timestamp: new Date().toISOString(),
+        };
+      }
+    } catch (err) {
+      resultError = err instanceof Error ? err : new Error(String(err));
+      throw resultError;
+    } finally {
+      // 7. Post-execution Action Ledger Update (Transaction Boundary End)
+      await ActionLedger.updateResult(
+        ledgerEntry.actionId,
+        {
+          result: resultError ? undefined : 'success',
+          error: resultError?.message,
+        },
+        Date.now() - startMs
+      );
+      // Cost update isn't supported by updateResult yet, but keeping the format
+      if (resultCost !== undefined) {
+        // We'll just patch the entry manually for now since updateResult doesn't take costUsd
+        const entry = await ActionLedger.getByActionId(ledgerEntry.actionId);
+        if (entry) entry.costUsd = resultCost;
+      }
+    }
+
+    return { output: resultOutput, costUsd: resultCost };
   }
 
   /**
@@ -670,6 +781,7 @@ export function createResearchPipeline(
         tags: ['research', topic.toLowerCase()],
       },
     },
+    identity: { userId: 'system', workspaceId: 'default', roles: [] },
   };
 }
 
@@ -700,6 +812,7 @@ export function createMonitoringPipeline(
         ? { provider: outputChannel.provider, chatId: outputChannel.chatId }
         : undefined,
     },
+    identity: { userId: 'system', workspaceId: 'default', roles: [] },
   };
 }
 
@@ -733,5 +846,6 @@ export function createCodePipeline(
       memory: true,
       artifact: { name: `code-${Date.now()}`, tags: ['code', lang.toLowerCase()] },
     },
+    identity: { userId: 'system', workspaceId: 'default', roles: [] },
   };
 }

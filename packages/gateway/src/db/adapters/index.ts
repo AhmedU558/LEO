@@ -31,7 +31,48 @@ export async function createAdapter(config?: DatabaseConfig): Promise<DatabaseAd
 
     // Initialize schema on first connection
     if (!schemaInitialized) {
-      await initializeSchema(async (sql) => pgAdapter.exec(sql));
+      await pgAdapter.transaction(async () => {
+        await pgAdapter.exec('SELECT pg_advisory_xact_lock(1492)');
+
+        let skip = false;
+        const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
+
+        if (isTest) {
+          // Querying a missing table aborts PostgreSQL's transaction even if
+          // JavaScript catches the error. Check existence without raising SQL errors.
+          const table = await pgAdapter.query<{ name: string | null }>(
+            "SELECT to_regclass('public.system_settings') AS name"
+          );
+          if (table[0]?.name) {
+            const res = await pgAdapter.query<{ value: string }>(
+              'SELECT value FROM system_settings WHERE key = $1',
+              ['schema_init_time']
+            );
+            const lastInitStr = res[0]?.value;
+            if (lastInitStr) {
+              const lastInit = parseInt(lastInitStr, 10);
+              // If schema was initialized in the last 60 seconds, assume another parallel worker just did it
+              if (Date.now() - lastInit < 60000) {
+                skip = true;
+                log.info(
+                  '[Schema] Skipped initializeSchema (recently initialized by another test worker)'
+                );
+              }
+            }
+          }
+        }
+
+        if (!skip) {
+          await initializeSchema(async (sql) => pgAdapter.exec(sql));
+
+          if (isTest) {
+            await pgAdapter.execute(
+              "INSERT INTO system_settings (key, value) VALUES ('schema_init_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+              [Date.now().toString()]
+            );
+          }
+        }
+      });
       schemaInitialized = true;
     }
   } catch (err) {

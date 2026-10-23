@@ -10,15 +10,17 @@
  * - Timeout enforcement
  */
 
-import { spawn, exec } from 'child_process';
+import { spawn, exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { randomUUID } from 'node:crypto';
 import { getLog } from '../services/get-log.js';
 import { getErrorMessage } from '../services/error-utils.js';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const log = getLog('Sandbox');
 
 // Sandbox configuration
@@ -75,6 +77,19 @@ const DEFAULT_CONFIG: Required<SandboxConfig> = {
 
 let dockerAvailable: boolean | null = null;
 let dockerCheckPromise: Promise<boolean> | null = null;
+/**
+ * When the last negative `docker info` probe was recorded.
+ *
+ * An unavailable answer must not be cached for the life of the process. The
+ * probe has a 5s timeout and `docker info` is slow under load, so one busy
+ * moment — several sandbox containers starting at once — used to latch
+ * `dockerAvailable = false` permanently, and every later isolated execution
+ * failed closed with "Docker is not available" until the process restarted.
+ * Availability is fail-closed but recoverable: a positive result is cached
+ * indefinitely, a negative one only until this window expires.
+ */
+let dockerUnavailableSince = 0;
+const DOCKER_UNAVAILABLE_RETRY_MS = 10_000;
 let securityFlagsSupported: boolean | null = null;
 let lastHealthCheck: SandboxHealthStatus | null = null;
 
@@ -95,8 +110,14 @@ export interface SandboxHealthStatus {
  * Check if Docker is available and running
  */
 export async function isDockerAvailable(): Promise<boolean> {
-  if (dockerAvailable !== null) {
-    return dockerAvailable;
+  if (dockerAvailable === true) return true;
+  // A negative answer expires, so a transient probe failure does not disable
+  // isolated execution for the rest of the process's life.
+  if (
+    dockerAvailable === false &&
+    Date.now() - dockerUnavailableSince < DOCKER_UNAVAILABLE_RETRY_MS
+  ) {
+    return false;
   }
 
   // Deduplicate concurrent checks — only one Docker probe runs at a time
@@ -111,6 +132,7 @@ export async function isDockerAvailable(): Promise<boolean> {
       return true;
     } catch {
       dockerAvailable = false;
+      dockerUnavailableSince = Date.now();
       return false;
     } finally {
       dockerCheckPromise = null;
@@ -238,6 +260,7 @@ export async function getSandboxStatus(forceRefresh = false): Promise<SandboxHea
  */
 export function resetSandboxCache(): void {
   dockerAvailable = null;
+  dockerUnavailableSince = 0;
   securityFlagsSupported = null;
   lastHealthCheck = null;
 }
@@ -275,7 +298,8 @@ export async function ensureImage(image: string): Promise<boolean> {
 export async function executeInSandbox(
   code: string,
   language: 'python' | 'javascript' | 'shell',
-  config: SandboxConfig = {}
+  config: SandboxConfig = {},
+  signal?: AbortSignal
 ): Promise<SandboxResult> {
   const startTime = Date.now();
 
@@ -291,26 +315,12 @@ export async function executeInSandbox(
     };
   }
 
-  // Auto-detect if relaxed security is needed (only test once)
-  let useRelaxedSecurity = config.relaxedSecurity ?? false;
-  if (!useRelaxedSecurity && securityFlagsSupported === null) {
-    // First run - test security flags
-    const flagsSupported = await testSecurityFlags();
-    if (!flagsSupported) {
-      log.info('Auto-enabling relaxed security mode due to Docker compatibility');
-      useRelaxedSecurity = true;
-    }
-  } else if (!useRelaxedSecurity && securityFlagsSupported === false) {
-    // Already tested and not supported
-    useRelaxedSecurity = true;
-  }
-
   // Merge config with defaults
   const cfg: Required<SandboxConfig> = {
     ...DEFAULT_CONFIG,
     ...config,
     image: config.image ?? DEFAULT_IMAGES[language] ?? DEFAULT_CONFIG.image,
-    relaxedSecurity: useRelaxedSecurity,
+    relaxedSecurity: false,
   };
 
   // Ensure image is available
@@ -338,7 +348,7 @@ export async function executeInSandbox(
     const dockerArgs = buildDockerArgs(tempDir, language, cfg);
 
     // Execute in container
-    const result = await runDockerContainer(dockerArgs, cfg.timeout);
+    const result = await runDockerContainer(dockerArgs, cfg.timeout, signal);
 
     return {
       ...result,
@@ -412,7 +422,6 @@ function buildDockerArgs(
   // Add security flags unless relaxedSecurity is enabled
   // Some Docker versions/configurations don't support --no-new-privileges
   if (!config.relaxedSecurity) {
-    args.push('--no-new-privileges'); // Prevent privilege escalation
     args.push('--cap-drop=ALL'); // Drop all capabilities
     args.push('--security-opt=no-new-privileges:true');
   } else {
@@ -451,7 +460,8 @@ function buildDockerArgs(
  */
 function runDockerContainer(
   args: string[],
-  timeout: number
+  timeout: number,
+  signal?: AbortSignal
 ): Promise<Omit<SandboxResult, 'executionTimeMs'>> {
   return new Promise((resolve) => {
     let stdout = '';
@@ -459,15 +469,46 @@ function runDockerContainer(
     let killed = false;
     let timedOut = false;
 
-    const child = spawn('docker', args, {
+    const name = `leo-sandbox-${randomUUID()}`;
+
+    // Single-flight teardown. Cancellation and process close both want the
+    // container gone, and both used to run their own `docker rm --force`. The
+    // second one races the first, the daemon answers "removal ... is already in
+    // progress", that is not the tolerated "No such container", so it threw —
+    // the close handler reported a cleanup failure and resolved while the
+    // container was still being removed, leaving a live container behind after
+    // an aborted run. Sharing one promise means abort() starts teardown
+    // immediately, close() awaits that same teardown, and the container is gone
+    // before the result is returned.
+    let removal: Promise<void> | undefined;
+    const removeContainer = (): Promise<void> => {
+      removal ??= (async () => {
+        try {
+          await execFileAsync('docker', ['rm', '--force', name], { timeout: 5000 });
+        } catch (error) {
+          // --rm normally removes an exited container before this final cleanup.
+          if (!getErrorMessage(error).includes('No such container')) throw error;
+        }
+      })();
+      return removal;
+    };
+    const child = spawn('docker', [args[0]!, '--name', name, ...args.slice(1)], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const abort = () => {
+      killed = true;
+      child.kill('SIGKILL');
+      void removeContainer().catch((error: unknown) => {
+        log.error('Failed to terminate sandbox container', { name, error: getErrorMessage(error) });
+      });
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
 
     // Timeout handler
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      killed = true;
-      child.kill('SIGKILL');
+      abort();
     }, timeout);
 
     // Capture stdout
@@ -476,8 +517,7 @@ function runDockerContainer(
       // Limit output size
       if (stdout.length > 1024 * 1024) {
         stdout = stdout.slice(0, 1024 * 1024) + '\n[Output truncated]';
-        killed = true;
-        child.kill('SIGKILL');
+        abort();
       }
     });
 
@@ -490,30 +530,50 @@ function runDockerContainer(
     });
 
     // Handle completion
-    child.on('close', (exitCode: number | null) => {
+    child.on('close', async (exitCode: number | null) => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abort);
+      let cleanupError: string | undefined;
+      try {
+        await removeContainer();
+      } catch (error) {
+        cleanupError = `Sandbox cleanup failed: ${getErrorMessage(error)}`;
+      }
 
       // Check for OOM kill (exit code 137)
       const memoryExceeded = exitCode === 137;
 
       resolve({
-        success: exitCode === 0 && !killed,
+        success: exitCode === 0 && !killed && !cleanupError,
         stdout: stdout.trim(),
         stderr: stderr.trim(),
         exitCode,
         timedOut,
         memoryExceeded,
-        error: timedOut
-          ? 'Execution timed out'
-          : memoryExceeded
-            ? 'Memory limit exceeded'
-            : undefined,
+        error:
+          cleanupError ??
+          (signal?.aborted
+            ? 'Execution cancelled'
+            : timedOut
+              ? 'Execution timed out'
+              : memoryExceeded
+                ? 'Memory limit exceeded'
+                : undefined),
       });
     });
 
     // Handle spawn errors
     child.on('error', (error: Error) => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abort);
+      // `close` may never fire on a spawn failure, so this is the only chance
+      // to reap a container the daemon might already have created.
+      void removeContainer().catch((cleanupError: unknown) => {
+        log.error('Failed to remove sandbox container after spawn error', {
+          name,
+          error: getErrorMessage(cleanupError),
+        });
+      });
       resolve({
         success: false,
         stdout: '',
@@ -543,6 +603,46 @@ export async function executeJavaScriptSandbox(
   config?: SandboxConfig
 ): Promise<SandboxResult> {
   return executeInSandbox(code, 'javascript', config);
+}
+
+/** JSON-only boundary for user JavaScript. No host functions, mounts, or credentials. */
+export async function executeIsolatedJavaScript(
+  code: string,
+  globals: Record<string, unknown> = {},
+  options: { timeout?: number; memoryMB?: number; signal?: AbortSignal } = {}
+): Promise<unknown> {
+  options.signal?.throwIfAborted();
+  const timeout = Math.min(30_000, Math.max(1, options.timeout ?? 5000));
+  const memoryMB = Math.min(256, Math.max(32, options.memoryMB ?? 128));
+  const data = JSON.stringify(globals, (_key, value) => {
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      throw new Error('Host functions cannot cross the isolated execution boundary');
+    }
+    return value;
+  });
+  const runner = `
+const vm = require('node:vm');
+const context = vm.createContext({}, { codeGeneration: { strings: false, wasm: false } });
+new vm.Script('Object.assign(globalThis, JSON.parse(' + ${JSON.stringify(JSON.stringify(data))} + '))').runInContext(context);
+new vm.Script(${JSON.stringify(`(async () => {\n${code}\n})()`)}).runInContext(context, { timeout: ${timeout} })
+  .then(value => process.stdout.write(JSON.stringify({ value })))
+  .catch(error => { process.stderr.write(String(error)); process.exitCode = 1; });
+`;
+  const result = await executeInSandbox(
+    runner,
+    'javascript',
+    {
+      timeout,
+      memoryMB,
+      networkEnabled: false,
+      env: {},
+      relaxedSecurity: false,
+    },
+    options.signal
+  );
+  if (!result.success)
+    throw new Error(result.error ?? result.stderr ?? 'Isolated execution failed');
+  return (JSON.parse(result.stdout) as { value?: unknown }).value;
 }
 
 /**

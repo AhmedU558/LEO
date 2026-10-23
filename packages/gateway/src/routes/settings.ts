@@ -1,3 +1,4 @@
+import { invalidateAgentCache } from '../services/agent/cache.js';
 /**
  * Settings routes — HTTP handlers only.
  *
@@ -124,6 +125,7 @@ settingsRoutes.post('/default-provider', async (c) => {
     const body = validateBody(setDefaultProviderSchema, await c.req.json());
 
     await settingsRepo.set(DEFAULT_PROVIDER_KEY, body.provider);
+    invalidateAgentCache();
 
     return apiResponse(c, {
       defaultProvider: body.provider,
@@ -143,6 +145,7 @@ settingsRoutes.post('/default-model', async (c) => {
     const body = validateBody(setDefaultModelSchema, await c.req.json());
 
     await settingsRepo.set(DEFAULT_MODEL_KEY, body.model);
+    invalidateAgentCache();
 
     return apiResponse(c, {
       defaultModel: body.model,
@@ -163,6 +166,7 @@ settingsRoutes.post('/api-keys', async (c) => {
 
     const key = `${API_KEY_PREFIX}${body.provider}`;
     await settingsRepo.set(key, body.apiKey);
+    invalidateAgentCache();
 
     const sanitizedProvider = sanitizeProviderName(body.provider);
     if (sanitizedProvider) {
@@ -189,6 +193,7 @@ settingsRoutes.delete('/api-keys/:provider', async (c) => {
 
   const key = `${API_KEY_PREFIX}${provider}`;
   await settingsRepo.delete(key);
+  invalidateAgentCache();
 
   const sanitizedProvider = sanitizeProviderName(provider);
   if (sanitizedProvider) {
@@ -466,6 +471,7 @@ settingsRoutes.put('/tool-groups', async (c) => {
 
     const enabledGroupIds = [...enabledSet];
     await settingsRepo.set(TOOL_GROUPS_KEY, enabledGroupIds);
+    invalidateAgentCache();
 
     return apiResponse(c, { enabledGroupIds });
   } catch (err) {
@@ -514,6 +520,7 @@ settingsRoutes.put('/max-llm-concurrency', async (c) => {
     }
 
     await settingsRepo.set(MAX_LLM_CONCURRENCY_KEY, val);
+    invalidateAgentCache();
     getLlmSemaphore().setMaxSlots(val);
 
     return apiResponse(c, {

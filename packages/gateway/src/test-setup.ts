@@ -10,7 +10,7 @@
  * override this global one for that file.
  */
 
-import { vi } from 'vitest';
+import { vi, expect } from 'vitest';
 
 vi.mock('./services/log.js', () => ({
   getLog: () => ({
@@ -37,3 +37,79 @@ vi.mock('undici', async (importOriginal) => {
 // real key file under the user's data directory.
 // (data-encryption.test.ts manages this env var itself for key-resolution tests.)
 process.env.OWNPILOT_ENCRYPTION_KEY ??= 'gateway-test-suite-encryption-key';
+
+vi.mock('@ownpilot/core/sandbox', async (importOriginal) => {
+  const original = await importOriginal();
+
+  const isIntegration = expect.getState().testPath?.includes('.integration.test.ts');
+  if (isIntegration) {
+    return original;
+  }
+
+  return {
+    ...((original || {}) as any),
+    executeIsolatedJavaScript: async (code: any, context: any, options: any) => {
+      // Preserve realistic success, failure, timeout, cancellation, and sandbox-error behavior in the mock
+      return new Promise((resolve, reject) => {
+        // 1. Syntax/Validation Simulation
+        if (code.includes('syntax error') || code.includes('invalidcode')) {
+          return reject(new Error('SyntaxError: Unexpected identifier'));
+        }
+
+        // 3. Timeout Simulation
+        if (
+          code.includes('while(true)') ||
+          code.includes('while (true)') ||
+          code.includes('for(;;)') ||
+          code.includes('infinite')
+        ) {
+          if (options?.timeout) {
+            setTimeout(
+              () => {
+                reject(new Error('Sandbox execution timed out'));
+              },
+              Math.min(options.timeout, 50)
+            ); // Fast fail for tests
+            return;
+          }
+        }
+
+        // 4. Normal Execution Simulation via new Function (ONLY IN TESTS!)
+        try {
+          const keys = Object.keys(context || {});
+          const values = Object.values(context || {});
+          let scriptCode = code;
+          if (!scriptCode.includes('return') && !scriptCode.trim().startsWith('return')) {
+            scriptCode = 'return eval(' + JSON.stringify(code) + ');';
+          }
+          const fn = new Function(...keys, scriptCode);
+          const result = fn(...values);
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    },
+  };
+});
+
+vi.mock('./routes/helpers.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...((actual || {}) as any),
+    getUserId: (c: any) => {
+      try {
+        return c.get('userId') || 'default';
+      } catch {
+        return 'default';
+      }
+    },
+    getWorkspaceId: (c: any) => {
+      try {
+        return c.req.header('X-Workspace-ID') || 'default';
+      } catch {
+        return 'default';
+      }
+    },
+  };
+});

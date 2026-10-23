@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Workspace Container Routes
  *
@@ -8,7 +9,6 @@
  * GET /system/status           - Get sandbox system status
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import { WorkspacesRepository } from '../../db/repositories/workspaces.js';
 import { getOrchestrator, type ContainerConfig } from '@ownpilot/core/workspace';
@@ -21,7 +21,7 @@ const app = new Hono();
  * POST /workspaces/:id/container/start - Start container
  */
 app.post('/:id/container/start', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const workspaceId = c.req.param('id');
   const repo = new WorkspacesRepository(userId);
 
@@ -80,7 +80,7 @@ app.post('/:id/container/start', async (c) => {
  * POST /workspaces/:id/container/stop - Stop container
  */
 app.post('/:id/container/stop', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const workspaceId = c.req.param('id');
   const repo = new WorkspacesRepository(userId);
 
@@ -124,7 +124,7 @@ app.post('/:id/container/stop', async (c) => {
  * GET /workspaces/:id/container/status - Get container status
  */
 app.get('/:id/container/status', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const workspaceId = c.req.param('id');
   const repo = new WorkspacesRepository(userId);
 
@@ -178,7 +178,7 @@ app.get('/:id/container/status', async (c) => {
  * GET /workspaces/:id/container/logs - Get container logs
  */
 app.get('/:id/container/logs', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const workspaceId = c.req.param('id');
   const tail = getIntParam(c, 'tail', 100, 1, 1000);
   const repo = new WorkspacesRepository(userId);

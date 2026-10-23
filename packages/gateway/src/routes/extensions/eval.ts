@@ -1,3 +1,4 @@
+import { getUserId } from '../helpers.js';
 /**
  * Extensions Eval Routes
  *
@@ -6,7 +7,6 @@
  * POST /:id/eval/optimize-description — Generate and score alternative descriptions
  */
 
-import { LOCAL_OWNER_ID } from '../../config/defaults.js';
 import { Hono } from 'hono';
 import { createProvider, getProviderConfig as coreGetProviderConfig } from '@ownpilot/core/agent';
 import type { AIProvider } from '@ownpilot/core/costs';
@@ -82,7 +82,7 @@ async function buildProvider(providerOverride?: string, modelOverride?: string) 
 // ---------------------------------------------------------------------------
 
 evalRoutes.post('/:id/eval/run', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();
@@ -144,7 +144,7 @@ evalRoutes.post('/:id/eval/run', async (c) => {
 // ---------------------------------------------------------------------------
 
 evalRoutes.post('/:id/eval/grade', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();
@@ -219,7 +219,7 @@ Return ONLY valid JSON: {"score": 0.85, "passed": true, "feedback": "Brief expla
 // ---------------------------------------------------------------------------
 
 evalRoutes.post('/:id/eval/optimize-description', async (c) => {
-  const userId = LOCAL_OWNER_ID;
+  const userId = getUserId(c);
   const id = c.req.param('id');
 
   const service = getExtService();

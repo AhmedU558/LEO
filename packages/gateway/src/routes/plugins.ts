@@ -259,7 +259,7 @@ pluginsRoutes.post('/:id/enable', async (c) => {
   // Audit plugin enable — re-activates the plugin's declared permissions
   // (network, storage, exec) and its tool/handler registrations.
   getEventSystem().emit('audit.plugin.enabled', 'plugins', {
-    ip: getClientIp(c.req),
+    ip: getClientIp(c),
     pluginId: id,
     pluginName: plugin.manifest.name,
     permissions: plugin.manifest.permissions ?? [],
@@ -292,7 +292,7 @@ pluginsRoutes.post('/:id/disable', async (c) => {
 
   // Audit plugin disable.
   getEventSystem().emit('audit.plugin.disabled', 'plugins', {
-    ip: getClientIp(c.req),
+    ip: getClientIp(c),
     pluginId: id,
     pluginName: plugin.manifest.name,
   });
@@ -335,7 +335,7 @@ pluginsRoutes.put('/:id/config', async (c) => {
   // shipping the secret to wherever the audit log ends up.
   const changedKeys = Object.keys(body.settings ?? {});
   getEventSystem().emit('audit.plugin.configChanged', 'plugins', {
-    ip: getClientIp(c.req),
+    ip: getClientIp(c),
     pluginId: id,
     pluginName: plugin.manifest.name,
     changedKeys,

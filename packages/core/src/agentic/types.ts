@@ -161,6 +161,8 @@ export interface AgenticTask {
   };
   /** Chain input: context from a prior task result. */
   readonly chainInput?: Record<string, unknown>;
+  /** Identity context propagating the user and workspace. */
+  readonly identity: import('../security/identity.js').LeoIdentityContext;
 }
 
 /** Execution plan — how the system will execute a task. */

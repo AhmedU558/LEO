@@ -28,6 +28,51 @@ function nsKey(userId: string, key: string): string {
 }
 
 export class IdempotencyKeysRepository extends BaseRepository {
+  /** Effect records never expire automatically: an uncertain effect is not safe to replay. */
+  async claimOperation(
+    userId: string,
+    operationId: string,
+    requestHash: string,
+    owner: string
+  ): Promise<{
+    claimed: boolean;
+    state: 'pending' | 'success' | 'failed' | 'cancelled' | 'unknown';
+    requestHash: string;
+    result?: unknown;
+  }> {
+    const key = JSON.stringify(['effect', userId, operationId]);
+    const record = { state: 'pending', requestHash, owner };
+    const inserted = await this.query(
+      `INSERT INTO ${TABLE} (key, result, expires_at) VALUES ($1, $2, 'infinity')
+       ON CONFLICT (key) DO NOTHING RETURNING key`,
+      [key, JSON.stringify(record)]
+    );
+    if (inserted.length) return { claimed: true, state: 'pending', requestHash };
+    const existing = await this.queryOne<{ result: typeof record & { result?: unknown } }>(
+      `SELECT result FROM ${TABLE} WHERE key = $1`,
+      [key]
+    );
+    if (!existing) throw new Error('Operation claim disappeared');
+    return { ...existing.result, claimed: false } as Awaited<
+      ReturnType<typeof this.claimOperation>
+    >;
+  }
+
+  async finishOperation(
+    userId: string,
+    operationId: string,
+    owner: string,
+    state: 'success' | 'failed' | 'cancelled' | 'unknown',
+    result: unknown
+  ): Promise<void> {
+    const updated = await this.execute(
+      `UPDATE ${TABLE} SET result = result || $3::jsonb
+       WHERE key = $1 AND result->>'owner' = $2 AND result->>'state' = 'pending'`,
+      [JSON.stringify(['effect', userId, operationId]), owner, JSON.stringify({ state, result })]
+    );
+    if (updated.changes !== 1) throw new Error('Operation ownership lost');
+  }
+
   /**
    * Get the cached result for an idempotency key if it exists and is not expired.
    * Returns null if the key does not exist or has expired.

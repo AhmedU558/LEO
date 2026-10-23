@@ -1,3 +1,6 @@
+export * from './media/index.js';
+export * from './content/index.js';
+export * from './storage/index.js';
 /**
  * @ownpilot/core
  *
@@ -69,3 +72,8 @@ export * from './edge/index.js';
 // Re-exported from ./version.ts so consumers can use @ownpilot/core/version
 // sub-path instead of importing the full barrel just to read the version.
 export { VERSION } from './version.js';
+export * as social from './social/index.js';
+export * as computer from './computer/index.js';
+export * as voice from './voice/index.js';
+export * as autonomy from './autonomy/index.js';
+export * as analytics from './analytics/index.js';
