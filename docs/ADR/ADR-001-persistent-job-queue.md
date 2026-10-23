@@ -1,12 +1,12 @@
 # ADR-001: Persistent Job Queue Layer
 
-**Status:** Proposed | **Date:** 2026-05-07 | **Deciders:** OwnPilot Team
+**Status:** Proposed | **Date:** 2026-05-07 | **Deciders:** LEO Team
 
 ---
 
 ## Context
 
-Five autonomous systems in OwnPilot implement cron-like or event-driven logic with no durable persistence across process restarts:
+Five autonomous systems in LEO implement cron-like or event-driven logic with no durable persistence across process restarts:
 
 - **Triggers** (schedule, event, webhook) — in-memory timer + DB state
 - **Plans** — step executor with DB state per step

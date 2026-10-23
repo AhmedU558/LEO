@@ -12,8 +12,8 @@ export function SecurityPage() {
       </Badge>
       <h1>Security Overview</h1>
       <p>
-        OwnPilot is built with a security-first mindset. Multiple layers of protection ensure that
-        your data stays private and that autonomous agents can't do unintended damage.
+        LEO is built with a security-first mindset. Multiple layers of protection ensure that your
+        data stays private and that autonomous agents can't do unintended damage.
       </p>
 
       <h2>4-Layer Code Execution Security</h2>
@@ -59,7 +59,7 @@ export function SecurityPage() {
       </ul>
 
       <h2>PII Detection & Redaction</h2>
-      <p>OwnPilot detects and can redact 15+ categories of personally identifiable information:</p>
+      <p>LEO detects and can redact 15+ categories of personally identifiable information:</p>
       <ul>
         <li>Social Security Numbers (SSN)</li>
         <li>Credit card numbers</li>
@@ -85,7 +85,7 @@ export function SecurityPage() {
       </p>
 
       <h2>SSRF Protection</h2>
-      <p>OwnPilot prevents Server-Side Request Forgery (SSRF) attacks through two mechanisms:</p>
+      <p>LEO prevents Server-Side Request Forgery (SSRF) attacks through two mechanisms:</p>
       <ul>
         <li>
           <code>isBlockedUrl()</code> — Synchronous hostname check that blocks private IP ranges
@@ -175,14 +175,14 @@ export function SecurityPage() {
 
       <Callout type="warning" title="Production security">
         For production deployments, always set <code>AUTH_TYPE=jwt</code> and use a strong
-        <code>JWT_SECRET</code>. If exposing OwnPilot to the internet, place it behind a reverse
-        proxy (nginx/Caddy) with TLS.
+        <code>JWT_SECRET</code>. If exposing LEO to the internet, place it behind a reverse proxy
+        (nginx/Caddy) with TLS.
       </Callout>
 
       <h2>Extension Security Audit</h2>
       <p>
-        Before installing extensions or skills, OwnPilot performs an LLM-powered security analysis
-        that checks for dangerous patterns, unusual permissions requests, and potential data
+        Before installing extensions or skills, LEO performs an LLM-powered security analysis that
+        checks for dangerous patterns, unusual permissions requests, and potential data
         exfiltration. A <strong>Permission Review Modal</strong> shows all requested permissions
         before activation.
       </p>

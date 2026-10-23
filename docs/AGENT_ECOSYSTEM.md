@@ -1,4 +1,4 @@
-# OwnPilot Agent Ecosystem — Complete Architecture Guide
+# LEO Agent Ecosystem — Complete Architecture Guide
 
 > **Status:** Living document — covers all 4 agent concepts, their isolation boundaries, practical use cases, and current gaps.
 > **Related docs:** [AGENTS.md](./AGENTS.md) (core agent class reference), [AUTONOMOUS_AGENTS.md](./AUTONOMOUS_AGENTS.md) (souls), [CODING_AGENTS.md](./CODING_AGENTS.md) (CLI wrappers), [ARCHITECTURE.md](./ARCHITECTURE.md)
@@ -26,7 +26,7 @@
 
 ## Overview — The 4 Agent Concepts
 
-OwnPilot is not a single agent — it's an **ecosystem** of agent concepts, each designed for a specific operational pattern. Understanding the differences is critical for both users (choosing the right tool) and developers (extending the system correctly).
+LEO is not a single agent — it's an **ecosystem** of agent concepts, each designed for a specific operational pattern. Understanding the differences is critical for both users (choosing the right tool) and developers (extending the system correctly).
 
 | #   | Concept                | Primary File(s)                     | DB Tables                                                  | Trigger Model              |
 | --- | ---------------------- | ----------------------------------- | ---------------------------------------------------------- | -------------------------- |
@@ -186,7 +186,7 @@ Skills:      web_search, fetch_url, add_note, send_notification
 Boundaries:  - Do NOT give investment advice
              - Label speculation distinctly from facts
 
-User wakes up → opens OwnPilot → Radar has already run at 08:00 →
+User wakes up → opens LEO → Radar has already run at 08:00 →
 "Today's Brief: 5 new AI startups, 2 interesting" note exists →
 User didn't issue any command.
 ```
@@ -215,7 +215,7 @@ Budget:      $0.20/hour
 | Aspect   | Personal Assistant      | Soul Agent                      |
 | -------- | ----------------------- | ------------------------------- |
 | Trigger  | User message (reactive) | Cron heartbeat (proactive)      |
-| Identity | Generic "OwnPilot"      | Custom persona with personality |
+| Identity | Generic "LEO"           | Custom persona with personality |
 | Budget   | None                    | Daily/monthly limits enforced   |
 | Tools    | ALL tools               | Filtered by `skillAccess`       |
 | Memory   | Shared user memory      | Soul-specific + shared          |
@@ -369,11 +369,11 @@ Stop: on_report
 
 ## Concept 4: Coding Agent (External CLI Orchestration)
 
-> **Remote control for Claude Code / Codex / Gemini CLI — OwnPilot's "hands" for real code.**
+> **Remote control for Claude Code / Codex / Gemini CLI — LEO's "hands" for real code.**
 
 ### What It Is
 
-A wrapper around external AI coding CLI tools that spawns them as child processes and streams their output through OwnPilot's UI via WebSocket.
+A wrapper around external AI coding CLI tools that spawns them as child processes and streams their output through LEO's UI via WebSocket.
 
 ### Technical Profile
 
@@ -381,7 +381,7 @@ A wrapper around external AI coding CLI tools that spawns them as child processe
 Runtime:   child_process.spawn (auto mode) OR node-pty (interactive)
 Providers: claude-code, codex, gemini-cli, custom:<name>
 Session:   max 3 concurrent per user, UUID-identified
-Sandbox:   User-specified cwd, sanitized env (OwnPilot secrets stripped)
+Sandbox:   User-specified cwd, sanitized env (LEO secrets stripped)
 Auth:      Login-based OR API key (optional)
 Output:    Ring buffer (100KB) + WebSocket streaming to XTerminal
 ```
@@ -411,7 +411,7 @@ Output:    Ring buffer (100KB) + WebSocket streaming to XTerminal
             packages/gateway/src/routes/chat.ts"
 
 Behind the scenes:
-  → OwnPilot spawns: claude -p "..." --dangerously-skip-permissions
+  → LEO spawns: claude -p "..." --dangerously-skip-permissions
                            --output-format stream-json --verbose
   → Claude Code reads files, edits, runs tests
   → Output streams via WebSocket (coding-agent:session:output)
@@ -426,7 +426,7 @@ Mode: interactive
 Provider: codex
 → XTerminal opens in UI
 → User types natural language, sees CLI responses
-→ IDE-like experience within OwnPilot
+→ IDE-like experience within LEO
 ```
 
 ### When to Use
@@ -471,7 +471,7 @@ Coding Agents are **not AI themselves** — they're **remote-control wrappers** 
 | Claw               | `workspace_id` + `.claw/` dir  | Dedicated workspace        | `allowed_tools` + claw tools |
 | Coding Agent       | CWD + sanitized env            | User-specified path        | Attached skills only         |
 
-**Environment sanitization (Coding Agents):** OwnPilot's own secrets (`POSTGRES_*`, session tokens, internal API keys) are stripped from the child process environment. Only the explicit provider API key + user-defined vars pass through.
+**Environment sanitization (Coding Agents):** LEO's own secrets (`POSTGRES_*`, session tokens, internal API keys) are stripped from the child process environment. Only the explicit provider API key + user-defined vars pass through.
 
 ---
 
@@ -563,7 +563,7 @@ Execution flow:
 
 ## UI Navigation Map
 
-The OwnPilot UI exposes these concepts through different sidebar entries:
+The LEO UI exposes these concepts through different sidebar entries:
 
 ```
 MAIN
@@ -1087,7 +1087,7 @@ fetch(`${baseUrl}/chat/completions`)
 - OpenAI-compatible: `OPENAI_BASE_URL=https://api.minimax.io/v1`
 - Anthropic-compatible: `ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic`
 
-The `openai-compatible` type in OwnPilot appends `/chat/completions`, which is only valid for the `/v1` path (OpenAI format), not `/anthropic/v1` (Anthropic format expects `/v1/messages`).
+The `openai-compatible` type in LEO appends `/chat/completions`, which is only valid for the `/v1` path (OpenAI format), not `/anthropic/v1` (Anthropic format expects `/v1/messages`).
 
 ---
 
@@ -1132,4 +1132,4 @@ packages/gateway/src/
 ---
 
 _Last updated: 2026-07-06_
-_Authors: OwnPilot team + collaborative analysis session_
+_Authors: LEO team + collaborative analysis session_

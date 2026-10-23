@@ -6,7 +6,7 @@
 
 ## Context
 
-OwnPilot's API is at `/api/v1/`. As the platform matures, breaking changes will be needed (schema changes, authentication model changes, response format changes). Extensions and channel adapters that call v1 endpoints will break when those changes land. A versioning strategy is required.
+LEO's API is at `/api/v1/`. As the platform matures, breaking changes will be needed (schema changes, authentication model changes, response format changes). Extensions and channel adapters that call v1 endpoints will break when those changes land. A versioning strategy is required.
 
 ## Decision
 

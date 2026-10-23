@@ -91,7 +91,7 @@ const WIZARDS: WizardDef[] = [
   {
     id: 'skill',
     title: 'Install a Skill',
-    description: 'Search npm for OwnPilot skills and add them to your AI.',
+    description: 'Search npm for LEO skills and add them to your AI.',
     icon: Layers,
     time: '~2 min',
     color: 'text-cyan-500',

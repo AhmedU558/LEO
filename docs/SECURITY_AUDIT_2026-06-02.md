@@ -1,6 +1,6 @@
 # Security Audit — 2026-06-02
 
-Manual, depth-first security audit of OwnPilot's untrusted-input boundary, with
+Manual, depth-first security audit of LEO's untrusted-input boundary, with
 all findings fixed and merged to `main` during the session. This complements the
 automated scan output under `security-report/`.
 

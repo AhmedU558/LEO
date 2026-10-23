@@ -1,6 +1,6 @@
 # CLI Tool Calling Spec
 
-This document defines the single tool-calling contract for CLI-backed chat providers in OwnPilot.
+This document defines the single tool-calling contract for CLI-backed chat providers in LEO.
 
 ## Goal
 
@@ -30,7 +30,7 @@ All CLI providers should target the same 4 meta-tools:
 - `use_tool`
 - `batch_use_tool`
 
-The model should never call OwnPilot HTTP endpoints directly.
+The model should never call LEO HTTP endpoints directly.
 
 ## Structured Bridge Contract
 

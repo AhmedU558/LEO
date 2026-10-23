@@ -121,7 +121,7 @@ export interface UpdateMcpServerInput {
 }
 
 export const mcpApi = {
-  /** Get OwnPilot MCP server info (endpoint URL, exposed tools, config snippets) */
+  /** Get LEO MCP server info (endpoint URL, exposed tools, config snippets) */
   serverInfo: () => apiClient.get<McpServerInfo>('/mcp/serve/info'),
 
   /** List all configured MCP servers */

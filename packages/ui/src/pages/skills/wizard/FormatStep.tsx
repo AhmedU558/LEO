@@ -35,7 +35,7 @@ const OPTIONS: {
     id: 'ownpilot',
     icon: Wrench,
     title: 'Extension',
-    subtitle: 'OwnPilot native format',
+    subtitle: 'LEO native format',
     bullets: [
       'Custom JS tool code + triggers',
       'Full access to built-in tool library',

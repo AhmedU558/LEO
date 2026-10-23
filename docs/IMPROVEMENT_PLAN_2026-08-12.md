@@ -1,4 +1,4 @@
-# OwnPilot — Improvement Plan (from the 2026-08-12 audit)
+# LEO — Improvement Plan (from the 2026-08-12 audit)
 
 **Date**: 2026-08-12
 **Source**: `docs/CODEBASE_AUDIT_2026-08-12.md`

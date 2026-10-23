@@ -144,7 +144,7 @@ export function Layout() {
                   </button>
                 )}
                 <h1 className="font-semibold text-text-primary dark:text-dark-text-primary whitespace-nowrap text-sm">
-                  OwnPilot
+                  LEO
                 </h1>
               </div>
 

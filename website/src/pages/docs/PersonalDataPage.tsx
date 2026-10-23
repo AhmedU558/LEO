@@ -161,9 +161,9 @@ export function PersonalDataPage() {
       </Badge>
       <h1>Personal Data</h1>
       <p className="text-lg text-[var(--color-text-muted)] mb-8">
-        OwnPilot provides a complete personal data management system — notes, tasks, goals,
-        calendar, contacts, memories, bookmarks, expenses, habits, and custom data — all stored
-        locally in your PostgreSQL database and accessible via REST API and 50+ LLM tools.
+        LEO provides a complete personal data management system — notes, tasks, goals, calendar,
+        contacts, memories, bookmarks, expenses, habits, and custom data — all stored locally in
+        your PostgreSQL database and accessible via REST API and 50+ LLM tools.
       </p>
 
       <Callout type="tip" title="Privacy guarantee">

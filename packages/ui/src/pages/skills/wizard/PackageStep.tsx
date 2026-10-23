@@ -92,7 +92,7 @@ export function PackageStep({ pkg, onFinish, onBack }: PackageStepProps) {
         <p>
           <code className="font-mono">skill-name/scripts/</code> — tool code (if any)
         </p>
-        <p>Upload the .skill file to reinstall on any OwnPilot instance.</p>
+        <p>Upload the .skill file to reinstall on any LEO instance.</p>
       </div>
 
       <div className="flex justify-between items-center">

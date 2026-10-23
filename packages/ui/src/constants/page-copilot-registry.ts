@@ -265,7 +265,7 @@ export const PAGE_COPILOT_REGISTRY: Record<string, PageCopilotConfig> = {
   habits: {
     pageType: 'habit',
     systemPromptHint:
-      'You are helping manage habit tracking. Focus on streak analysis, consistency metrics, habit routine building, and motivation. OwnPilot has 8 AI habit tools for logging, analysis, and recommendations.',
+      'You are helping manage habit tracking. Focus on streak analysis, consistency metrics, habit routine building, and motivation. LEO has 8 AI habit tools for logging, analysis, and recommendations.',
     suggestions: [
       'Show my habit streak summary',
       'Which habits have I been most consistent with?',

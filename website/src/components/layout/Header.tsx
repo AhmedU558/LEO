@@ -53,13 +53,11 @@ export function Header() {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
             <img
-              src="/logo.jpeg"
-              alt="OwnPilot"
+              src="/logo.png"
+              alt="LEO"
               className="w-9 h-9 rounded-lg object-contain group-hover:scale-105 transition-transform"
             />
-            <span className="font-bold text-lg tracking-tight text-[var(--color-text)]">
-              OwnPilot
-            </span>
+            <span className="font-bold text-lg tracking-tight text-[var(--color-text)]">LEO</span>
           </Link>
 
           {/* Desktop nav */}

@@ -53,9 +53,8 @@ export function WorkflowsPage() {
       </Badge>
       <h1>Workflows</h1>
       <p>
-        OwnPilot's workflow system provides a visual drag-and-drop builder with 24 node types, a
-        Workflow Copilot for AI-assisted creation, and webhook triggers with HMAC signature
-        validation.
+        LEO's workflow system provides a visual drag-and-drop builder with 24 node types, a Workflow
+        Copilot for AI-assisted creation, and webhook triggers with HMAC signature validation.
       </p>
 
       <h2>24 Node Types</h2>

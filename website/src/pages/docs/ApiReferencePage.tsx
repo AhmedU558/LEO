@@ -13,7 +13,7 @@ export function ApiReferencePage() {
       </Badge>
       <h1>REST API Reference</h1>
       <p>
-        OwnPilot exposes a comprehensive REST API at <code>http://localhost:8080/api/v1/</code>. All
+        LEO exposes a comprehensive REST API at <code>http://localhost:8080/api/v1/</code>. All
         responses use standardized <code>apiResponse</code> / <code>apiError</code> helpers.
       </p>
 

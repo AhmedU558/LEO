@@ -1,6 +1,6 @@
 # UI Components Reference
 
-Comprehensive documentation of the OwnPilot frontend -- a React 19 single-page application providing the user interface for the privacy-first AI assistant platform.
+Comprehensive documentation of the LEO frontend -- a React 19 single-page application providing the user interface for the privacy-first AI assistant platform.
 
 ---
 
@@ -340,7 +340,7 @@ interface StreamChunk {
 
 **File:** `packages/ui/src/hooks/useWebSocket.tsx`
 
-Manages the WebSocket connection to the OwnPilot gateway for real-time communication. Provides both the raw hook and a React context-based provider for shared access.
+Manages the WebSocket connection to the LEO gateway for real-time communication. Provides both the raw hook and a React context-based provider for shared access.
 
 #### Exports
 
@@ -1408,7 +1408,7 @@ All settings pages are under `/settings/*` and provide configuration for the sys
 
 ## State Management
 
-OwnPilot uses a **React Context + Hooks** pattern rather than external state management libraries like Redux.
+LEO uses a **React Context + Hooks** pattern rather than external state management libraries like Redux.
 
 ### State Architecture
 

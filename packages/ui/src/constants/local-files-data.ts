@@ -82,7 +82,7 @@ const FILE_BOOKMARKS: BookmarkEntry[] = [
   { id: 'projects', label: 'projects', icon: '\uD83D\uDCBB', path: '/home/user/projects' },
   { id: 'sep-custom', type: 'separator' },
   // Dev/work dirs
-  { id: 'ownpilot', label: 'OwnPilot', icon: '\uD83E\uDD16', path: '/home/user/ownpilot' },
+  { id: 'ownpilot', label: 'LEO', icon: '\uD83E\uDD16', path: '/home/user/ownpilot' },
   { id: 'backups', label: 'Backups', icon: '\uD83D\uDCBE', path: '/home/user/backups' },
   { id: 'claude', label: '.claude', icon: '\uD83E\uDDE0', path: '/home/user/.claude' },
 ];

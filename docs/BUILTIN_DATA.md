@@ -1,6 +1,6 @@
-# OwnPilot Built-in Data Reference
+# LEO Built-in Data Reference
 
-Complete reference for all built-in data types stored in the OwnPilot PostgreSQL database. Every table, column, relationship, constraint, associated AI tool, and API route is documented here.
+Complete reference for all built-in data types stored in the LEO PostgreSQL database. Every table, column, relationship, constraint, associated AI tool, and API route is documented here.
 
 ---
 

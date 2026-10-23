@@ -1,6 +1,6 @@
 # Custom Tools System
 
-OwnPilot supports a dynamic custom tools system that allows both the LLM agent and human users to create, manage, and execute reusable tools at runtime. Custom tools are JavaScript functions stored in the database, sandboxed for security, and integrated seamlessly into the agent's tool catalog so they can be invoked in any conversation.
+LEO supports a dynamic custom tools system that allows both the LLM agent and human users to create, manage, and execute reusable tools at runtime. Custom tools are JavaScript functions stored in the database, sandboxed for security, and integrated seamlessly into the agent's tool catalog so they can be invoked in any conversation.
 
 This document covers the full architecture, lifecycle, security model, API surface, and extension points of the custom tools system.
 
@@ -29,7 +29,7 @@ This document covers the full architecture, lifecycle, security model, API surfa
 
 ## Overview
 
-The custom tools system bridges three layers of the OwnPilot stack:
+The custom tools system bridges three layers of the LEO stack:
 
 ```
 +---------------------+       +---------------------+       +---------------------+

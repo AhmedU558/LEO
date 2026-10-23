@@ -78,7 +78,7 @@ const MCP_SERVER_CONFIG_CLAUDE = `// claude_desktop_config.json
   }
 }`;
 
-const MCP_SERVER_TOOLS = `# OwnPilot exposes all 250+ tools via Streamable HTTP at /mcp
+const MCP_SERVER_TOOLS = `# LEO exposes all 250+ tools via Streamable HTTP at /mcp
 # Example tools available to Claude Desktop:
 
 core__create_note        → Create a note
@@ -127,15 +127,15 @@ export function McpPage() {
       </Badge>
       <h1>MCP Integration</h1>
       <p className="text-lg text-[var(--color-text-muted)] mb-8">
-        OwnPilot is both an MCP client and an MCP server. As a client, it connects to external MCP
+        LEO is both an MCP client and an MCP server. As a client, it connects to external MCP
         servers and uses their tools natively. As a server, it exposes all 250+ built-in tools to
         Claude Desktop, Claude Code, and any other MCP client.
       </p>
 
-      <h2>OwnPilot as MCP client</h2>
+      <h2>LEO as MCP client</h2>
       <p>
-        Connect any MCP-compatible tool server to OwnPilot. The tools become immediately available
-        to the agent in all conversations, workflows, and autonomous agents — no restart required.
+        Connect any MCP-compatible tool server to LEO. The tools become immediately available to the
+        agent in all conversations, workflows, and autonomous agents — no restart required.
       </p>
 
       <h3>Configuring MCP servers</h3>
@@ -259,9 +259,9 @@ export function McpPage() {
       <h3>Popular server presets</h3>
       <CodeBlock code={MCP_PRESETS} language="bash" />
 
-      <h2>OwnPilot as MCP server</h2>
+      <h2>LEO as MCP server</h2>
       <p>
-        OwnPilot exposes all 250+ built-in tools as a Streamable HTTP MCP endpoint at
+        LEO exposes all 250+ built-in tools as a Streamable HTTP MCP endpoint at
         <code>/mcp</code>. This lets Claude Desktop, Claude Code, Cursor, and other MCP clients use
         your personal data and tools directly.
       </p>
@@ -283,7 +283,7 @@ export function McpPage() {
       <CodeBlock code={MCP_SERVER_TOOLS} language="bash" />
 
       <Callout type="info" title="Tool name encoding">
-        MCP requires tool names to contain only alphanumeric characters and underscores. OwnPilot's
+        MCP requires tool names to contain only alphanumeric characters and underscores. LEO's
         dot-prefixed namespaces (<code>core.create_note</code>) are automatically converted to
         double-underscore format (<code>core__create_note</code>) for MCP compatibility. The reverse
         mapping is applied when the tool is executed.

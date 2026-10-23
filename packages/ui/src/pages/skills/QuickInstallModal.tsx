@@ -252,7 +252,7 @@ export function QuickInstallModal({ onClose, onInstalled }: QuickInstallModalPro
                 <p className="text-xs text-text-muted dark:text-dark-text-muted">
                   Enter the absolute path to a <span className="font-mono">SKILL.md</span> or{' '}
                   <span className="font-mono">extension.json</span> file on the server. The file
-                  must be accessible by the OwnPilot gateway process.
+                  must be accessible by the LEO gateway process.
                 </p>
               </div>
             </div>
@@ -272,8 +272,8 @@ export function QuickInstallModal({ onClose, onInstalled }: QuickInstallModalPro
                 className="w-full h-56 px-3 py-2 text-sm font-mono bg-bg-tertiary dark:bg-dark-bg-tertiary border border-border dark:border-dark-border rounded-lg text-text-primary dark:text-dark-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
               />
               <p className="text-xs text-text-muted dark:text-dark-text-muted mt-1.5">
-                Must be a valid OwnPilot extension manifest with{' '}
-                <span className="font-mono">id</span>, <span className="font-mono">name</span>, and{' '}
+                Must be a valid LEO extension manifest with <span className="font-mono">id</span>,{' '}
+                <span className="font-mono">name</span>, and{' '}
                 <span className="font-mono">version</span>.
               </p>
             </div>

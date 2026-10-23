@@ -147,7 +147,7 @@ function FlowDiagram() {
             <div className="w-12 h-12 rounded-xl bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center text-xl">
               🧠
             </div>
-            <span className="text-text-muted text-[10px]">OwnPilot</span>
+            <span className="text-text-muted text-[10px]">LEO</span>
           </div>
         </div>
 
@@ -246,7 +246,7 @@ const STEPS: Step[] = [
     n: 1,
     title: 'Set up an MQTT broker',
     detail:
-      'Run Mosquitto locally or use a hosted broker (HiveMQ, EMQX, AWS IoT). Set MQTT_BROKER_URL in your OwnPilot .env file.',
+      'Run Mosquitto locally or use a hosted broker (HiveMQ, EMQX, AWS IoT). Set MQTT_BROKER_URL in your LEO .env file.',
   },
   {
     n: 2,
@@ -302,8 +302,8 @@ export function EdgeDevicesOnboarding({ onRegister }: Props) {
           Connect Physical Devices to Your AI
         </h1>
         <p className="text-text-secondary dark:text-dark-text-secondary max-w-xl mx-auto leading-relaxed">
-          Edge Devices lets you stream sensor data from IoT hardware into OwnPilot over MQTT, then
-          query, analyze, and control those devices using natural language — or automated triggers.
+          Edge Devices lets you stream sensor data from IoT hardware into LEO over MQTT, then query,
+          analyze, and control those devices using natural language — or automated triggers.
         </p>
         <button
           onClick={onRegister}
@@ -408,7 +408,7 @@ export function EdgeDevicesOnboarding({ onRegister }: Props) {
             <span className="font-mono bg-amber-100 dark:bg-amber-500/20 px-1.5 py-0.5 rounded">
               MQTT_BROKER_URL
             </span>{' '}
-            — set in your OwnPilot <span className="font-mono">.env</span> file (e.g.{' '}
+            — set in your LEO <span className="font-mono">.env</span> file (e.g.{' '}
             <span className="font-mono">mqtt://localhost:1883</span>)
           </li>
           <li>
@@ -441,8 +441,8 @@ export function EdgeDevicesOnboarding({ onRegister }: Props) {
             </a>
           </li>
           <li>
-            Your device's <span className="font-mono">userId</span> from your OwnPilot profile and
-            the <span className="font-mono">deviceId</span> you get after registering
+            Your device's <span className="font-mono">userId</span> from your LEO profile and the{' '}
+            <span className="font-mono">deviceId</span> you get after registering
           </li>
         </ul>
       </div>

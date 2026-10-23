@@ -468,7 +468,7 @@ export function ApiKeysPage() {
               { icon: Shield, color: 'text-emerald-500 bg-emerald-500/10' },
             ]}
             title="Manage API Keys"
-            subtitle="Create and manage API keys for programmatic access to your OwnPilot instance. Each key has scoped permissions and usage tracking."
+            subtitle="Create and manage API keys for programmatic access to your LEO instance. Each key has scoped permissions and usage tracking."
             cta={{ label: 'Manage Keys', icon: Key, onClick: () => setActiveTab('keys') }}
             skipHomeChecked={skipHome}
             onSkipHomeChange={onSkipHomeChange}
@@ -693,9 +693,9 @@ export function ApiKeysPage() {
                   Privacy First
                 </h3>
                 <p className="text-sm text-text-muted dark:text-dark-text-muted">
-                  OwnPilot is designed with privacy at its core. Your API keys are stored locally
-                  and encrypted with AES-256-GCM. All conversations can be encrypted and stored
-                  locally. You maintain full control over your data.
+                  LEO is designed with privacy at its core. Your API keys are stored locally and
+                  encrypted with AES-256-GCM. All conversations can be encrypted and stored locally.
+                  You maintain full control over your data.
                 </p>
               </section>
 

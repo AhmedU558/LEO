@@ -1,6 +1,6 @@
 # Database Documentation
 
-Comprehensive reference for OwnPilot's PostgreSQL database layer. This document covers the schema, all tables, the repository pattern, data stores, seed data, migrations, connection management, and relationship model.
+Comprehensive reference for LEO's PostgreSQL database layer. This document covers the schema, all tables, the repository pattern, data stores, seed data, migrations, connection management, and relationship model.
 
 ---
 
@@ -36,7 +36,7 @@ Comprehensive reference for OwnPilot's PostgreSQL database layer. This document 
 
 ## 1. Overview
 
-OwnPilot uses **PostgreSQL 16** as its sole production database. The database layer lives inside the `packages/gateway` package and follows a strict layered architecture:
+LEO uses **PostgreSQL 16** as its sole production database. The database layer lives inside the `packages/gateway` package and follows a strict layered architecture:
 
 ```
 packages/gateway/src/db/
@@ -110,7 +110,7 @@ This function is called automatically on the **first database connection** via t
 
 ## 3. Table Reference
 
-OwnPilot defines **47 tables** organized into 11 domain groups. Every table uses `TEXT PRIMARY KEY`.
+LEO defines **47 tables** organized into 11 domain groups. Every table uses `TEXT PRIMARY KEY`.
 
 ---
 

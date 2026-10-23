@@ -162,7 +162,7 @@ export function TelegramWizard({ onComplete, onCancel }: Props) {
             {[
               { title: 'Open Telegram', desc: 'Search for @BotFather and start a chat.' },
               { title: 'Create a new bot', desc: 'Send /newbot to BotFather.' },
-              { title: 'Choose a name', desc: 'This is the display name (e.g., "My OwnPilot").' },
+              { title: 'Choose a name', desc: 'This is the display name (e.g., "My LEO").' },
               { title: 'Choose a username', desc: 'Must end in "bot" (e.g., my_ownpilot_bot).' },
               {
                 title: 'Copy the token',

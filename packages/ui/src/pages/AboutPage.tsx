@@ -1,4 +1,4 @@
-import { Heart, Globe, Github, Twitter, ExternalLink } from '../components/icons';
+import { Heart, Github, Twitter, ExternalLink } from '../components/icons';
 
 const VERSION = __APP_VERSION__;
 
@@ -20,7 +20,7 @@ export function AboutPage() {
           About
         </h2>
         <p className="text-sm text-text-muted dark:text-dark-text-muted">
-          About OwnPilot and the team behind it
+          About LEO and the project it is built on
         </p>
       </header>
 
@@ -30,16 +30,16 @@ export function AboutPage() {
           {/* Hero */}
           <div className="flex flex-col items-center text-center space-y-4">
             <img
-              src="/ownpilot-logo.jpeg"
-              alt="OwnPilot Logo"
+              src="/leo-logo.png"
+              alt="LEO Logo"
               className="w-28 h-28 rounded-2xl shadow-lg object-cover"
             />
             <div>
               <h1 className="text-3xl font-bold text-text-primary dark:text-dark-text-primary">
-                OwnPilot
+                LEO
               </h1>
               <p className="text-text-muted dark:text-dark-text-muted mt-1">
-                Privacy-first AI Assistant
+                Logical Execution &amp; Orchestration
               </p>
               <span className="inline-block mt-2 px-2.5 py-0.5 text-xs font-medium rounded-full bg-primary/10 text-primary">
                 v{VERSION}
@@ -50,10 +50,10 @@ export function AboutPage() {
           {/* Description */}
           <div className="p-5 bg-bg-secondary dark:bg-dark-bg-secondary rounded-xl border border-border dark:border-dark-border">
             <p className="text-sm text-text-secondary dark:text-dark-text-secondary leading-relaxed">
-              OwnPilot is a self-hosted, privacy-first AI assistant gateway that gives you full
-              control over your AI interactions. Connect 100+ AI providers, manage personal data,
-              automate workflows with triggers and plans, and interact through multiple channels
-              &mdash; all from your own infrastructure.
+              LEO is an autonomous AI system that understands, plans, authorizes, executes, and
+              audits tasks. It is self-hosted and privacy-first: connect 100+ AI providers, manage
+              personal data, automate workflows with triggers and plans, and interact through
+              multiple channels &mdash; all from your own infrastructure.
             </p>
             <div className="flex flex-wrap gap-2 mt-4">
               {highlights.map((h) => (
@@ -73,24 +73,31 @@ export function AboutPage() {
               Links
             </h3>
             <LinkRow
-              icon={<Globe className="w-4 h-4" />}
-              label="Website"
-              href="https://ownpilot.dev"
-              display="ownpilot.dev"
-            />
-            <LinkRow
               icon={<Github className="w-4 h-4" />}
               label="GitHub"
-              href="https://github.com/ownpilot/ownpilot"
-              display="github.com/ownpilot/ownpilot"
+              href="https://github.com/AhmedU558/LEO"
+              display="github.com/AhmedU558/LEO"
             />
           </div>
 
-          {/* Creator */}
+          {/* Built on OwnPilot */}
           <div className="p-5 bg-bg-secondary dark:bg-dark-bg-secondary rounded-xl border border-border dark:border-dark-border">
-            <h3 className="text-sm font-semibold text-text-primary dark:text-dark-text-primary mb-4">
-              Created by
+            <h3 className="text-sm font-semibold text-text-primary dark:text-dark-text-primary mb-2">
+              Built on OwnPilot
             </h3>
+            <p className="text-sm text-text-secondary dark:text-dark-text-secondary leading-relaxed mb-4">
+              LEO is built on{' '}
+              <a
+                href="https://github.com/ownpilot/ownpilot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                OwnPilot
+              </a>
+              , the open-source project created by Ersin KO&Ccedil; and released under the MIT
+              License.
+            </p>
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
                 EK
@@ -123,26 +130,16 @@ export function AboutPage() {
             </div>
           </div>
 
-          {/* Made in */}
-          <div className="text-center space-y-2 pb-8">
-            <div className="flex items-center justify-center gap-1.5 text-sm text-text-secondary dark:text-dark-text-secondary">
-              Made with
-              <Heart className="w-4 h-4 text-error inline-block" />
+          {/* Upstream origin */}
+          <div className="text-center pb-8">
+            <div className="flex items-center justify-center gap-1.5 text-xs text-text-muted dark:text-dark-text-muted">
+              OwnPilot is made with
+              <Heart className="w-3.5 h-3.5 text-error inline-block" />
               in Estonia
               <span className="ml-1" role="img" aria-label="Estonia">
                 &#127466;&#127466;
               </span>
             </div>
-            <p className="text-xs text-text-muted dark:text-dark-text-muted">
-              Coded with a Turkish mind, crafted in Estonia
-              <span className="ml-1" role="img" aria-label="Turkey">
-                &#127481;&#127479;
-              </span>
-              <span className="mx-1">&amp;</span>
-              <span role="img" aria-label="Estonia">
-                &#127466;&#127466;
-              </span>
-            </p>
           </div>
         </div>
       </div>

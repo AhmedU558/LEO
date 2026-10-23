@@ -215,9 +215,7 @@ export function SkillInstallWizard({ onComplete, onCancel }: Props) {
                 <span className="text-sm font-medium text-text-primary dark:text-dark-text-primary">
                   Search the marketplace
                 </span>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Browse OwnPilot-tagged packages on npm.
-                </p>
+                <p className="text-xs text-text-muted mt-0.5">Browse LEO-tagged packages on npm.</p>
               </div>
             </button>
 

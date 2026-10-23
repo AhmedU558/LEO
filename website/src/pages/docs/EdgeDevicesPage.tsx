@@ -52,16 +52,16 @@ const DEVICE_TYPES = `# Supported device types:
 # gateway    — Sub-device aggregator (Zigbee bridge, Z-Wave controller)`;
 
 const MQTT_TOPICS = `# Default topic structure (configurable per device):
-# Telemetry (device → OwnPilot):
+# Telemetry (device → LEO):
 home/livingroom/telemetry   → {"temperature":22.5,"humidity":58,"timestamp":1710590400}
 
-# Commands (OwnPilot → device):
+# Commands (LEO → device):
 home/livingroom/command     → {"action":"set_threshold","value":25}
 
-# Status (device → OwnPilot):
+# Status (device → LEO):
 home/livingroom/status      → {"online":true,"battery":87,"lastSeen":"2026-03-16T10:00:00Z"}
 
-# OwnPilot auto-subscribes to all registered device topics on startup`;
+# LEO auto-subscribes to all registered device topics on startup`;
 
 const SEND_COMMAND = `POST /api/v1/edge/devices/:deviceId/command
 Content-Type: application/json
@@ -119,12 +119,12 @@ core.subscribe_device_events
   → Register a trigger for device events (threshold crossed, motion detected, etc.)
   → args: { deviceId, event, condition, triggerName }`;
 
-const ESP32_EXAMPLE = `// ESP32 Arduino sketch — connect to OwnPilot MQTT broker
+const ESP32_EXAMPLE = `// ESP32 Arduino sketch — connect to LEO MQTT broker
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-const char* mqttServer = "192.168.1.100";  // OwnPilot server IP
+const char* mqttServer = "192.168.1.100";  // LEO server IP
 const char* deviceId   = "esp32-sensor-01";
 
 void publishTelemetry() {
@@ -162,16 +162,16 @@ export function EdgeDevicesPage() {
       </Badge>
       <h1>Edge Devices &amp; IoT</h1>
       <p className="text-lg text-[var(--color-text-muted)] mb-8">
-        OwnPilot integrates with IoT devices via MQTT (Mosquitto), providing a device registry,
-        telemetry storage, command queue, and 6 LLM tools so your AI assistant can read sensors and
-        control actuators directly in conversation.
+        LEO integrates with IoT devices via MQTT (Mosquitto), providing a device registry, telemetry
+        storage, command queue, and 6 LLM tools so your AI assistant can read sensors and control
+        actuators directly in conversation.
       </p>
 
       <h2>Architecture</h2>
       <p>
-        OwnPilot connects to a Mosquitto MQTT broker. Devices publish telemetry to their topic
-        prefix and subscribe to their command topic. OwnPilot subscribes to all registered device
-        topics on startup and stores telemetry in PostgreSQL.
+        LEO connects to a Mosquitto MQTT broker. Devices publish telemetry to their topic prefix and
+        subscribe to their command topic. LEO subscribes to all registered device topics on startup
+        and stores telemetry in PostgreSQL.
       </p>
 
       <h2>MQTT broker setup</h2>

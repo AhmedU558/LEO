@@ -1,22 +1,27 @@
-# OwnPilot
+# LEO
 
-> Privacy-first personal AI assistant platform with Claw autonomous agents, soul agents, crews, AI agent creator, tool orchestration, multi-provider support, MCP integration, voice pipeline, browser automation, IoT edge device control, and Telegram + WhatsApp connectivity.
+**Logical Execution & Orchestration**
+
+> An autonomous AI system that understands, plans, authorizes, executes, and audits tasks.
 >
 > **Self-hosted. Your data stays yours.**
 
 v0.8.3
 
 <p align="center">
-  <img src="ownpilot_.jpeg" alt="OwnPilot — Privacy-First Personal AI Assistant Platform" width="100%" />
+  <img src="leo-banner.svg" alt="LEO — Logical Execution &amp; Orchestration. An autonomous AI system that understands, plans, authorizes, executes, and audits tasks." width="100%" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/ownpilot/ownpilot/actions/workflows/ci.yml"><img src="https://github.com/ownpilot/ownpilot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/AhmedU558/LEO/actions/workflows/ci.yml"><img src="https://github.com/AhmedU558/LEO/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
-  <a href="https://ghcr.io/ownpilot/ownpilot"><img src="https://img.shields.io/badge/ghcr.io-ownpilot-blue?logo=docker" alt="Docker" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-≥22-green?logo=node.js" alt="Node.js" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript" alt="TypeScript" /></a>
 </p>
+
+Claw autonomous agents, soul agents, crews, an AI agent creator, tool orchestration, multi-provider support, MCP integration, a voice pipeline, browser automation, IoT edge device control, and Telegram + WhatsApp connectivity.
+
+LEO is built on [OwnPilot](https://github.com/ownpilot/OwnPilot) and is distributed under the same [MIT License](LICENSE).
 
 ---
 
@@ -76,7 +81,7 @@ v0.8.3
 - **Meta-tool Proxy** — Only 4 meta-tools sent to the LLM (`search_tools`, `get_tool_help`, `use_tool`, `batch_use_tool`); all tools remain available via dynamic discovery
 - **Tool Namespaces** — Qualified tool names with prefixes (`core.`, `custom.`, `plugin.`, `skill.`, `mcp.`) for clear origin tracking
 - **MCP Client** — Connect to external MCP servers (Filesystem, GitHub, Brave Search, etc.) and use their tools natively
-- **MCP Server** — Expose OwnPilot's tools as an MCP endpoint for Claude Desktop and other MCP clients
+- **MCP Server** — Expose LEO's tools as an MCP endpoint for Claude Desktop and other MCP clients
 - **User Extensions** — Installable tool bundles with custom tools, triggers, services, and configurations; Extension SDK provides `utils.callTool()` to invoke any of 250+ built-in tools
 - **6 Default Extensions** — Daily Briefing, Knowledge Base, Project Tracker, Smart Search, Automation Builder, Contact Enricher bundled out-of-the-box
 - **Extension Security Audit** — LLM-powered security analysis for skills and extensions before installation
@@ -285,10 +290,10 @@ All messages (web UI chat, Telegram, trigger-initiated chats) flow through the s
 ### Docker (Recommended)
 
 ```bash
-git clone https://github.com/ownpilot/ownpilot.git
-cd ownpilot
+git clone https://github.com/AhmedU558/LEO.git
+cd LEO
 
-# Start OwnPilot + PostgreSQL (uses defaults, no .env needed)
+# Start LEO + PostgreSQL (uses defaults, no .env needed)
 docker compose --profile postgres up -d
 
 # UI + API: http://localhost:8080
@@ -347,8 +352,8 @@ The wizard will guide you through:
 
 ```bash
 # Clone and install
-git clone https://github.com/ownpilot/ownpilot.git
-cd ownpilot
+git clone https://github.com/AhmedU558/LEO.git
+cd LEO
 pnpm install
 
 # Configure
@@ -386,7 +391,7 @@ API keys and settings are stored in the PostgreSQL database. The web UI **Config
 ## Project Structure
 
 ```
-ownpilot/
+LEO/
 ├── packages/
 │   ├── core/                    # AI engine & tool framework
 │   │   ├── src/
@@ -779,7 +784,7 @@ The creator uses a dedicated agent with a specialized system prompt, ensuring it
 
 ### Overview
 
-OwnPilot has **250+ tools** organized into **33 categories**. Rather than sending all tool definitions to the LLM (which would consume too many tokens), OwnPilot uses a **meta-tool proxy pattern**:
+LEO has **250+ tools** organized into **33 categories**. Rather than sending all tool definitions to the LLM (which would consume too many tokens), LEO uses a **meta-tool proxy pattern**:
 
 1. **`search_tools`** — Find tools by keyword with optional `include_params` for inline parameter schemas
 2. **`get_tool_help`** — Get detailed help for a specific tool (supports batch lookup)
@@ -861,11 +866,11 @@ The AI can create new tools at runtime:
 
 ## MCP Integration
 
-OwnPilot supports the [Model Context Protocol](https://modelcontextprotocol.io/) in both directions:
+LEO supports the [Model Context Protocol](https://modelcontextprotocol.io/) in both directions:
 
 ### MCP Client (connect to external servers)
 
-Connect to any MCP server to extend OwnPilot's capabilities:
+Connect to any MCP server to extend LEO's capabilities:
 
 ```
 Settings → MCP Servers → Add (or use Quick Add presets)
@@ -884,13 +889,13 @@ Tools from connected MCP servers appear in the AI's catalog with `mcp.{servernam
 
 ### MCP Server (expose tools to external clients)
 
-OwnPilot exposes its full tool registry as an MCP endpoint:
+LEO exposes its full tool registry as an MCP endpoint:
 
 ```
 POST /mcp/serve   — Streamable HTTP transport
 ```
 
-External MCP clients (Claude Desktop, other agents) can connect and use OwnPilot's 250+ tools.
+External MCP clients (Claude Desktop, other agents) can connect and use LEO's 250+ tools.
 
 ---
 
@@ -957,7 +962,7 @@ Headless Chromium automation via Playwright for AI-driven web browsing and data 
 
 ## Edge Devices
 
-MQTT-based IoT/edge device management. OwnPilot acts as the brain; cheap edge hardware (ESP32, Raspberry Pi) acts as the hands.
+MQTT-based IoT/edge device management. LEO acts as the brain; cheap edge hardware (ESP32, Raspberry Pi) acts as the hands.
 
 ### Architecture
 
@@ -970,7 +975,7 @@ Edge Device (ESP32/RPi/Arduino)
   ├── ownpilot/{userId}/devices/{deviceId}/commands     ← Server
   └── ownpilot/{userId}/devices/{deviceId}/status       → Server (LWT)
   │
-Mosquitto Broker ←→ OwnPilot Gateway (EdgeMqttClient)
+Mosquitto Broker ←→ LEO Gateway (EdgeMqttClient)
 ```
 
 ### Device Types
@@ -1162,7 +1167,7 @@ Keys are loaded into `process.env` at server startup for provider SDK compatibil
 
 ### Code Execution
 
-OwnPilot can execute code on behalf of the AI through 5 execution tools:
+LEO can execute code on behalf of the AI through 5 execution tools:
 
 | Tool                 | Description                            |
 | -------------------- | -------------------------------------- |
@@ -1534,7 +1539,7 @@ LOG_LEVEL=info
 cp .env.example .env
 # Edit .env with your settings
 
-# Start OwnPilot + PostgreSQL
+# Start LEO + PostgreSQL
 docker compose --profile postgres up -d
 
 # With MQTT broker for edge/IoT devices
@@ -1645,7 +1650,7 @@ pnpm ci                     # Alias for pnpm release:verify
 
 ## Release Process
 
-OwnPilot uses semantic versioning. The current release train is `0.8.3`; subsequent work is tracked under the `[Unreleased]` heading in `CHANGELOG.md` until the next version is cut.
+LEO uses semantic versioning. The current release train is `0.8.3`; subsequent work is tracked under the `[Unreleased]` heading in `CHANGELOG.md` until the next version is cut.
 
 For a normal minor release:
 

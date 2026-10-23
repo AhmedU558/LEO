@@ -1,7 +1,7 @@
 # Context Graph + Hook Pipeline Architecture
 
 > **Status:** Design proposal (2026-04-14)
-> **Scope:** OwnPilot super-assistant chat / per-page chat / context budget management
+> **Scope:** LEO super-assistant chat / per-page chat / context budget management
 > **Audience:** Architecture reviewers, next implementation session
 > **Related docs:**
 >
@@ -29,7 +29,7 @@ Dynamic Context Layer (page-scoped)
 Hook Pipeline (lazy context resolution)
 ```
 
-OwnPilot'ta bu kısmen zaten var — `.claude/rules/page-contexts.md` dosyası bunu adresliyor. Ama eksik tarafı: context page'den otomatik pull edilmiyor, rule olarak duruyor. İlerisi: her sayfa chat'i açılırken bir `pageContextResolver(route, entityId)` çağrısı → sadece o sayfanın ilgili fragment'ını prompt'a kat.
+LEO'ta bu kısmen zaten var — `.claude/rules/page-contexts.md` dosyası bunu adresliyor. Ama eksik tarafı: context page'den otomatik pull edilmiyor, rule olarak duruyor. İlerisi: her sayfa chat'i açılırken bir `pageContextResolver(route, entityId)` çağrısı → sadece o sayfanın ilgili fragment'ını prompt'a kat.
 
 ---
 
@@ -58,7 +58,7 @@ Claude Projects: Project files'i chunked RAG + otomatik relevant retrieval.
 
 Bu sorunun cevabı = **Context Graph + Retrieval Chain**
 
-Mantık: OwnPilot'taki her "şey" bir node, aralarındaki ilişkiler edge. Query geldiğinde graph'ta relevant subgraph'ı retrieve edip prompt'a inject.
+Mantık: LEO'taki her "şey" bir node, aralarındaki ilişkiler edge. Query geldiğinde graph'ta relevant subgraph'ı retrieve edip prompt'a inject.
 
 ### Önerilen Context Graph Modeli
 
@@ -168,7 +168,7 @@ Bu exact pattern **LangChain RAG, LlamaIndex Graph RAG, Claude Projects, Cursor 
 
 ---
 
-## 🏗️ OwnPilot'a Önerilen Implementation Yol Haritası
+## 🏗️ LEO'a Önerilen Implementation Yol Haritası
 
 ### Faz 0: Altyapı (prerequisite, 1 session)
 
@@ -213,7 +213,7 @@ Bu exact pattern **LangChain RAG, LlamaIndex Graph RAG, Claude Projects, Cursor 
 ```
 ┌──────────────────────────────────────────┐
 │ STATIC (always present) — ~1500 tokens   │
-│ ├── Identity (OwnPilot + guard)          │
+│ ├── Identity (LEO + guard)          │
 │ ├── Meta-tools (search/get_help/use)     │
 │ ├── Response protocol (memories/suggs)   │
 │ └── Top 20 critical tool names + sig     │

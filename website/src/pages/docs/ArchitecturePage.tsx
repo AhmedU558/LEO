@@ -49,8 +49,8 @@ export function ArchitecturePage() {
       </Badge>
       <h1>Architecture Overview</h1>
       <p>
-        OwnPilot is a TypeScript monorepo built with Turborepo. Four packages work together to
-        deliver a complete self-hosted AI assistant platform.
+        LEO is a TypeScript monorepo built with Turborepo. Four packages work together to deliver a
+        complete self-hosted AI assistant platform.
       </p>
 
       <h2>System diagram</h2>
@@ -172,7 +172,7 @@ export function ArchitecturePage() {
 
       <h2>Event system</h2>
       <p>
-        OwnPilot uses a 3-in-1 event system in <code>@ownpilot/core</code>:
+        LEO uses a 3-in-1 event system in <code>@ownpilot/core</code>:
       </p>
       <ul>
         <li>

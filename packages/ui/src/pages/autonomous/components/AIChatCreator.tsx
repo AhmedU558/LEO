@@ -156,7 +156,7 @@ function buildSystemInstruction(
   skills: ExtensionInfo[],
   defaults: { provider: string; model: string }
 ): string {
-  return `You are an expert AI agent designer for OwnPilot. Your job is to design complete, production-ready autonomous agents based on user requirements.
+  return `You are an expert AI agent designer for LEO. Your job is to design complete, production-ready autonomous agents based on user requirements.
 
 ## Agent Configuration Schema
 

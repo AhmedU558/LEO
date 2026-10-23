@@ -1,7 +1,7 @@
 /**
  * Centralized API Client
  *
- * Typed wrapper around native fetch() for all OwnPilot API calls.
+ * Typed wrapper around native fetch() for all LEO API calls.
  * Handles:
  *   - Path prefixing (/api/v1)
  *   - ApiResponse<T> envelope unwrapping

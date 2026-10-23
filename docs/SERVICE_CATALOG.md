@@ -1,4 +1,4 @@
-# OwnPilot Service Catalog
+# LEO Service Catalog
 
 > **85+ services** in `packages/gateway/src/services/` + workflow + middleware
 > Last updated: 2026-07-06 (v0.8.3)
@@ -147,7 +147,7 @@ Quality ratings:
 | Service              | Lines | Responsibility                                                                                               |
 | -------------------- | ----- | ------------------------------------------------------------------------------------------------------------ |
 | `mcp-client-service` | 410   | Connect to external MCP servers, register their tools in shared registry. Auto-reconnect, health monitoring. |
-| `mcp-server-service` | 401   | Expose OwnPilot's 250+ tools AS an MCP server. Session management with 30-min TTL.                           |
+| `mcp-server-service` | 401   | Expose LEO's 250+ tools AS an MCP server. Session management with 30-min TTL.                                |
 
 **Quality**: OK.
 

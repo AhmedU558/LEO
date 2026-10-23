@@ -155,7 +155,7 @@ export function ConfigurationPage() {
       </Badge>
       <h1>Configuration</h1>
       <p className="text-lg text-[var(--color-text-muted)] mb-8">
-        OwnPilot has four configuration sources with a clear priority order: CLI flags override DB
+        LEO has four configuration sources with a clear priority order: CLI flags override DB
         values, which override environment variables, which override built-in defaults. All
         sensitive values are stored AES-256-GCM encrypted in PostgreSQL — no plain-text secrets in{' '}
         <code>.env</code>.
@@ -167,7 +167,7 @@ export function ConfigurationPage() {
       <h2>Config Center (web UI)</h2>
       <p>
         The recommended way to manage configuration. Navigate to{' '}
-        <strong>Settings → Config Center</strong> in the OwnPilot web UI. All API keys and sensitive
+        <strong>Settings → Config Center</strong> in the LEO web UI. All API keys and sensitive
         values are stored encrypted in PostgreSQL.
       </p>
       <CodeBlock code={CONFIG_CENTER} language="bash" />

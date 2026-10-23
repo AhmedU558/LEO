@@ -240,7 +240,7 @@ export function EdgeDevicesPage() {
               { icon: Brain, color: 'text-violet-500 bg-violet-500/10' },
             ]}
             title="Connect Physical Devices to Your AI"
-            subtitle="Stream sensor data from IoT hardware into OwnPilot over MQTT, then query, analyze, and control devices using natural language."
+            subtitle="Stream sensor data from IoT hardware into LEO over MQTT, then query, analyze, and control devices using natural language."
             cta={{ label: 'View Devices', icon: Wifi, onClick: () => setPageTab('devices') }}
             skipHomeChecked={skipHome}
             onSkipHomeChange={onSkipHomeChange}
@@ -278,7 +278,7 @@ export function EdgeDevicesPage() {
             steps={[
               {
                 title: 'Set up MQTT broker',
-                detail: 'Configure your Mosquitto or other MQTT broker and connect it to OwnPilot.',
+                detail: 'Configure your Mosquitto or other MQTT broker and connect it to LEO.',
               },
               {
                 title: 'Register your device',
@@ -286,7 +286,7 @@ export function EdgeDevicesPage() {
               },
               {
                 title: 'Flash client code',
-                detail: 'Upload the OwnPilot client library to your microcontroller or SBC.',
+                detail: 'Upload the LEO client library to your microcontroller or SBC.',
               },
               {
                 title: 'Watch data flow in',
