@@ -10,7 +10,6 @@ import type {
   VoiceProviderEvents,
   VoiceProviderOptions,
   VoiceSessionStatus,
-  VoiceTranscriptEvent,
   VoiceToolCallEvent,
   VoiceMessage,
 } from '@ownpilot/core/voice';
@@ -27,7 +26,6 @@ export class MockVoiceProvider implements VoiceProvider {
   readonly name = 'mock';
 
   private events: VoiceProviderEvents | null = null;
-  private options: VoiceProviderOptions | null = null;
   private status: VoiceSessionStatus = 'disconnected';
   private behavior: MockVoiceProviderBehavior = {};
   private toolResults: Map<string, unknown> = new Map();
@@ -72,7 +70,7 @@ export class MockVoiceProvider implements VoiceProvider {
     }
   }
 
-  async connect(events: VoiceProviderEvents, options?: VoiceProviderOptions): Promise<void> {
+  async connect(events: VoiceProviderEvents, _options?: VoiceProviderOptions): Promise<void> {
     if (this.behavior.connectError) {
       this.status = 'error';
       events.onStatusChange?.('error');
@@ -81,7 +79,6 @@ export class MockVoiceProvider implements VoiceProvider {
     }
 
     this.events = events;
-    this.options = options || null;
     this.status = 'connecting';
     this.events.onStatusChange?.('connecting');
 

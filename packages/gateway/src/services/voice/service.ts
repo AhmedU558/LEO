@@ -115,17 +115,13 @@ export class VoiceService {
       );
 
       const duration = Date.now() - startTime;
-      if (!toolResult.success) {
-        const errorMsg = toolResult.error || 'Tool execution failed';
+      if (toolResult.isError) {
+        const errorMsg = toolResult.content || 'Tool execution failed';
         ActionLedger.updateResult(ledgerEntry.actionId, { error: errorMsg }, duration);
         return { allowed: false, error: errorMsg };
       }
 
-      ActionLedger.updateResult(
-        ledgerEntry.actionId,
-        { success: true, result: toolResult.content },
-        duration
-      );
+      ActionLedger.updateResult(ledgerEntry.actionId, { result: toolResult.content }, duration);
       return { allowed: true, result: toolResult.content };
     } catch (err: unknown) {
       const duration = Date.now() - startTime;

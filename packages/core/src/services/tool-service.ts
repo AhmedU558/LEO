@@ -39,6 +39,7 @@ export interface IToolService {
       conversationId?: string;
       userId?: string;
       execSource?: string;
+      signal?: AbortSignal;
       job?: { jobId: string; leaseToken: string; effectIndex: number };
     }
   ): Promise<ToolServiceResult>;
