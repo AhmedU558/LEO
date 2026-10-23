@@ -1,4 +1,4 @@
-# OwnPilot — Codebase Audit & Improvement Report
+# LEO — Codebase Audit & Improvement Report
 
 **Date**: 2026-08-12
 **Scope**: Full monorepo (`core`, `gateway`, `ui`, `cli`), CI, build, tests, docs, container setup

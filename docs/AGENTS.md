@@ -1,6 +1,6 @@
 # Agent System Architecture
 
-This document provides a comprehensive reference for the OwnPilot agent system. It covers every layer of the architecture, from the core abstractions and execution loop through prompt composition, memory injection, permissions, provider routing, and the gateway integration that ties everything together.
+This document provides a comprehensive reference for the LEO agent system. It covers every layer of the architecture, from the core abstractions and execution loop through prompt composition, memory injection, permissions, provider routing, and the gateway integration that ties everything together.
 
 ---
 
@@ -56,7 +56,7 @@ This document provides a comprehensive reference for the OwnPilot agent system. 
 
 ## Overview
 
-The OwnPilot agent system is a modular, multi-provider AI framework that supports tool-calling loops, dynamic prompt composition, persistent memory injection, fine-grained permissions, and multi-agent coordination. It is organized into three packages:
+The LEO agent system is a modular, multi-provider AI framework that supports tool-calling loops, dynamic prompt composition, persistent memory injection, fine-grained permissions, and multi-agent coordination. It is organized into three packages:
 
 | Package            | Role                                                                                    |
 | ------------------ | --------------------------------------------------------------------------------------- |

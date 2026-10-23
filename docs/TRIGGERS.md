@@ -1,6 +1,6 @@
 # Trigger System
 
-The OwnPilot trigger system provides proactive automation for the AI assistant. Instead of waiting for user commands, triggers fire autonomously based on schedules, system events, evaluated conditions, or incoming webhooks. When a trigger fires, it executes an action -- sending a chat message through the agent, calling a tool, posting a notification, checking goal status, or summarizing memories.
+The LEO trigger system provides proactive automation for the AI assistant. Instead of waiting for user commands, triggers fire autonomously based on schedules, system events, evaluated conditions, or incoming webhooks. When a trigger fires, it executes an action -- sending a chat message through the agent, calling a tool, posting a notification, checking goal status, or summarizing memories.
 
 This document covers every aspect of the system: database schema, trigger types and configuration, action types, the trigger engine, the plan integration, the autonomy layer, the REST API, the agent tools, the built-in proactive behaviors, and the seed data.
 
@@ -332,7 +332,7 @@ To prevent a condition trigger from firing repeatedly while a condition remains 
 
 **Type value:** `webhook`
 
-Webhook triggers are designed to be fired by external HTTP calls. They provide a mechanism for outside systems (GitHub, CI/CD pipelines, third-party services) to invoke actions in OwnPilot.
+Webhook triggers are designed to be fired by external HTTP calls. They provide a mechanism for outside systems (GitHub, CI/CD pipelines, third-party services) to invoke actions in LEO.
 
 **Config Interface:**
 

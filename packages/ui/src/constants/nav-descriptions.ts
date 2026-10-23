@@ -40,7 +40,7 @@ export const NAV_DESCRIPTIONS: Record<string, string> = {
   '/tools': 'Browse available AI tools and functions',
   '/custom-tools': 'Define your own JavaScript AI tools',
   '/skills': 'Install and manage skill packages',
-  '/plugins': 'Extend OwnPilot with community plugins',
+  '/plugins': 'Extend LEO with community plugins',
 
   // System
   '/agents': 'Reusable agent presets (profile templates, not running instances)',
@@ -51,7 +51,7 @@ export const NAV_DESCRIPTIONS: Record<string, string> = {
   '/logs': 'View system and agent activity logs',
   '/agent-observability': 'Live runtime dashboard — soul, crew, and claw activity',
   '/edge-devices': 'Manage IoT and edge device connections',
-  '/tunnel': 'Expose OwnPilot via Cloudflare or ngrok tunnel',
+  '/tunnel': 'Expose LEO via Cloudflare or ngrok tunnel',
 
   // Settings
   '/settings/api-keys': 'Manage your LLM provider API keys',
@@ -67,11 +67,11 @@ export const NAV_DESCRIPTIONS: Record<string, string> = {
   '/settings/mcp-servers': 'Connect Model Context Protocol servers',
   '/settings/connected-apps': 'Link external apps and services',
   '/settings/workflow-tools': 'Tools available inside workflow nodes',
-  '/settings/config-center': 'Global OwnPilot configuration',
+  '/settings/config-center': 'Global LEO configuration',
   '/settings/layout': 'Customize sidebar layout and dashboard widgets',
   '/settings/system': 'System info, storage, and diagnostics',
 
   // Bottom items
-  '/about': 'About OwnPilot, version, and credits',
+  '/about': 'About LEO, version, and credits',
   '/profile': 'Your profile, preferences, and account',
 };

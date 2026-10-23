@@ -102,7 +102,7 @@ export function ChannelsPage() {
       </Badge>
       <h1>Channels</h1>
       <p className="text-lg text-[var(--color-text-muted)] mb-8">
-        OwnPilot connects to Telegram and WhatsApp via channel plugins, bringing the full assistant
+        LEO connects to Telegram and WhatsApp via channel plugins, bringing the full assistant
         experience — 250+ tools, memory, workflows — directly into your messaging apps. Each channel
         has approval flow, pairing keys, user management, and inbox persistence.
       </p>
@@ -286,7 +286,7 @@ export function ChannelsPage() {
       <h2>Pairing keys</h2>
       <p>
         Pairing keys are rotating short codes used to verify channel ownership and link a
-        Telegram/WhatsApp user account to an OwnPilot user account.
+        Telegram/WhatsApp user account to an LEO user account.
       </p>
       <CodeBlock code={PAIRING_KEY} language="http" filename="pairing-key.http" />
 

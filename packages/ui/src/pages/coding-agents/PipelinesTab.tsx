@@ -2,7 +2,7 @@
  * Coding Agents — Pipelines Tab
  *
  * Multi-step CLI tool orchestration. Set a goal, pick a provider
- * (Claude/Gemini/Codex), and let OwnPilot chain sessions together —
+ * (Claude/Gemini/Codex), and let LEO chain sessions together —
  * analyzing output and deciding next steps.
  *
  * Used by CodingAgentsPage as a tab; previously lived as a standalone
@@ -766,7 +766,7 @@ export function PipelinesTab() {
                   Select a run or start a new pipeline
                 </p>
                 <p className="text-xs text-text-muted/60 mt-1 max-w-sm mx-auto">
-                  Set a goal, pick a CLI tool (Claude Code, Codex, Gemini), and let OwnPilot chain
+                  Set a goal, pick a CLI tool (Claude Code, Codex, Gemini), and let LEO chain
                   sessions together — analyzing output and deciding next steps automatically.
                 </p>
               </div>

@@ -1,6 +1,6 @@
-# OwnPilot Provider System
+# LEO Provider System
 
-Comprehensive reference for the multi-provider AI architecture in OwnPilot. This document covers every provider type, the routing and fallback system, model capabilities, configuration loading, aggregator services, local inference, database overrides, and the UI management layer.
+Comprehensive reference for the multi-provider AI architecture in LEO. This document covers every provider type, the routing and fallback system, model capabilities, configuration loading, aggregator services, local inference, database overrides, and the UI management layer.
 
 ---
 
@@ -1422,7 +1422,7 @@ The system can automatically sync provider and model data from the [models.dev](
 ### Sync Process
 
 1. Fetches `https://models.dev/api.json` (complete catalog of providers and models).
-2. For each provider, converts the models.dev format to OwnPilot's `ProviderConfig` format.
+2. For each provider, converts the models.dev format to LEO's `ProviderConfig` format.
 3. Maps capabilities: `tool_call` -> `function_calling`, `structured_output` -> `json_mode`, `reasoning` -> `reasoning`, image/video/audio modalities -> `vision`/`audio`.
 4. **Merges** with existing config files, preserving protected fields.
 5. Writes updated JSON files to `data/providers/`.

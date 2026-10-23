@@ -1,6 +1,6 @@
-# OwnPilot Gateway API Reference
+# LEO Gateway API Reference
 
-Complete HTTP API reference for the OwnPilot Gateway, a Hono-based server running on Node.js with `@hono/node-server`.
+Complete HTTP API reference for the LEO Gateway, a Hono-based server running on Node.js with `@hono/node-server`.
 
 **Base URL:** `http://localhost:8080`
 **API Prefix:** `/api/v1`

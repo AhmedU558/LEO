@@ -13,8 +13,8 @@ export function QuickStartPage() {
       </Badge>
       <h1>Quick Start</h1>
       <p>
-        The fastest way to start OwnPilot is with Docker — it pulls the image, starts PostgreSQL
-        with pgvector, and serves everything on a single port.
+        The fastest way to start LEO is with Docker — it pulls the image, starts PostgreSQL with
+        pgvector, and serves everything on a single port.
       </p>
 
       <Callout type="info" title="Prerequisites">
@@ -28,7 +28,7 @@ export function QuickStartPage() {
         code={`git clone https://github.com/ownpilot/ownpilot.git
 cd ownpilot
 
-# Start OwnPilot + PostgreSQL
+# Start LEO + PostgreSQL
 docker compose --profile postgres up -d`}
         language="bash"
       />
@@ -184,8 +184,8 @@ ownpilot config set ollama-base-url http://localhost:11434`}
       </table>
 
       <Callout type="success" title="You're ready!">
-        Once OwnPilot is running and you've set an API key, navigate to the Chat page to start your
-        first conversation. The assistant has access to all 250+ built-in tools by default.
+        Once LEO is running and you've set an API key, navigate to the Chat page to start your first
+        conversation. The assistant has access to all 250+ built-in tools by default.
       </Callout>
 
       {/* Prev/Next navigation */}

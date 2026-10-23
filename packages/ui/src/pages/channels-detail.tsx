@@ -77,7 +77,7 @@ export function ChannelDetail({
 }) {
   const toast = useToast();
   const [showTestForm, setShowTestForm] = useState(false);
-  const [testText, setTestText] = useState('Hello! This is a test message from OwnPilot.');
+  const [testText, setTestText] = useState('Hello! This is a test message from LEO.');
   const [testChatId, setTestChatId] = useState('');
   const [isSending, setIsSending] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);

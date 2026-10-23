@@ -1,6 +1,6 @@
 # Coding Agents
 
-OwnPilot can orchestrate external AI coding CLI tools -- Claude Code (Anthropic), Codex (OpenAI), and Gemini CLI (Google) -- as first-class coding agents. Users can also register custom CLI providers beyond the built-in three.
+LEO can orchestrate external AI coding CLI tools -- Claude Code (Anthropic), Codex (OpenAI), and Gemini CLI (Google) -- as first-class coding agents. Users can also register custom CLI providers beyond the built-in three.
 
 Each coding agent runs as a child process in a user-specified working directory, authenticates with the user's own credentials, and streams output to the web UI in real time via WebSocket.
 
@@ -39,7 +39,7 @@ User (UI / AI tool)
        +---> resolves provider (built-in or custom:name)
        +---> resolves API key (Config Center -> env var -> none)
        +---> validates binary installed on PATH
-       +---> creates sanitized env (strips OwnPilot secrets, injects API key)
+       +---> creates sanitized env (strips LEO secrets, injects API key)
        +---> builds CLI args per provider
        |
        v
@@ -211,7 +211,7 @@ function createSanitizedEnv(
 
 1. **Copies** the current `process.env` as the base.
 
-2. **Strips sensitive OwnPilot variables** matching these patterns:
+2. **Strips sensitive LEO variables** matching these patterns:
    - `OWNPILOT_*`
    - `DATABASE_*`
    - `ADMIN_KEY`
@@ -294,7 +294,7 @@ After registration, the provider is available as `custom:aider` in session creat
 
 ## AI Tool Definitions
 
-Four AI tools are registered in the `Coding Agents` category, usable by OwnPilot's main agent and in workflows:
+Four AI tools are registered in the `Coding Agents` category, usable by LEO's main agent and in workflows:
 
 ### `run_coding_task`
 

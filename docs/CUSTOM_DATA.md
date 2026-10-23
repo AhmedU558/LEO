@@ -1,6 +1,6 @@
 # Custom Data System
 
-The Custom Data system allows the OwnPilot AI agent to create, manage, and query user-defined data tables at runtime. Instead of relying on a fixed schema, the AI can dynamically define table structures with typed columns and then populate them with records -- all stored as JSONB in PostgreSQL for maximum flexibility.
+The Custom Data system allows the LEO AI agent to create, manage, and query user-defined data tables at runtime. Instead of relying on a fixed schema, the AI can dynamically define table structures with typed columns and then populate them with records -- all stored as JSONB in PostgreSQL for maximum flexibility.
 
 This document covers every layer of the system: database schema, repository, REST API, AI tool definitions, tool executor, and the frontend UI.
 
@@ -25,7 +25,7 @@ This document covers every layer of the system: database schema, repository, RES
 
 ## Overview
 
-OwnPilot ships with several built-in data modules (bookmarks, tasks, notes, calendar, contacts, expenses, memories, goals, scheduled tasks). The Custom Data system exists for everything else -- any structured data the user or AI wants to persist that does not already have a dedicated module.
+LEO ships with several built-in data modules (bookmarks, tasks, notes, calendar, contacts, expenses, memories, goals, scheduled tasks). The Custom Data system exists for everything else -- any structured data the user or AI wants to persist that does not already have a dedicated module.
 
 Key properties:
 

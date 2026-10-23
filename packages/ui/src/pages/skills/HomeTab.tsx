@@ -289,8 +289,8 @@ export function HomeTab() {
         <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
           Skills follow the open <span className="font-semibold">AgentSkills.io</span> standard — a
           plain markdown file with YAML frontmatter for metadata and markdown body for instructions.
-          OwnPilot also supports its own native format with richer tool definitions and
-          multi-section layouts. Both formats are fully supported.
+          LEO also supports its own native format with richer tool definitions and multi-section
+          layouts. Both formats are fully supported.
         </p>
       </div>
 

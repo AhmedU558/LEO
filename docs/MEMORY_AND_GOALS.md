@@ -1,6 +1,6 @@
 # Memory and Goal Systems
 
-OwnPilot includes a persistent memory system and a long-term goal tracking system that together enable autonomous, context-aware AI behavior. The AI remembers facts about the user across conversations, tracks long-term objectives, and connects those objectives to executable plans and automated triggers.
+LEO includes a persistent memory system and a long-term goal tracking system that together enable autonomous, context-aware AI behavior. The AI remembers facts about the user across conversations, tracks long-term objectives, and connects those objectives to executable plans and automated triggers.
 
 This document provides a comprehensive reference for both systems: their database schemas, tool interfaces, internal lifecycle mechanics, prompt injection pipeline, and the integration points that tie memories, goals, plans, and triggers together.
 

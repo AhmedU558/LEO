@@ -1,6 +1,6 @@
 # CLI Tools System
 
-OwnPilot provides a managed CLI tools system that lets the AI assistant discover, execute, and install command-line tools (linters, formatters, build tools, test runners, etc.) in a controlled, policy-governed manner. Unlike the coding agent system (long-running PTY sessions), CLI tools are short-lived fire-and-forget executions with bounded output capture.
+LEO provides a managed CLI tools system that lets the AI assistant discover, execute, and install command-line tools (linters, formatters, build tools, test runners, etc.) in a controlled, policy-governed manner. Unlike the coding agent system (long-running PTY sessions), CLI tools are short-lived fire-and-forget executions with bounded output capture.
 
 This document covers the full architecture, catalog, discovery, policy system, risk scoring, API surface, security model, and UI management.
 
@@ -657,7 +657,7 @@ Before spawning any child process, `createSanitizedEnv()` strips sensitive varia
 
 ```typescript
 const sensitivePatterns = [
-  /^OWNPILOT_/i, // All OwnPilot internal vars
+  /^OWNPILOT_/i, // All LEO internal vars
   /^DATABASE_/i, // Database connection strings
   /^ADMIN_KEY$/i, // Admin authentication key
   /^JWT_SECRET$/i, // JWT signing secret

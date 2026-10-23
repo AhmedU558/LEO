@@ -95,7 +95,7 @@ export function Architecture() {
           <div className="max-w-5xl mx-auto rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-lg">
             <img
               src="/architecture.png"
-              alt="OwnPilot Architecture — Privacy-first AI platform with 100+ tools, 11+ providers, self-hosted"
+              alt="LEO Architecture — Privacy-first AI platform with 100+ tools, 11+ providers, self-hosted"
               className="w-full h-auto"
               loading="lazy"
             />

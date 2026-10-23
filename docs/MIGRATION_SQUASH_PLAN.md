@@ -193,4 +193,4 @@ This squash should be done when:
 - Full DB re-creation from the squashed migration (acceptable for early-stage projects)
 - A compatibility layer that detects old schema and applies only delta migrations
 
-For OwnPilot's current stage, **option A (full re-create)** is recommended — the project is pre-v1.0 and no production DBs depend on incremental migration history.
+For LEO's current stage, **option A (full re-create)** is recommended — the project is pre-v1.0 and no production DBs depend on incremental migration history.

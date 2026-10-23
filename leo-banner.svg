@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" width="1600" height="600" role="img" aria-label="LEO — Logical Execution &amp; Orchestration. An autonomous AI system that understands, plans, authorizes, executes, and audits tasks.">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e1b4b"/>
+      <stop offset="0.55" stop-color="#3730a3"/>
+      <stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+    <radialGradient id="heart" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </radialGradient>
+    <style>
+      text { font-family: 'Segoe UI', Inter, -apple-system, 'Helvetica Neue', Arial, sans-serif; fill: #ffffff; }
+      .box { fill: #ffffff; fill-opacity: 0.10; stroke: #ffffff; stroke-opacity: 0.30; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="600" rx="28" fill="url(#sky)"/>
+
+  <!-- Background starfield, kept clear of the text block -->
+  <g fill="#ffffff">
+    <circle cx="1300" cy="62" r="2" fill-opacity="0.6"/>
+    <circle cx="1410" cy="120" r="1.5" fill-opacity="0.5"/>
+    <circle cx="1520" cy="70" r="2.5" fill-opacity="0.55"/>
+    <circle cx="1545" cy="190" r="1.5" fill-opacity="0.45"/>
+    <circle cx="1470" cy="250" r="2" fill-opacity="0.4"/>
+    <circle cx="1360" cy="205" r="1.2" fill-opacity="0.45"/>
+    <circle cx="1540" cy="330" r="1.6" fill-opacity="0.35"/>
+  </g>
+
+  <!-- The LEO mark: the constellation Leo, scaled from the 100x100 logo -->
+  <g transform="translate(59 65) scale(2.8)">
+    <g stroke="#ffffff" stroke-opacity="0.55" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <polyline points="27,38 34,31 43,35 44,46 37,55 35,67"/>
+      <polyline points="44,46 62,45 77,55 63,61 35,67"/>
+    </g>
+    <g fill="#ffffff">
+      <circle cx="27" cy="38" r="2.4"/>
+      <circle cx="34" cy="31" r="2.2"/>
+      <circle cx="43" cy="35" r="2.6"/>
+      <circle cx="44" cy="46" r="3.2"/>
+      <circle cx="37" cy="55" r="2.4"/>
+      <circle cx="62" cy="45" r="2.8"/>
+      <circle cx="63" cy="61" r="2.4"/>
+      <circle cx="77" cy="55" r="3.0"/>
+    </g>
+    <circle cx="35" cy="67" r="7" fill="#f59e0b" fill-opacity="0.25"/>
+    <circle cx="35" cy="67" r="4.6" fill="url(#heart)"/>
+  </g>
+
+  <!-- Wordmark, expansion and tagline -->
+  <text x="360" y="182" font-size="150" font-weight="800" letter-spacing="14">LEO</text>
+  <text x="366" y="240" font-size="38" font-weight="600" letter-spacing="1">Logical Execution &amp; Orchestration</text>
+  <text x="366" y="296" font-size="28" fill-opacity="0.85">An autonomous AI system that understands, plans,</text>
+  <text x="366" y="334" font-size="28" fill-opacity="0.85">authorizes, executes, and audits tasks.</text>
+
+  <!-- The five verbs of the tagline, as a pipeline -->
+  <g>
+    <rect class="box" x="80" y="405" width="240" height="115" rx="18"/>
+    <text x="200" y="455" font-size="30" font-weight="700" text-anchor="middle">Understand</text>
+    <text x="200" y="490" font-size="19" text-anchor="middle" fill-opacity="0.8">Voice · Chat · Vision</text>
+
+    <rect class="box" x="380" y="405" width="240" height="115" rx="18"/>
+    <text x="500" y="455" font-size="30" font-weight="700" text-anchor="middle">Plan</text>
+    <text x="500" y="490" font-size="19" text-anchor="middle" fill-opacity="0.8">Goals · Workflows</text>
+
+    <rect class="box" x="680" y="405" width="240" height="115" rx="18"/>
+    <text x="800" y="455" font-size="30" font-weight="700" text-anchor="middle">Authorize</text>
+    <text x="800" y="490" font-size="19" text-anchor="middle" fill-opacity="0.8">Policy · Approvals</text>
+
+    <rect class="box" x="980" y="405" width="240" height="115" rx="18"/>
+    <text x="1100" y="455" font-size="30" font-weight="700" text-anchor="middle">Execute</text>
+    <text x="1100" y="490" font-size="19" text-anchor="middle" fill-opacity="0.8">Browser · Tools · MCP</text>
+
+    <rect class="box" x="1280" y="405" width="240" height="115" rx="18"/>
+    <text x="1400" y="455" font-size="30" font-weight="700" text-anchor="middle">Audit</text>
+    <text x="1400" y="490" font-size="19" text-anchor="middle" fill-opacity="0.8">Action ledger</text>
+  </g>
+  <g stroke="#ffffff" stroke-opacity="0.7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="340,450 360,462 340,474"/>
+    <polyline points="640,450 660,462 640,474"/>
+    <polyline points="940,450 960,462 940,474"/>
+    <polyline points="1240,450 1260,462 1240,474"/>
+  </g>
+
+  <text x="1520" y="570" font-size="18" text-anchor="end" fill-opacity="0.6">Built on OwnPilot (MIT)</text>
+</svg>

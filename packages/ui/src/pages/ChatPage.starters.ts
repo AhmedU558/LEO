@@ -29,7 +29,7 @@ export const EXAMPLE_STARTERS: StarterPrompt[] = [
     detail: 'Capabilities, tools, limits',
     source: 'example',
     prompt:
-      'Give me a concise orientation to what you can do in OwnPilot. Include available tools, privacy boundaries, current model limits, and the best ways to work with you.',
+      'Give me a concise orientation to what you can do in LEO. Include available tools, privacy boundaries, current model limits, and the best ways to work with you.',
   },
   {
     icon: '✅',

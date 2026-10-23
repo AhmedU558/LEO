@@ -38,8 +38,8 @@ export function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4">
-              <img src="/logo.jpeg" alt="OwnPilot" className="w-8 h-8 rounded-lg object-contain" />
-              <span className="font-bold text-lg text-[var(--color-text)]">OwnPilot</span>
+              <img src="/logo.png" alt="LEO" className="w-8 h-8 rounded-lg object-contain" />
+              <span className="font-bold text-lg text-[var(--color-text)]">LEO</span>
             </Link>
             <p className="text-sm text-[var(--color-text-muted)] leading-relaxed mb-4 max-w-xs">
               Privacy-first personal AI assistant platform. Self-hosted. Your data stays yours.
@@ -87,7 +87,7 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div className="mt-12 pt-8 border-t border-[var(--color-border)] flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-[var(--color-text-subtle)]">© 2026 OwnPilot. MIT License.</p>
+          <p className="text-xs text-[var(--color-text-subtle)]">© 2026 LEO. MIT License.</p>
           <div className="flex items-center gap-4">
             <a
               href="https://github.com/ownpilot/ownpilot"

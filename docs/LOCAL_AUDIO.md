@@ -1,6 +1,6 @@
 # Local Audio Setup
 
-OwnPilot can run speech-to-text and text-to-speech without paid APIs.
+LEO can run speech-to-text and text-to-speech without paid APIs.
 
 ## Components
 
@@ -31,7 +31,7 @@ POST /v1/audio/transcriptions
 
 ## Run Local TTS
 
-Install Piper and download a voice model. OwnPilot calls:
+Install Piper and download a voice model. LEO calls:
 
 ```bash
 piper --model <local_tts_model> --output_file <temp.wav>
@@ -39,7 +39,7 @@ piper --model <local_tts_model> --output_file <temp.wav>
 
 Piper output is WAV. Telegram voice replies try to convert WAV to OGG/Opus with
 `ffmpeg` so they can be sent as native voice notes. If `ffmpeg` is unavailable,
-OwnPilot falls back to sending the generated audio file.
+LEO falls back to sending the generated audio file.
 
 ## Telegram
 

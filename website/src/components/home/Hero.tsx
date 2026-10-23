@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { CodeBlock } from '@/components/ui/CodeBlock';
 
-const DOCKER_QUICKSTART = `# Clone and start OwnPilot
+const DOCKER_QUICKSTART = `# Clone and start LEO
 git clone https://github.com/ownpilot/ownpilot.git
 cd ownpilot
 

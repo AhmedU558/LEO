@@ -142,10 +142,9 @@ export function CodingAgentsPage() {
       </Badge>
       <h1>Coding Agents</h1>
       <p className="text-lg text-[var(--color-text-muted)] mb-8">
-        OwnPilot orchestrates Claude Code, Codex CLI, and Gemini CLI as coding agents — autonomous
-        code editors that can read files, run tests, make commits, and complete multi-step
-        programming tasks. Sessions stream output in real-time and support PTY mode for interactive
-        tools.
+        LEO orchestrates Claude Code, Codex CLI, and Gemini CLI as coding agents — autonomous code
+        editors that can read files, run tests, make commits, and complete multi-step programming
+        tasks. Sessions stream output in real-time and support PTY mode for interactive tools.
       </p>
 
       <h2>Supported providers</h2>
@@ -323,15 +322,15 @@ export function CodingAgentsPage() {
       <h2>Environment sanitization</h2>
       <p>
         Coding agent child processes run with a sanitized copy of the parent environment. This
-        prevents conflicts when OwnPilot itself runs inside an agent environment.
+        prevents conflicts when LEO itself runs inside an agent environment.
       </p>
       <CodeBlock code={ENV_SANITIZATION} language="bash" />
 
       <Callout type="warning" title="CLAUDECODE env var">
-        Claude Code sets <code>CLAUDECODE=1</code> in its environment. If OwnPilot is itself running
+        Claude Code sets <code>CLAUDECODE=1</code> in its environment. If LEO is itself running
         inside Claude Code, child coding agent processes will see this variable and refuse to start.
-        OwnPilot automatically removes it (and similar variables) from the sanitized environment
-        passed to child coding agents.
+        LEO automatically removes it (and similar variables) from the sanitized environment passed
+        to child coding agents.
       </Callout>
 
       <h2>Fleet integration</h2>

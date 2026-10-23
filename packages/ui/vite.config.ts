@@ -76,11 +76,12 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['logo.svg', 'ownpilot-logo.jpeg'],
+        includeAssets: ['logo.svg', 'leo-logo.png'],
         manifest: {
-          name: 'OwnPilot',
-          short_name: 'OwnPilot',
-          description: 'Privacy-first AI Assistant Dashboard',
+          name: 'LEO',
+          short_name: 'LEO',
+          description:
+            'Logical Execution & Orchestration. An autonomous AI system that understands, plans, authorizes, executes, and audits tasks.',
           theme_color: '#0f172a',
           background_color: '#0f172a',
           display: 'standalone',
@@ -96,9 +97,9 @@ export default defineConfig(({ mode }) => {
               purpose: 'any maskable',
             },
             {
-              src: 'ownpilot-logo.jpeg',
+              src: 'leo-logo.png',
               sizes: '256x256',
-              type: 'image/jpeg',
+              type: 'image/png',
               purpose: 'any',
             },
           ],

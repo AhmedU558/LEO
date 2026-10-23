@@ -20,7 +20,7 @@ export function CTA() {
 
           <p className="text-xl text-[var(--color-text-muted)] mb-10 max-w-2xl mx-auto leading-relaxed">
             Join the growing community of privacy-conscious developers and power users who self-host
-            OwnPilot. Your data. Your infrastructure. Your rules.
+            LEO. Your data. Your infrastructure. Your rules.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">

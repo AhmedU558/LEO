@@ -66,7 +66,7 @@ const features = [
     badge: 'Client + Server',
     badgeVariant: 'blue' as const,
     description:
-      'Both sides of MCP: connect to external MCP servers (Filesystem, GitHub, Brave Search) and expose OwnPilot as an MCP server for Claude Desktop.',
+      'Both sides of MCP: connect to external MCP servers (Filesystem, GitHub, Brave Search) and expose LEO as an MCP server for Claude Desktop.',
     color: 'from-cyan-500/20 to-blue-500/20',
     iconColor: 'text-cyan-500',
   },
@@ -223,7 +223,7 @@ export function Features() {
               A complete AI platform, <span className="text-gradient">not a SaaS</span>
             </h2>
             <p className="text-lg text-[var(--color-text-muted)] leading-relaxed">
-              OwnPilot runs entirely on your infrastructure. No data sent to third parties, no
+              LEO runs entirely on your infrastructure. No data sent to third parties, no
               subscription fees, no vendor lock-in. Just a powerful, extensible AI assistant that
               respects your privacy.
             </p>

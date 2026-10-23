@@ -1,6 +1,6 @@
 # Plans -- Autonomous Plan Execution System
 
-OwnPilot includes a full-featured autonomous plan execution system that enables the AI assistant to decompose complex goals into ordered steps and execute them independently. Plans support conditional branching, parallel execution, looping, sub-plan delegation, user-input gates, automatic retries with exponential backoff, checkpointing, rollback, and a complete audit trail.
+LEO includes a full-featured autonomous plan execution system that enables the AI assistant to decompose complex goals into ordered steps and execute them independently. Plans support conditional branching, parallel execution, looping, sub-plan delegation, user-input gates, automatic retries with exponential backoff, checkpointing, rollback, and a complete audit trail.
 
 ---
 

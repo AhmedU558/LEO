@@ -258,7 +258,7 @@ export function ChangelogPage() {
         </Badge>
         <h1>Changelog</h1>
         <p>
-          All notable changes to OwnPilot are documented here. The format follows{' '}
+          All notable changes to LEO are documented here. The format follows{' '}
           <a href="https://keepachangelog.com/en/1.1.0/" target="_blank" rel="noopener noreferrer">
             Keep a Changelog
           </a>{' '}

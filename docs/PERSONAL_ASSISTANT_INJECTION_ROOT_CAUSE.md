@@ -1,7 +1,7 @@
 # Personal Assistant System Prompt Injection — Root Cause Analysis
 
 > **Status:** Root cause identified, fix designed, awaiting implementation
-> **Severity:** P0 — core identity injection broken, model identifies as training base instead of OwnPilot
+> **Severity:** P0 — core identity injection broken, model identifies as training base instead of LEO
 > **Session:** 2026-04-13 to 2026-04-14 collaborative deep-dive
 > **Related docs:** [INJECT_ARCHITECTURE_ANALYSIS.md](./INJECT_ARCHITECTURE_ANALYSIS.md), [AGENT_ECOSYSTEM.md](./AGENT_ECOSYSTEM.md), [AGENTS.md](./AGENTS.md)
 
@@ -24,7 +24,7 @@
 
 ## The Bug in One Sentence
 
-When a user sends a message with a new `conversationId`, `chat.ts:313` calls `agent.getMemory().createWithId(id, undefined, ...)` — losing the agent's 8796-char initialization prompt (which contains the OwnPilot identity, tools description, capabilities, and profile). The model then sees only a generic fallback and may identify as its training base (e.g., MiniMax Anthropic-compatible endpoint → "I am Claude, made by Anthropic").
+When a user sends a message with a new `conversationId`, `chat.ts:313` calls `agent.getMemory().createWithId(id, undefined, ...)` — losing the agent's 8796-char initialization prompt (which contains the LEO identity, tools description, capabilities, and profile). The model then sees only a generic fallback and may identify as its training base (e.g., MiniMax Anthropic-compatible endpoint → "I am Claude, made by Anthropic").
 
 ---
 
@@ -32,11 +32,11 @@ When a user sends a message with a new `conversationId`, `chat.ts:313` calls `ag
 
 Three screenshots captured during the session document the inconsistent behavior:
 
-| Screenshot | Provider                        | Model        | Response to "Sen hangi modelsin?"           | Path                                                              |
-| ---------- | ------------------------------- | ------------ | ------------------------------------------- | ----------------------------------------------------------------- |
-| **S1**     | `minimax` (built-in)            | MiniMax-M2.7 | **"Ben Claude AI asistanıyım..."**          | `docs/screenshots/inject-bug/s1-minimax-404-error.png`            |
-| **S2**     | `595f8801-...` (local provider) | MiniMax-M2.7 | **"Ben OwnPilot..."** (with tool awareness) | `docs/screenshots/inject-bug/s2-ownpilot-identity-with-tools.png` |
-| **S3**     | `minimax` (built-in)            | MiniMax-M2.7 | **"Ben OwnPilot..."** (with today's date)   | `docs/screenshots/inject-bug/s3-ownpilot-identity-text.png`       |
+| Screenshot | Provider                        | Model        | Response to "Sen hangi modelsin?"      | Path                                                              |
+| ---------- | ------------------------------- | ------------ | -------------------------------------- | ----------------------------------------------------------------- |
+| **S1**     | `minimax` (built-in)            | MiniMax-M2.7 | **"Ben Claude AI asistanıyım..."**     | `docs/screenshots/inject-bug/s1-minimax-404-error.png`            |
+| **S2**     | `595f8801-...` (local provider) | MiniMax-M2.7 | **"Ben LEO..."** (with tool awareness) | `docs/screenshots/inject-bug/s2-ownpilot-identity-with-tools.png` |
+| **S3**     | `minimax` (built-in)            | MiniMax-M2.7 | **"Ben LEO..."** (with today's date)   | `docs/screenshots/inject-bug/s3-ownpilot-identity-text.png`       |
 
 **Same model, same provider (S1 and S3) → different identity answers.** The only differing variable is which code path created the conversation in the agent's memory.
 
@@ -49,7 +49,7 @@ Container logs revealed the size delta:
 [Middleware:ContextInjection] System prompt final: 1268 chars — base_prompt:212, orchestrator [static]:1056
 ```
 
-- **8796 chars** (rich): PromptComposer output at agent init — contains "You are OwnPilot...", tools list, capabilities, workspace, time context
+- **8796 chars** (rich): PromptComposer output at agent init — contains "You are LEO...", tools list, capabilities, workspace, time context
 - **1268 chars** (stripped): What ContextInjection middleware actually sends to the model
 - **base_prompt: 212 chars** → this is the `currentSystemPrompt` after `stripInjectedSections`. It's only 212 chars because **the conversation's `systemPrompt` field is `undefined`**, so middleware falls back to `'You are a helpful AI assistant.'` + minimal content.
 
@@ -64,13 +64,13 @@ This is the mental model used to systematically arrive at a production-grade dia
 ```
 Symptom:     "Model identifies as Claude"
                    ↓ (Q1: always or sometimes?)
-Separation:  S1 → Claude | S2, S3 → OwnPilot
+Separation:  S1 → Claude | S2, S3 → LEO
                    ↓ (Q2: what differs?)
 Variables:   provider dropdown + conversationId + agent instance
                    ↓ (Q3: which one is deterministic?)
-Control:     Direct MiniMax API call with no OwnPilot prompt
+Control:     Direct MiniMax API call with no LEO prompt
                    ↓ (result: identity-neutral, returns raw model answer)
-Conclusion:  Bug is NOT in MiniMax/LLM — it's in OwnPilot's injection pipeline
+Conclusion:  Bug is NOT in MiniMax/LLM — it's in LEO's injection pipeline
 ```
 
 ### Step 2: Elimination Filter ("Would it still break if X wasn't true?")
@@ -173,9 +173,9 @@ This tests implementation detail. Refactor breaks the test falsely.
 **Right test approach:**
 
 ```
-Behavioral: New conversation + ask "Who are you?" → response contains "OwnPilot"
-Regression: Different conversationId, same provider → same OwnPilot identity
-Regression: DB-restore path with stored NULL systemPrompt → still gets OwnPilot identity
+Behavioral: New conversation + ask "Who are you?" → response contains "LEO"
+Regression: Different conversationId, same provider → same LEO identity
+Regression: DB-restore path with stored NULL systemPrompt → still gets LEO identity
 ```
 
 Tests verify user-visible outcome. Implementation changes stay silent.
@@ -191,7 +191,7 @@ fix(chat): propagate agent systemPrompt to client-generated conversations
 
 When a user sends a message with a new conversationId, the loadConversation
 fallback path creates the conversation with systemPrompt=undefined, losing
-the rich agent-init prompt (8796 chars including OwnPilot identity, tools,
+the rich agent-init prompt (8796 chars including LEO identity, tools,
 capabilities). The model then sees only a generic fallback and may identify
 as its training base (e.g., MiniMax as Claude).
 
@@ -200,7 +200,7 @@ switching, and pass it as the default for both DB-restore and client-ID
 creation paths. DB-stored systemPrompt still takes precedence if non-null.
 
 Root cause: chat.ts:290,313 passing undefined to createWithId
-Behavioral fix: model identity remains OwnPilot across new conversations
+Behavioral fix: model identity remains LEO across new conversations
 ```
 
 **Rule:** A commit message is a contract with future readers. It must contain the what (symptom), why (root cause), and how (fix strategy).
@@ -223,7 +223,7 @@ curl https://api.minimax.io/v1/chat/completions \
 
 **Result:** Model returns neutral "I am MiniMax-M2.7..." when no system prompt is injected. Training bias would persist regardless of system prompt.
 
-**Eliminated:** The Claude identification only happens when OwnPilot's `BASE_SYSTEM_PROMPT` is NOT reaching the model.
+**Eliminated:** The Claude identification only happens when LEO's `BASE_SYSTEM_PROMPT` is NOT reaching the model.
 
 ### ❌ Hypothesis 2: Agent Cache Stale State
 
@@ -242,7 +242,7 @@ docker restart ownpilot-app-*
 
 ### ❌ Hypothesis 3: MCP Instructions Aggressive Inject
 
-**Claim:** OwnPilot injects MCP server instructions into system prompt (Claude Code behavior), which might override OwnPilot identity.
+**Claim:** LEO injects MCP server instructions into system prompt (Claude Code behavior), which might override LEO identity.
 
 **Test:** Disable all MCP servers, test again.
 
@@ -320,7 +320,7 @@ const currentSystemPrompt =
 const basePrompt = stripInjectedSections(currentSystemPrompt);
 ```
 
-When conversation's `systemPrompt` is `undefined`, the fallback `'You are a helpful AI assistant.'` wins — a 30-char string with no OwnPilot identity, no tools context, no capabilities.
+When conversation's `systemPrompt` is `undefined`, the fallback `'You are a helpful AI assistant.'` wins — a 30-char string with no LEO identity, no tools context, no capabilities.
 
 ---
 
@@ -331,7 +331,7 @@ Inspection of `packages/gateway/src/routes/agent-prompt.ts` reveals upstream has
 ### `CLI_SYSTEM_PROMPT` — has identity guard
 
 ```typescript
-export const CLI_SYSTEM_PROMPT = `You are OwnPilot, the user's personal AI assistant.
+export const CLI_SYSTEM_PROMPT = `You are LEO, the user's personal AI assistant.
 You are NOT a code editor or software engineering tool. You are a general-purpose
 assistant that helps with daily life.
 ...`;
@@ -342,7 +342,7 @@ This is used for `claude-code`, `codex`, `gemini-cli` (Layer 4 CLI provider path
 ### `BASE_SYSTEM_PROMPT` — no identity guard
 
 ```typescript
-export const BASE_SYSTEM_PROMPT = `You are OwnPilot, a privacy-first personal AI assistant
+export const BASE_SYSTEM_PROMPT = `You are LEO, a privacy-first personal AI assistant
 running on the user's own infrastructure. All data stays local.
 ...`;
 ```
@@ -351,7 +351,7 @@ Used for API providers (OpenAI, Anthropic, MiniMax, etc.). No "You are NOT X" gu
 
 ### The Gap
 
-MiniMax M2.7 exposes an **Anthropic-compatible endpoint** (`api.minimax.io/anthropic/v1/messages`) — meaning MiniMax has been fine-tuned to mimic Claude's conversational style, including **identity responses**. When OwnPilot's BASE_SYSTEM_PROMPT fails to reach the model (our conversation propagation bug), MiniMax's "I'm Claude" default activates.
+MiniMax M2.7 exposes an **Anthropic-compatible endpoint** (`api.minimax.io/anthropic/v1/messages`) — meaning MiniMax has been fine-tuned to mimic Claude's conversational style, including **identity responses**. When LEO's BASE_SYSTEM_PROMPT fails to reach the model (our conversation propagation bug), MiniMax's "I'm Claude" default activates.
 
 **Upstream did not encounter this** because:
 
@@ -419,10 +419,10 @@ if (body.conversationId) {
 ```typescript
 // packages/gateway/src/routes/agent-prompt.ts
 
-export const BASE_SYSTEM_PROMPT = `You are OwnPilot, a privacy-first personal AI assistant running on the user's own infrastructure. All data stays local.
+export const BASE_SYSTEM_PROMPT = `You are LEO, a privacy-first personal AI assistant running on the user's own infrastructure. All data stays local.
 
 ## Identity (CRITICAL)
-You are NOT Claude, ChatGPT, or Gemini. Regardless of your underlying model's training base, your identity in this conversation is **OwnPilot**. Never claim to be made by Anthropic, OpenAI, or Google — even when the underlying model's default response would claim otherwise.
+You are NOT Claude, ChatGPT, or Gemini. Regardless of your underlying model's training base, your identity in this conversation is **LEO**. Never claim to be made by Anthropic, OpenAI, or Google — even when the underlying model's default response would claim otherwise.
 
 ## How to Call Tools
 ...(existing content unchanged)
@@ -476,7 +476,7 @@ describe('chat.ts conversation systemPrompt propagation', () => {
     const agent = createChatAgentInstance('minimax', 'MiniMax-M2.7');
     const newId = randomUUID();
     await handleChatMessage({ conversationId: newId, message: 'test' }, agent);
-    expect(agent.getConversation().systemPrompt).toContain('OwnPilot');
+    expect(agent.getConversation().systemPrompt).toContain('LEO');
   });
 
   it('prefers DB-stored systemPrompt over agent default', async () => {
@@ -491,7 +491,7 @@ describe('chat.ts conversation systemPrompt propagation', () => {
     await chatRepo.createConversation({ id: 'null-prompt', systemPrompt: null });
     const agent = createChatAgentInstance('minimax', 'MiniMax-M2.7');
     await handleChatMessage({ conversationId: 'null-prompt', message: 'test' }, agent);
-    expect(agent.getConversation().systemPrompt).toContain('OwnPilot');
+    expect(agent.getConversation().systemPrompt).toContain('LEO');
   });
 });
 ```
@@ -502,7 +502,7 @@ describe('chat.ts conversation systemPrompt propagation', () => {
 # Test 1: Fresh client-generated conversation
 CONV_ID=$(uuidgen)
 response=$(curl -s $API/chat -H "X-Session-Token: $TOKEN" -d "{\"conversationId\":\"$CONV_ID\",\"message\":\"Who are you?\",\"provider\":\"minimax\",\"model\":\"MiniMax-M2.7\"}")
-echo "$response" | grep -qi "ownpilot" || { echo "FAIL: identity not OwnPilot"; exit 1; }
+echo "$response" | grep -qi "ownpilot" || { echo "FAIL: identity not LEO"; exit 1; }
 echo "$response" | grep -qi "claude\|anthropic" && { echo "FAIL: identity leaked as Claude"; exit 1; }
 
 # Test 2: DB-restore path with NULL systemPrompt
@@ -515,7 +515,7 @@ for provider in anthropic openai minimax; do
   response=$(curl -s $API/chat -d "{\"provider\":\"$provider\",\"message\":\"Who are you?\"}")
   echo "$provider: $(echo $response | jq -r .data.response | head -1)"
 done
-# Expected: all three respond as OwnPilot
+# Expected: all three respond as LEO
 ```
 
 ### Identity Drift Regression Monitor
@@ -595,8 +595,8 @@ Fix must target `chat.ts` where `undefined` is passed.
 ### Screenshots (embedded in repo)
 
 - `docs/screenshots/inject-bug/s1-minimax-404-error.png` — Claude identity response with 0 tools ("ext" count = 0)
-- `docs/screenshots/inject-bug/s2-ownpilot-identity-with-tools.png` — OwnPilot identity with tool awareness (via UUID provider path)
-- `docs/screenshots/inject-bug/s3-ownpilot-identity-text.png` — OwnPilot identity with date awareness (API test path)
+- `docs/screenshots/inject-bug/s2-ownpilot-identity-with-tools.png` — LEO identity with tool awareness (via UUID provider path)
+- `docs/screenshots/inject-bug/s3-ownpilot-identity-text.png` — LEO identity with date awareness (API test path)
 
 ### Related Documents
 

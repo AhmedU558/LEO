@@ -210,7 +210,7 @@ const PLATFORMS: Platform[] = [
     id: 'channel.webchat',
     name: 'Web Chat',
     emoji: '🌐',
-    desc: 'Embed an OwnPilot widget on your own website. No configuration required.',
+    desc: 'Embed an LEO widget on your own website. No configuration required.',
     fields: [],
   },
 ];

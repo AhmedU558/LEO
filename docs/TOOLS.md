@@ -1,6 +1,6 @@
-# OwnPilot Tool System
+# LEO Tool System
 
-Comprehensive reference for the OwnPilot tool architecture, all 250+ built-in tools, the registration lifecycle, execution model, and extensibility system.
+Comprehensive reference for the LEO tool architecture, all 250+ built-in tools, the registration lifecycle, execution model, and extensibility system.
 
 ---
 
@@ -61,7 +61,7 @@ Comprehensive reference for the OwnPilot tool architecture, all 250+ built-in to
 
 ## Architecture Overview
 
-The OwnPilot tool system is the bridge between the AI agent and the outside world. When the LLM decides it needs to perform an action -- read a file, create a task, search the web, remember a fact -- it issues a **tool call**. The tool system validates, dispatches, and executes that call, then returns the result to the LLM for incorporation into its response.
+The LEO tool system is the bridge between the AI agent and the outside world. When the LLM decides it needs to perform an action -- read a file, create a task, search the web, remember a fact -- it issues a **tool call**. The tool system validates, dispatches, and executes that call, then returns the result to the LLM for incorporation into its response.
 
 ```
 User prompt
@@ -498,7 +498,7 @@ getToolStats(): { totalGroups, totalTools, enabledByDefault, disabledByDefault }
 
 ## Tool Discovery System
 
-With 148+ tools, the LLM cannot have all tool schemas in every API request. OwnPilot solves this with a discovery-based architecture.
+With 148+ tools, the LLM cannot have all tool schemas in every API request. LEO solves this with a discovery-based architecture.
 
 ### Search Tags
 
@@ -1270,7 +1270,7 @@ Prevent unbounded queries from overloading the system. List-returning tools have
 
 ## Definition-Only vs Built-In Executor Tools
 
-OwnPilot uses a two-tier architecture for tools:
+LEO uses a two-tier architecture for tools:
 
 ### Built-In Executor Tools
 

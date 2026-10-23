@@ -1,6 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="14" fill="#7c3aed"/>
-  <circle cx="32" cy="24" r="10" fill="white" opacity="0.9"/>
-  <path d="M16 48 C16 36 48 36 48 48" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
-  <circle cx="32" cy="24" r="4" fill="#7c3aed"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="LEO">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e1b4b"/>
+      <stop offset="0.55" stop-color="#3730a3"/>
+      <stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+    <radialGradient id="heart" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </radialGradient>
+  </defs>
+  <!-- Full-bleed sky so the mark also works as a maskable app icon. -->
+  <rect width="100" height="100" rx="22" fill="url(#sky)"/>
+  <!-- The constellation Leo: the sickle (head and mane) and the body to the tail.
+       Everything sits inside the central safe zone used by maskable icons. -->
+  <g stroke="#ffffff" stroke-opacity="0.55" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="27,38 34,31 43,35 44,46 37,55 35,67"/>
+    <polyline points="44,46 62,45 77,55 63,61 35,67"/>
+  </g>
+  <g fill="#ffffff">
+    <circle cx="27" cy="38" r="2.4"/>
+    <circle cx="34" cy="31" r="2.2"/>
+    <circle cx="43" cy="35" r="2.6"/>
+    <circle cx="44" cy="46" r="3.2"/>
+    <circle cx="37" cy="55" r="2.4"/>
+    <circle cx="62" cy="45" r="2.8"/>
+    <circle cx="63" cy="61" r="2.4"/>
+    <circle cx="77" cy="55" r="3.0"/>
+  </g>
+  <!-- Regulus, "the heart of the lion" and the brightest star in Leo. -->
+  <circle cx="35" cy="67" r="7" fill="#f59e0b" fill-opacity="0.25"/>
+  <circle cx="35" cy="67" r="4.6" fill="url(#heart)"/>
 </svg>

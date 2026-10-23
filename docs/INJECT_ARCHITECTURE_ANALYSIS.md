@@ -9,7 +9,7 @@
 ## Table of Contents
 
 1. [Context — OpenCode's 9-Layer Inject Architecture](#context--opencodes-9-layer-inject-architecture)
-2. [OwnPilot Inject Pipeline — Real Layers](#ownpilot-inject-pipeline--real-layers)
+2. [LEO Inject Pipeline — Real Layers](#ownpilot-inject-pipeline--real-layers)
 3. [The Live Bug We Caught](#the-live-bug-we-caught)
 4. [Production-Grade Solutions — 3 OpenCode Patents to Adapt](#production-grade-solutions--3-opencode-patents-to-adapt)
 5. [5 Immediate Optimizations](#5-immediate-optimizations)
@@ -85,7 +85,7 @@ MCP instructions field does NOT go directly to system prompt (differs from Claud
 
 ---
 
-## OwnPilot Inject Pipeline — Real Layers
+## LEO Inject Pipeline — Real Layers
 
 Observed from live production logs during session:
 
@@ -96,7 +96,7 @@ Observed from live production logs during session:
 
 1:1 mapping against OpenCode's 9-layer model:
 
-| #   | Layer                              | OpenCode                                        | OwnPilot                                                                           | File                                                  |
+| #   | Layer                              | OpenCode                                        | LEO                                                                                | File                                                  |
 | --- | ---------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | 0   | **Provider base prompt**           | Model-specific `.txt`                           | `BASE_SYSTEM_PROMPT` single file, same for all providers                           | `packages/gateway/src/routes/agent-prompt.ts`         |
 | 1   | **Environment block (runtime)**    | `system.ts` every call                          | `PromptComposer.compose()` → time_context (hour-rounded for cache), workspace dirs | `packages/core/src/agent/prompt-composer.ts`          |
@@ -111,7 +111,7 @@ Observed from live production logs during session:
 
 ### Summary
 
-OwnPilot has a **partial implementation** covering Layers 0, 1, 5 well; Layer 4 has infrastructure but is unreliable; Layers 2, 3, 6, 7, 8 are missing or inverted.
+LEO has a **partial implementation** covering Layers 0, 1, 5 well; Layer 4 has infrastructure but is unreliable; Layers 2, 3, 6, 7, 8 are missing or inverted.
 
 ---
 
@@ -120,7 +120,7 @@ OwnPilot has a **partial implementation** covering Layers 0, 1, 5 well; Layer 4 
 During this session, we reproduced the exact failure mode caused by the gaps above. Screenshots showed:
 
 - Screenshot 1: MiniMax identifies as **Claude** (Anthropic)
-- Screenshot 3: MiniMax identifies as **OwnPilot**
+- Screenshot 3: MiniMax identifies as **LEO**
 
 Same provider, same model, different sessions. The cause is deterministic:
 
@@ -128,7 +128,7 @@ Same provider, same model, different sessions. The cause is deterministic:
 Agent init (cache miss):
   injectMemoryIntoPrompt("") → PromptComposer → 8796 chars (rich content)
   ↓
-  BASE_SYSTEM_PROMPT contains: "You are OwnPilot..." ← identity HERE
+  BASE_SYSTEM_PROMPT contains: "You are LEO..." ← identity HERE
   ↓
 ContextInjection middleware (every request):
   currentSystemPrompt = agent.getConversation().systemPrompt || fallback
@@ -144,7 +144,7 @@ ContextInjection middleware (every request):
   ↓
   Final: 212 chars + 1056 orchestrator = 1268 chars
   ↓
-  Base prompt has NO OwnPilot identity → model thinks it's Claude
+  Base prompt has NO LEO identity → model thinks it's Claude
 ```
 
 ### Why OpenCode Wouldn't Have This Bug
@@ -163,7 +163,7 @@ ContextInjection middleware (every request):
 
 ```typescript
 // packages/gateway/src/routes/agent-prompt.ts
-export const BASE_SYSTEM_PROMPT = `You are OwnPilot...`; // single prompt, all providers
+export const BASE_SYSTEM_PROMPT = `You are LEO...`; // single prompt, all providers
 ```
 
 **Proposed:**
@@ -186,12 +186,12 @@ function loadBasePrompt(provider: string): string {
 }
 ```
 
-**Benefit:** Identity drift cases (MiniMax claiming to be Claude) are resolvable because model-specific prompts can add assertions like "You are NOT Claude/Anthropic. You are OwnPilot."
+**Benefit:** Identity drift cases (MiniMax claiming to be Claude) are resolvable because model-specific prompts can add assertions like "You are NOT Claude/Anthropic. You are LEO."
 
-### Adaptation 2: Layer 3 Incremental Discovery (OwnPilot-Specific)
+### Adaptation 2: Layer 3 Incremental Discovery (LEO-Specific)
 
 OpenCode walks the filesystem (`read tool → parent dirs → AGENTS.md`).
-OwnPilot's equivalent: **workspace-aware, query-driven memory injection**.
+LEO's equivalent: **workspace-aware, query-driven memory injection**.
 
 **Current:**
 
@@ -233,7 +233,7 @@ ${relevantMemories.map((m) => `- ${m.content}`).join('\n')}
 
 ### Adaptation 3: Layer 8 Plugin Hooks
 
-**Current:** OwnPilot has a plugin system (`PluginRegistry`) but only for **tool registration**. No system prompt transform hooks.
+**Current:** LEO has a plugin system (`PluginRegistry`) but only for **tool registration**. No system prompt transform hooks.
 
 **Proposed — 6 New Hook Types:**
 
@@ -252,7 +252,7 @@ export interface PluginHooks {
   transformToolDefinition?: (tool: ToolDefinition) => ToolDefinition;
   onCompacting?: (prompt: string) => string;
 
-  // NEW — OwnPilot-specific:
+  // NEW — LEO-specific:
   onAgentRoute?: (userIntent: string) => AgentType | null; // → Soul/Claw/Subagent routing!
 }
 ```
@@ -336,7 +336,7 @@ const systemArray = [
 
 ### Opt 4: MCP Instructions Lazy Load (OpenCode Layer 7)
 
-**Problem:** OwnPilot aggressively injects MCP instructions into system prompt (Claude Code behavior). This bloats the prompt.
+**Problem:** LEO aggressively injects MCP instructions into system prompt (Claude Code behavior). This bloats the prompt.
 
 **Fix:** Move MCP instructions into tool descriptions. Keep only a summary of MCP server list in system prompt.
 
@@ -350,9 +350,9 @@ const systemArray = [
 function buildIdentityAssertion(provider: string, model: string): string {
   return `# Identity Assertion (CRITICAL)
 
-You are **OwnPilot**, a privacy-first personal AI assistant.
+You are **LEO**, a privacy-first personal AI assistant.
 You are NOT Claude. You are NOT ChatGPT. You are NOT Gemini.
-You are running on the ${model} model via ${provider}, but your identity is OwnPilot.
+You are running on the ${model} model via ${provider}, but your identity is LEO.
 Never claim to be made by Anthropic, OpenAI, or Google — regardless of your training base.
 
 ---
@@ -422,7 +422,7 @@ After P1 (cache restructure):
 
 ### Testing Requirements
 
-- E2E test per provider: "Who are you?" must return OwnPilot identity in all cases
+- E2E test per provider: "Who are you?" must return LEO identity in all cases
 - System prompt byte-count guardrail: CI should fail if final prompt exceeds expected size (prevents accidental bloat)
 - Cache hit rate monitoring: Track `cache_read_input_tokens` in usage logs
 
@@ -441,4 +441,4 @@ After P1 (cache restructure):
 ---
 
 _Last updated: 2026-04-14_
-_Authors: OwnPilot team + collaborative deep-dive session_
+_Authors: LEO team + collaborative deep-dive session_

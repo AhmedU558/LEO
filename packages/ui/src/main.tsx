@@ -1,5 +1,5 @@
 // Polyfill: crypto.randomUUID is unavailable in non-secure contexts (HTTP without TLS).
-// This enables OwnPilot to work over Tailscale, LAN, or any plain-HTTP access.
+// This enables LEO to work over Tailscale, LAN, or any plain-HTTP access.
 if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function') {
   Object.defineProperty(crypto, 'randomUUID', {
     configurable: true,

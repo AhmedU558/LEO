@@ -140,7 +140,7 @@ export function PluginInstallWizard({ onComplete, onCancel }: Props) {
             Browse Plugins
           </h2>
           <p className="text-sm text-text-muted dark:text-dark-text-muted mb-4">
-            OwnPilot ships with many built-in plugins. Pick one to enable or reconfigure.
+            LEO ships with many built-in plugins. Pick one to enable or reconfigure.
           </p>
 
           <div className="flex gap-2 mb-3">
@@ -240,7 +240,7 @@ export function PluginInstallWizard({ onComplete, onCancel }: Props) {
               label="Explain"
               buildPrompt={() => {
                 const toolList = selected.tools.slice(0, 20).join(', ') || 'none';
-                return `Explain in 2–3 short sentences what this OwnPilot plugin does and when a user would benefit from enabling it.\n\nName: ${selected.name}\nDescription: ${selected.description || '(none)'}\nTools: ${toolList}\nCapabilities: ${selected.capabilities.join(', ') || 'none'}\nPermissions: ${selected.permissions.join(', ') || 'none'}\n\nOutput plain text only.`;
+                return `Explain in 2–3 short sentences what this LEO plugin does and when a user would benefit from enabling it.\n\nName: ${selected.name}\nDescription: ${selected.description || '(none)'}\nTools: ${toolList}\nCapabilities: ${selected.capabilities.join(', ') || 'none'}\nPermissions: ${selected.permissions.join(', ') || 'none'}\n\nOutput plain text only.`;
               }}
               onResult={(text) => setAiExplain(text.trim())}
             />

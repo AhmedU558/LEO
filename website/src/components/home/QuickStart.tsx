@@ -17,7 +17,7 @@ cd ownpilot`,
         language: 'bash',
       },
       {
-        title: 'Start OwnPilot + PostgreSQL',
+        title: 'Start LEO + PostgreSQL',
         code: `docker compose --profile postgres up -d`,
         language: 'bash',
       },

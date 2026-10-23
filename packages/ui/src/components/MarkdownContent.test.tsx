@@ -350,7 +350,7 @@ After`}
     const html = renderToStaticMarkup(
       <MarkdownContent
         content={`<metric_grid data='{"metrics":[{"label":"Total","value":"12"}]}' />
-<key_value data='{"title":"Snapshot","Owner":"OwnPilot","Open":3}' />`}
+<key_value data='{"title":"Snapshot","Owner":"LEO","Open":3}' />`}
       />
     );
 
@@ -358,7 +358,7 @@ After`}
     expect(html).toContain('12');
     expect(html).toContain('Snapshot');
     expect(html).toContain('Owner');
-    expect(html).toContain('OwnPilot');
+    expect(html).toContain('LEO');
     expect(html).toContain('Open');
     expect(html).toContain('3');
     expect(html).not.toContain('Widget could not be rendered');

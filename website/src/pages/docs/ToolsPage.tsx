@@ -33,14 +33,14 @@ export function ToolsPage() {
       </Badge>
       <h1>Tool System Overview</h1>
       <p>
-        OwnPilot provides 250+ built-in tools across 32 categories, plus extensible hooks for custom
+        LEO provides 250+ built-in tools across 32 categories, plus extensible hooks for custom
         tools, MCP tools, skills, and extensions. The meta-tool proxy keeps LLM context lean.
       </p>
 
       <h2>Meta-tool Proxy</h2>
       <p>
         Instead of sending all 250+ tool definitions to the LLM (which would consume thousands of
-        tokens), OwnPilot uses a meta-tool proxy pattern. Only 4 tools are ever sent to the LLM:
+        tokens), LEO uses a meta-tool proxy pattern. Only 4 tools are ever sent to the LLM:
       </p>
       <ul>
         <li>
@@ -136,7 +136,7 @@ export function ToolsPage() {
       <CodeBlock code={TOOL_CATEGORIES} language="text" filename="tool-categories" />
 
       <h2>MCP Integration</h2>
-      <p>OwnPilot is both an MCP client and server:</p>
+      <p>LEO is both an MCP client and server:</p>
 
       <h3>MCP Client</h3>
       <p>
@@ -159,8 +159,8 @@ ownpilot config set mcp-servers '[
 
       <h3>MCP Server</h3>
       <p>
-        OwnPilot exposes all 250+ tools as an MCP endpoint, making them available to Claude Desktop
-        and any other MCP client. Uses Streamable HTTP transport on <code>/mcp</code>.
+        LEO exposes all 250+ tools as an MCP endpoint, making them available to Claude Desktop and
+        any other MCP client. Uses Streamable HTTP transport on <code>/mcp</code>.
       </p>
 
       <h2>Extensions</h2>

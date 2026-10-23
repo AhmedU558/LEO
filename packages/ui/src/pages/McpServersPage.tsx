@@ -871,8 +871,8 @@ export function McpServersPage() {
             MCP Integration
           </h2>
           <p className="text-sm text-text-muted dark:text-dark-text-muted">
-            Use OwnPilot as an MCP server for external AI clients, or connect to external MCP
-            servers for additional tools.
+            Use LEO as an MCP server for external AI clients, or connect to external MCP servers for
+            additional tools.
           </p>
         </div>
       </header>
@@ -973,7 +973,7 @@ export function McpServersPage() {
       {/* Servers tab */}
       {activeTab === 'servers' && (
         <div className="max-w-3xl mx-auto p-6 space-y-8 flex-1 overflow-y-auto w-full">
-          {/* Section 1: OwnPilot as MCP Server */}
+          {/* Section 1: LEO as MCP Server */}
           <OwnPilotServerSection />
 
           {/* Section 2: External MCP Servers (Client) */}
@@ -984,7 +984,7 @@ export function McpServersPage() {
                   External MCP Servers
                 </h2>
                 <p className="text-xs text-text-muted dark:text-dark-text-muted mt-0.5">
-                  Connect to external MCP servers to add tools to OwnPilot
+                  Connect to external MCP servers to add tools to LEO
                 </p>
               </div>
               <div className="flex items-center gap-2">

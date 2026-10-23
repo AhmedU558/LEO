@@ -16,7 +16,7 @@ export function IntroductionPage() {
       </div>
       <h1>Introduction</h1>
       <p className="text-xl text-[var(--color-text-muted)] leading-relaxed mb-6 mt-2 font-medium">
-        OwnPilot is a privacy-first personal AI assistant platform that runs entirely on your own
+        LEO is a privacy-first personal AI assistant platform that runs entirely on your own
         infrastructure. Self-hosted. Your data stays yours.
       </p>
 
@@ -26,18 +26,18 @@ export function IntroductionPage() {
         minutes.
       </Callout>
 
-      <h2>What is OwnPilot?</h2>
+      <h2>What is LEO?</h2>
       <p>
-        OwnPilot is a full-featured AI assistant platform that you deploy on your own hardware or
-        cloud VM. It brings together multi-provider AI (104 providers including local inference),
-        250+ built-in tools, autonomous soul agents, visual workflow automation, MCP integration,
-        voice, browser automation, IoT control, and Telegram + WhatsApp connectivity — all in a
-        single, self-hosted package.
+        LEO is a full-featured AI assistant platform that you deploy on your own hardware or cloud
+        VM. It brings together multi-provider AI (104 providers including local inference), 250+
+        built-in tools, autonomous soul agents, visual workflow automation, MCP integration, voice,
+        browser automation, IoT control, and Telegram + WhatsApp connectivity — all in a single,
+        self-hosted package.
       </p>
       <p>
-        Unlike cloud-based AI assistants, OwnPilot never sends your personal data to third parties.
-        Your conversations, memories, notes, tasks, contacts, and all other personal data stay on
-        your server.
+        Unlike cloud-based AI assistants, LEO never sends your personal data to third parties. Your
+        conversations, memories, notes, tasks, contacts, and all other personal data stay on your
+        server.
       </p>
 
       <h2>Core principles</h2>
@@ -123,8 +123,7 @@ export function IntroductionPage() {
 
       <h2>Architecture overview</h2>
       <p>
-        OwnPilot is a TypeScript monorepo managed with Turborepo and pnpm. It consists of 4
-        packages:
+        LEO is a TypeScript monorepo managed with Turborepo and pnpm. It consists of 4 packages:
       </p>
       <ul>
         <li>
@@ -149,7 +148,7 @@ export function IntroductionPage() {
         8199 and proxies API/WebSocket requests to the gateway on 8080.
       </p>
 
-      <h2>What you can do with OwnPilot</h2>
+      <h2>What you can do with LEO</h2>
       <ul>
         <li>
           Chat with 104 AI providers (OpenAI, Anthropic, Google, Ollama, and more) through a single

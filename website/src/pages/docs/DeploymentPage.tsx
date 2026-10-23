@@ -83,7 +83,7 @@ export function DeploymentPage() {
       </Badge>
       <h1>Deployment</h1>
       <p>
-        OwnPilot ships as a multi-arch Docker image (amd64 + arm64) at{' '}
+        LEO ships as a multi-arch Docker image (amd64 + arm64) at{' '}
         <code>ghcr.io/ownpilot/ownpilot</code>. A single container serves the API, bundled UI, and
         WebSocket on port 8080.
       </p>
@@ -221,8 +221,8 @@ docker compose -f docker-compose.prod.yml up -d`}
 
       <h2>Reverse Proxy (nginx + TLS)</h2>
       <p>
-        For internet-facing deployments, place OwnPilot behind nginx with Let's Encrypt TLS.
-        WebSocket proxying and SSE (unbuffered) are both required.
+        For internet-facing deployments, place LEO behind nginx with Let's Encrypt TLS. WebSocket
+        proxying and SSE (unbuffered) are both required.
       </p>
       <CodeBlock code={NGINX} language="nginx" filename="ownpilot.conf" />
 

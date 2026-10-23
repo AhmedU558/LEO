@@ -54,7 +54,7 @@ export function LoginPage() {
               <ShieldCheck className="w-6 h-6 text-primary" />
             </div>
             <h1 className="text-xl font-semibold text-text-primary dark:text-dark-text-primary">
-              OwnPilot
+              LEO
             </h1>
             <p className="text-sm text-text-muted dark:text-dark-text-muted mt-1">
               Enter your password to continue

@@ -188,7 +188,7 @@ export function TunnelPage() {
                 max="65535"
               />
               <p className="text-xs text-text-muted dark:text-dark-text-muted mt-1">
-                The port your OwnPilot gateway is running on
+                The port your LEO gateway is running on
               </p>
             </div>
 
@@ -430,7 +430,7 @@ export function TunnelPage() {
           Cloudflare Tunnel
         </h1>
         <p className="text-sm text-text-muted dark:text-dark-text-muted mt-0.5">
-          Expose your OwnPilot gateway to the internet
+          Expose your LEO gateway to the internet
         </p>
       </div>
 

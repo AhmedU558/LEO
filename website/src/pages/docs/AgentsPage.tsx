@@ -28,8 +28,8 @@ export function AgentsPage() {
       </Badge>
       <h1>Agent System Overview</h1>
       <p>
-        OwnPilot's agent system has multiple layers — from simple chat agents to fully autonomous
-        soul agents with rich identity and heartbeat lifecycles.
+        LEO's agent system has multiple layers — from simple chat agents to fully autonomous soul
+        agents with rich identity and heartbeat lifecycles.
       </p>
 
       <h2>Agent types</h2>

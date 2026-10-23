@@ -67,7 +67,7 @@ export interface SkillUpdateInfo {
 // =============================================================================
 
 export const skillsApi = {
-  /** Search npm for OwnPilot skills */
+  /** Search npm for LEO skills */
   search: (query: string, limit = 20, offset = 0) =>
     apiClient.get<NpmSearchResult>(
       `/skills/search?q=${encodeURIComponent(query)}&limit=${limit}${offset ? `&offset=${offset}` : ''}`

@@ -1,4 +1,4 @@
-# OwnPilot Refactor & Gap Audit — 2026-06-22
+# LEO Refactor & Gap Audit — 2026-06-22
 
 ## Scope
 
@@ -18,7 +18,7 @@ No source changes were made during the audit.
 
 ## Executive summary
 
-OwnPilot is in a strong state: strict TypeScript is enabled, the release gate is comprehensive, tests are extensive, security remediation has been active, and recent package/export migrations have removed major mock/import hazards.
+LEO is in a strong state: strict TypeScript is enabled, the release gate is comprehensive, tests are extensive, security remediation has been active, and recent package/export migrations have removed major mock/import hazards.
 
 The main remaining issue is structural concentration. Gateway services and routes hold too many responsibilities per file, while core service/agent barrels remain wide enough to recreate import and mocking coupling. The newly expanded Agentic layer is well covered by tests, but needs persistence and observability decisions before it becomes a long-lived execution substrate.
 

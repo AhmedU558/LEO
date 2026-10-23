@@ -211,7 +211,7 @@ export function ChatStarterPrompts({
       <div className="h-full flex items-center justify-center">
         <div className="text-center max-w-md">
           <h3 className="text-xl font-medium text-text-primary dark:text-dark-text-primary mb-2">
-            Welcome to OwnPilot
+            Welcome to LEO
           </h3>
 
           {showSetupWizard ? (

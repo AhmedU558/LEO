@@ -13,8 +13,8 @@ export function ProvidersPage() {
       </Badge>
       <h1>AI Provider Overview</h1>
       <p>
-        OwnPilot supports 104 AI providers through a unified provider abstraction. All providers use
-        the same agent interface — you can switch models without changing any code.
+        LEO supports 104 AI providers through a unified provider abstraction. All providers use the
+        same agent interface — you can switch models without changing any code.
       </p>
 
       <h2>Provider categories</h2>
@@ -95,9 +95,7 @@ export function ProvidersPage() {
       </p>
 
       <h2>Smart Provider Routing</h2>
-      <p>
-        OwnPilot can automatically route requests to the optimal provider based on your strategy:
-      </p>
+      <p>LEO can automatically route requests to the optimal provider based on your strategy:</p>
       <table>
         <thead>
           <tr>
@@ -131,10 +129,10 @@ export function ProvidersPage() {
 
       <h2>Anthropic Prompt Caching</h2>
       <p>
-        OwnPilot supports Anthropic's prompt caching via <code>cache_control</code> blocks. The
-        static system prompt is cached to reduce input token costs on repeated requests. The
-        orchestrator section is placed in a static cache block; the time context is rounded to the
-        hour boundary to prevent cache invalidation.
+        LEO supports Anthropic's prompt caching via <code>cache_control</code> blocks. The static
+        system prompt is cached to reduce input token costs on repeated requests. The orchestrator
+        section is placed in a static cache block; the time context is rounded to the hour boundary
+        to prevent cache invalidation.
       </p>
 
       <h2>Extended Thinking</h2>

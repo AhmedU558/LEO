@@ -97,6 +97,8 @@ package-lock.json
 packages/**/*.py
 packages/**/*.csv
 packages/**/*.png
+# ...except the UI's deliberate public assets (app icons)
+!packages/ui/public/*.png
 packages/**/*.b64
 docs/MINIMAX_CHECK.md
 docs/QWEN_CHECK.md
@@ -116,7 +118,7 @@ security-reports/*
 # External tooling scratch dirs (not OwnPilot source)
 .wrongstack/
 .antigravitycli/
-# Root-level debug/scratch screenshots (brand assets like ownpilot_.jpeg stay tracked)
+# Root-level debug/scratch screenshots (brand assets like leo-banner.svg stay tracked)
 /provider_screenshot.png
 /*_screenshot.png
 /claw-*.png

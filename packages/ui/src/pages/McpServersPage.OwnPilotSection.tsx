@@ -1,5 +1,5 @@
 /**
- * OwnPilot's own MCP server status section — shown at the top of the MCP
+ * LEO's own MCP server status section — shown at the top of the MCP
  * Servers page. Self-contained (no props, own state). Extracted from
  * McpServersPage.tsx.
  */
@@ -101,10 +101,10 @@ export function OwnPilotServerSection() {
             </div>
             <div>
               <h2 className="text-base font-semibold text-text-primary dark:text-dark-text-primary">
-                OwnPilot MCP Server
+                LEO MCP Server
               </h2>
               <p className="text-xs text-text-muted dark:text-dark-text-muted mt-0.5">
-                Expose OwnPilot tools to external AI clients via MCP protocol
+                Expose LEO tools to external AI clients via MCP protocol
               </p>
             </div>
           </div>
@@ -255,9 +255,9 @@ export function OwnPilotServerSection() {
             </h4>
             <p>
               Model Context Protocol (MCP) is an open standard that lets AI applications discover
-              and use tools from external servers. OwnPilot exposes all its tools via MCP, so any
-              MCP-compatible AI client can use OwnPilot's capabilities (file management, web search,
-              code execution, task management, etc).
+              and use tools from external servers. LEO exposes all its tools via MCP, so any
+              MCP-compatible AI client can use LEO's capabilities (file management, web search, code
+              execution, task management, etc).
             </p>
           </div>
           <div>
@@ -265,7 +265,7 @@ export function OwnPilotServerSection() {
               How it works
             </h4>
             <ol className="list-decimal list-inside space-y-1 text-text-muted dark:text-dark-text-muted">
-              <li>OwnPilot runs a Streamable HTTP server at the endpoint URL shown above</li>
+              <li>LEO runs a Streamable HTTP server at the endpoint URL shown above</li>
               <li>
                 MCP clients connect and discover available tools via{' '}
                 <code className="px-1 rounded bg-bg-tertiary dark:bg-dark-bg-tertiary">
@@ -292,13 +292,13 @@ export function OwnPilotServerSection() {
                 Go to <strong>Developer</strong> &rarr; <strong>Edit Config</strong>
               </li>
               <li>
-                Add the OwnPilot config to the{' '}
+                Add the LEO config to the{' '}
                 <code className="px-1 rounded bg-bg-tertiary dark:bg-dark-bg-tertiary">
                   mcpServers
                 </code>{' '}
                 section
               </li>
-              <li>Restart Claude Desktop &mdash; OwnPilot tools will appear in the tool picker</li>
+              <li>Restart Claude Desktop &mdash; LEO tools will appear in the tool picker</li>
             </ol>
           </div>
           <div>
@@ -313,7 +313,7 @@ export function OwnPilotServerSection() {
                 </code>{' '}
                 in your project root (or via Cursor settings)
               </li>
-              <li>Add the OwnPilot config snippet</li>
+              <li>Add the LEO config snippet</li>
               <li>Restart the editor &mdash; tools available in Composer</li>
             </ol>
           </div>
@@ -333,7 +333,7 @@ export function OwnPilotServerSection() {
                 </code>{' '}
                 (global)
               </li>
-              <li>Add the OwnPilot config snippet</li>
+              <li>Add the LEO config snippet</li>
               <li>Restart Claude Code &mdash; tools available automatically</li>
             </ol>
           </div>
@@ -342,8 +342,8 @@ export function OwnPilotServerSection() {
               Security Notes
             </h4>
             <ul className="list-disc list-inside space-y-1 text-text-muted dark:text-dark-text-muted">
-              <li>The MCP server runs on the same port as OwnPilot's API</li>
-              <li>Tools execute with the same permissions as OwnPilot</li>
+              <li>The MCP server runs on the same port as LEO's API</li>
+              <li>Tools execute with the same permissions as LEO</li>
               <li>For remote access, use a reverse proxy with authentication</li>
               <li>
                 The server is stateful per-session but ephemeral &mdash; no state persisted between

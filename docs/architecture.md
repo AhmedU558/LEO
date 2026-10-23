@@ -1,4 +1,4 @@
-# OwnPilot Architecture
+# LEO Architecture
 
 **Version:** 0.8.3
 
@@ -39,7 +39,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                           OwnPilot Monorepo                              │
+│                           LEO Monorepo                              │
 │                                                                      │
 │  ┌─────────────┐    ┌─────────────────┐    ┌─────────────────────┐   │
 │  │    CLI     │───▶│    Gateway      │───▶│       Core          │   │
@@ -56,7 +56,7 @@
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**OwnPilot** is a privacy-first personal AI assistant platform. It runs as a single self-hosted server with:
+**LEO** is a privacy-first personal AI assistant platform. It runs as a single self-hosted server with:
 
 - An HTTP API (Hono) + WebSocket server (Gateway)
 - A React SPA frontend
@@ -495,7 +495,7 @@ packages/core/src/
 
 ## 5.A Two-Layer Capability Architecture (2026-05-23)
 
-OwnPilot uses a two-layer model to keep module boundaries clean. Every
+LEO uses a two-layer model to keep module boundaries clean. Every
 runtime (Chat, Claw, Soul Heartbeat, AgentRunner, Workflow…) consumes a
 fixed set of horizontal capabilities. Capability contracts live in
 `@ownpilot/core`; implementations live in `@ownpilot/gateway`; runtimes
@@ -1778,12 +1778,12 @@ section. Each is listed here with file pointers.
 
 ```
 mcp-client-service.ts    — Connects to external MCP servers (stdio / SSE / HTTP)
-mcp-server-service.ts    — Exposes OwnPilot tools AS an MCP server to other clients
+mcp-server-service.ts    — Exposes LEO tools AS an MCP server to other clients
 mcp_servers table        — Configured MCP server records (workflows.ts schema)
 /api/v1/mcp routes       — CRUD + connect/disconnect + tool discovery + presets
 ```
 
-Bridges OwnPilot's 250+ tools to any MCP-compatible client (Claude Desktop, Cursor,
+Bridges LEO's 250+ tools to any MCP-compatible client (Claude Desktop, Cursor,
 Claude Code) and consumes tools from external MCP servers as virtual `plugin.mcp.*`
 tools.
 
