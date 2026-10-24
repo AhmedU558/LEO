@@ -273,6 +273,6 @@
   "author": "OwnPilot",
   "license": "MIT",
   "dependencies": {
-    "undici": ">=8.9.0"
+    "undici": ">=8.12.2"
   }
 }
