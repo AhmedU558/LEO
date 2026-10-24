@@ -1268,6 +1268,10 @@ describe('Edge cases', () => {
     expect(result!.value).toBe('');
   });
 
+  // Each store() derives a key with PBKDF2 at the production cost of 600,000
+  // iterations, so these loops are deliberately CPU-bound: ~3 s locally and
+  // past vitest's 5 s default on a 2-vCPU CI runner. The timeout is a load
+  // assumption, not a quality signal; the assertions are unchanged.
   it('stores credentials for all supported CredentialProvider values', async () => {
     const store = makeStore();
     const providers: CredentialProvider[] = [
@@ -1290,7 +1294,7 @@ describe('Edge cases', () => {
     }
     const items = await store.list(USER_A);
     expect(items).toHaveLength(providers.length);
-  });
+  }, 30_000);
 
   it('stores credentials for all supported CredentialType values', async () => {
     const store = makeStore();
@@ -1310,7 +1314,7 @@ describe('Edge cases', () => {
     // Only the last stored 'custom' provider survives for get(), but all are in the backend
     const items = await store.list(USER_A);
     expect(items.length).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('InMemoryCredentialBackend is independent per instance', async () => {
     const backend1 = makeBackend();
