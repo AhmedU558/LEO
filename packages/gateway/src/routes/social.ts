@@ -46,7 +46,9 @@ socialRoutes.post('/publish', async (c) => {
 
   const service = new SocialService(getUserId(c), getWorkspaceId(c));
   try {
-    const result = await service.createPublishTask(body as any);
+    const result = await service.createPublishTask(
+      body as unknown as Parameters<SocialService['createPublishTask']>[0]
+    );
     return apiResponse(c, result);
   } catch (err: unknown) {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
@@ -169,9 +171,9 @@ socialRoutes.get('/instagram/callback', async (c) => {
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
-    });
-
-    await repo.storeCredentials(authData.accountId!, {
+      // Stored by the same upsert that creates (or, on reconnect, refreshes)
+      // the account. A separate storeCredentials(authData.accountId) matched
+      // the platform id against the internal row id, so it updated nothing.
       accessToken: authData.accessToken!,
       refreshToken: authData.refreshToken,
     });
@@ -216,14 +218,16 @@ socialRoutes.get('/facebook/callback', async (c) => {
 
     // 2. Fetch pages
     const pagesRes = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${(tokenData as any).access_token}`
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${(tokenData as { access_token?: string }).access_token}`
     );
     if (!pagesRes.ok) throw new Error('Failed to fetch pages');
     const pagesData = await pagesRes.json();
 
     const repo = new SocialRepository(getUserId(c), getWorkspaceId(c));
 
-    const pages = (pagesData as any).data || [];
+    const pages =
+      (pagesData as { data?: Array<{ id?: string; name?: string; access_token?: string }> }).data ||
+      [];
     for (const page of pages) {
       if (!page.id || !page.access_token) continue;
       await repo.createAccount({
@@ -232,11 +236,10 @@ socialRoutes.get('/facebook/callback', async (c) => {
         accountId: page.id,
         userId: getUserId(c),
         workspaceId: getWorkspaceId(c),
-        accountName: page.name,
+        // account_name is NOT NULL: a nameless page must not abort the batch.
+        accountName: page.name ?? page.id,
         profileUrl: `https://facebook.com/${page.id}`,
         status: 'active',
-      });
-      await repo.storeCredentials(page.id, {
         accessToken: page.access_token,
       });
     }
@@ -284,9 +287,9 @@ socialRoutes.get('/tiktok/callback', async (c) => {
       accountName: authData.accountName!,
       profileUrl: authData.profileUrl,
       status: 'active',
-    });
-
-    await repo.storeCredentials(authData.accountId!, {
+      // Stored by the same upsert that creates (or, on reconnect, refreshes)
+      // the account. A separate storeCredentials(authData.accountId) matched
+      // the platform id against the internal row id, so it updated nothing.
       accessToken: authData.accessToken!,
       refreshToken: authData.refreshToken,
     });
@@ -310,7 +313,7 @@ socialRoutes.post('/campaigns', async (c) => {
     const repo = getIdempotencyKeysRepository();
     const existing = await repo.getRecord(userId, idempotencyKey);
     if (existing) {
-      if ((existing.result as any).status === 'FAILED') {
+      if ((existing.result as { status?: string }).status === 'FAILED') {
         // If it failed previously, allow retry by deleting the key or just proceed
         // But for safe idempotency, we return the failed result. Let's just return it.
       }

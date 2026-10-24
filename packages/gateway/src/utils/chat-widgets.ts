@@ -725,7 +725,9 @@ function normalizeWidgetDataShape(name: string, data: unknown): unknown {
 
   if (name === 'card' || name === 'cards' || name === 'card_grid') {
     const items = firstArrayValue(data, ['items', 'cards', 'entries']);
-    if (items && !Array.isArray(data.items)) return { ...data, items };
+    // A grid -- titled or not -- keeps its cards. Only a lone object with no
+    // collection is a single card; wrapping a titled grid dropped every card.
+    if (items) return Array.isArray(data.items) ? data : { ...data, items };
 
     const hasCardFields = ['title', 'label', 'name', 'detail', 'description', 'body', 'text'].some(
       (key) => data[key] !== undefined

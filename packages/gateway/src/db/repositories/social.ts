@@ -7,6 +7,35 @@ import type {
   CampaignTarget,
 } from '@ownpilot/core/social';
 
+/** social_campaigns as stored. */
+interface CampaignRow {
+  id: string;
+  user_id: string;
+  workspace_id: string;
+  content_item_id: string;
+  execution_task_id: string | null;
+  status: PublishingCampaign['status'];
+  scheduled_for: Date | null;
+  version: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+/** social_campaign_targets as stored. */
+interface TargetRow {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  workspace_id: string;
+  account_id: string;
+  platform: CampaignTarget['platform'];
+  publish_request_id: string;
+  status: CampaignTarget['status'];
+  error: CampaignTarget['error'] | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
 export class SocialRepository extends BaseRepository {
   constructor(
     readonly userId: string,
@@ -158,8 +187,8 @@ export class SocialRepository extends BaseRepository {
   }
   async getPost(id: string): Promise<SocialPost | null> {
     return this.queryOne<SocialPost>(
-      `SELECT id, user_id AS "userId", workspace_id AS "workspaceId", account_id AS "accountId", platform, title, text, hashtags, media, metadata, scheduled_for AS "scheduledFor", created_at AS "createdAt", updated_at AS "updatedAt" FROM social_posts WHERE id=$1`,
-      [id]
+      `SELECT id, user_id AS "userId", workspace_id AS "workspaceId", account_id AS "accountId", platform, title, text, hashtags, media, metadata, scheduled_for AS "scheduledFor", created_at AS "createdAt", updated_at AS "updatedAt" FROM social_posts WHERE id=$1 AND user_id=$2 AND workspace_id=$3`,
+      [id, this.userId, this.workspaceId]
     );
   }
   // --- Campaigns ---
@@ -183,7 +212,7 @@ export class SocialRepository extends BaseRepository {
   }
 
   async getCampaign(id: string): Promise<PublishingCampaign | null> {
-    const res = await this.query(
+    const res = await this.query<CampaignRow>(
       `SELECT * FROM social_campaigns WHERE id = $1 AND user_id = $2 AND workspace_id = $3`,
       [id, this.userId, this.workspaceId]
     );
@@ -201,36 +230,36 @@ export class SocialRepository extends BaseRepository {
 
     for (const key of keys) {
       if (key === 'status') {
-        setClauses.push(`status = ${i++}`);
+        setClauses.push(`status = $${i++}`);
         values.push(updates.status);
       }
       if (key === 'executionTaskId') {
-        setClauses.push(`execution_task_id = ${i++}`);
+        setClauses.push(`execution_task_id = $${i++}`);
         values.push(updates.executionTaskId);
       }
       if (key === 'scheduledFor') {
-        setClauses.push(`scheduled_for = ${i++}`);
+        setClauses.push(`scheduled_for = $${i++}`);
         values.push(updates.scheduledFor ? new Date(updates.scheduledFor) : null);
       }
       if (key === 'version') {
-        setClauses.push(`version = ${i++}`);
+        setClauses.push(`version = $${i++}`);
         values.push(updates.version);
       }
     }
 
     if (setClauses.length === 0) return;
-    setClauses.push(`updated_at = ${i++}`);
+    setClauses.push(`updated_at = $${i++}`);
     values.push(new Date());
 
     values.push(id, this.userId, this.workspaceId);
     await this.execute(
-      `UPDATE social_campaigns SET ${setClauses.join(', ')} WHERE id = ${i - 2} AND user_id = ${i - 1} AND workspace_id = ${i}`,
+      `UPDATE social_campaigns SET ${setClauses.join(', ')} WHERE id = $${i} AND user_id = $${i + 1} AND workspace_id = $${i + 2}`,
       values
     );
   }
 
   async listCampaigns(): Promise<PublishingCampaign[]> {
-    const res = await this.query(
+    const res = await this.query<CampaignRow>(
       `SELECT * FROM social_campaigns WHERE user_id = $1 AND workspace_id = $2 ORDER BY created_at DESC`,
       [this.userId, this.workspaceId]
     );
@@ -258,7 +287,7 @@ export class SocialRepository extends BaseRepository {
   }
 
   async getCampaignTargets(campaignId: string): Promise<CampaignTarget[]> {
-    const res = await this.query(
+    const res = await this.query<TargetRow>(
       `SELECT * FROM social_campaign_targets WHERE campaign_id = $1 AND user_id = $2 AND workspace_id = $3`,
       [campaignId, this.userId, this.workspaceId]
     );
@@ -271,26 +300,26 @@ export class SocialRepository extends BaseRepository {
     let i = 1;
 
     if (updates.status !== undefined) {
-      setClauses.push(`status = ${i++}`);
+      setClauses.push(`status = $${i++}`);
       values.push(updates.status);
     }
     if (updates.error !== undefined) {
-      setClauses.push(`error = ${i++}`);
+      setClauses.push(`error = $${i++}`);
       values.push(updates.error ? JSON.stringify(updates.error) : null);
     }
 
     if (setClauses.length === 0) return;
-    setClauses.push(`updated_at = ${i++}`);
+    setClauses.push(`updated_at = $${i++}`);
     values.push(new Date());
 
     values.push(id, this.userId, this.workspaceId);
     await this.execute(
-      `UPDATE social_campaign_targets SET ${setClauses.join(', ')} WHERE id = ${i - 2} AND user_id = ${i - 1} AND workspace_id = ${i}`,
+      `UPDATE social_campaign_targets SET ${setClauses.join(', ')} WHERE id = $${i} AND user_id = $${i + 1} AND workspace_id = $${i + 2}`,
       values
     );
   }
 
-  private mapCampaign(row: any): PublishingCampaign {
+  private mapCampaign(row: CampaignRow): PublishingCampaign {
     return {
       id: row.id,
       userId: row.user_id,
@@ -305,7 +334,7 @@ export class SocialRepository extends BaseRepository {
     };
   }
 
-  private mapTarget(row: any): CampaignTarget {
+  private mapTarget(row: TargetRow): CampaignTarget {
     return {
       id: row.id,
       campaignId: row.campaign_id,
@@ -326,14 +355,15 @@ export class SocialRepository extends BaseRepository {
   ): Promise<void> {
     await this.execute(
       `UPDATE social_accounts 
-       SET access_token = $1, refresh_token = $2, token_expires_at = $3, updated_at = $4
-       WHERE id = $5 AND workspace_id = $6`,
+       SET access_token = $1, refresh_token = $2, expires_at = $3, updated_at = $4
+       WHERE id = $5 AND user_id = $6 AND workspace_id = $7`,
       [
         creds.accessToken,
         creds.refreshToken || null,
         creds.expiresAt?.toISOString() || null,
         new Date().toISOString(),
         accountId,
+        this.userId,
         this.workspaceId,
       ]
     );
