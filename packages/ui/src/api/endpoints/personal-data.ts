@@ -186,6 +186,13 @@ export const goalsApi = {
 export const memoriesApi = {
   list: (params?: Record<string, string>) =>
     apiClient.get<{ memories: Memory[] }>('/memories', { params }),
+  stats: () =>
+    apiClient.get<{
+      total: number;
+      byType: Record<string, number>;
+      avgImportance: number;
+      recentCount: number;
+    }>('/memories/stats'),
   create: (data: Record<string, unknown>) => apiClient.post<Memory>('/memories', data),
   update: (id: string, data: Record<string, unknown>) =>
     apiClient.patch<Memory>(`/memories/${id}`, data),

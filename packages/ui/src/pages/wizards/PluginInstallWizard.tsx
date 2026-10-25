@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { CHAT_PATH } from '../../constants/routes';
 import { WizardShell, type WizardStep } from '../../components/WizardShell';
 import {
   WizardLoadingView,
@@ -415,7 +416,7 @@ export function PluginInstallWizard({ onComplete, onCancel }: Props) {
           ]}
           actions={[
             { label: 'Plugin Settings', onClick: () => navigate('/settings/plugins') },
-            { label: 'Go to Chat', onClick: () => navigate('/') },
+            { label: 'Go to Chat', onClick: () => navigate(CHAT_PATH) },
           ]}
         />
       )}

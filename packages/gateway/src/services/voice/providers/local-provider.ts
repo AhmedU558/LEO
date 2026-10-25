@@ -13,16 +13,18 @@ const WHISPER = `
 import base64, io, sys, wave
 from faster_whisper import WhisperModel
 model = WhisperModel('tiny', device='cpu', compute_type='int8', local_files_only=True)
+rate = int(sys.argv[1]) if len(sys.argv) > 1 else 24000
+prompt = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
 audio = sys.stdin.read().strip()
 if audio:
     stream = io.BytesIO()
     with wave.open(stream, 'wb') as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
-        wav.setframerate(24000)
+        wav.setframerate(rate)
         wav.writeframes(base64.b64decode(audio, validate=True))
     stream.seek(0)
-    segments, _ = model.transcribe(stream, beam_size=1, vad_filter=True)
+    segments, _ = model.transcribe(stream, beam_size=1, vad_filter=True, initial_prompt=prompt)
     print(' '.join(segment.text.strip() for segment in segments))
 else:
     print('ready')
@@ -46,6 +48,50 @@ try {
   $leoStream.Dispose()
 }
 `;
+
+function runProcess(
+  command: string,
+  args: string[],
+  input: string,
+  signal: AbortSignal
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      command,
+      args,
+      {
+        windowsHide: true,
+        timeout: 25_000,
+        maxBuffer: 12 * 1024 * 1024,
+        signal,
+      },
+      (error, stdout) => {
+        if (error)
+          reject(
+            new Error(
+              `Local speech failed (${command}). Check the installed voice and cached Whisper model.`
+            )
+          );
+        else resolve(stdout.trim());
+      }
+    );
+    child.stdin?.on('error', () => {}); // execFile reports early process exits above.
+    child.stdin?.end(input);
+  });
+}
+
+/**
+ * Local Whisper on a short PCM16 mono clip. `prompt` biases recognition toward
+ * expected words (e.g. the wake phrase). Never leaves this machine.
+ */
+export function transcribeLocally(
+  audioBase64: string,
+  sampleRate: number,
+  signal: AbortSignal,
+  prompt = ''
+): Promise<string> {
+  return runProcess('python', ['-c', WHISPER, String(sampleRate), prompt], audioBase64, signal);
+}
 
 /** Replaces Windows speech with another speech engine; recognition and replies stay local. */
 export interface SpeechSynthesizer {
@@ -84,29 +130,7 @@ export class LocalVoiceProvider implements VoiceProvider {
     input: string,
     signal: AbortSignal
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const child = execFile(
-        command,
-        args,
-        {
-          windowsHide: true,
-          timeout: 25_000,
-          maxBuffer: 12 * 1024 * 1024,
-          signal,
-        },
-        (error, stdout) => {
-          if (error)
-            reject(
-              new Error(
-                `Local speech failed (${command}). Check the installed voice and cached Whisper model.`
-              )
-            );
-          else resolve(stdout.trim());
-        }
-      );
-      child.stdin?.on('error', () => {}); // execFile reports early process exits above.
-      child.stdin?.end(input);
-    });
+    return runProcess(command, args, input, signal);
   }
 
   async connect(events: VoiceProviderEvents, options?: VoiceProviderOptions): Promise<void> {

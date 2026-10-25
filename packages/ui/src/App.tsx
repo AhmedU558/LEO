@@ -164,6 +164,9 @@ const ActionLedgerPage = lazy(() =>
   import('./pages/ActionLedgerPage').then((m) => ({ default: m.ActionLedgerPage }))
 );
 const VoicePage = lazy(() => import('./pages/VoicePage').then((m) => ({ default: m.VoicePage })));
+const LeoConsolePage = lazy(() =>
+  import('./pages/LeoConsolePage').then((m) => ({ default: m.LeoConsolePage }))
+);
 const ComputerControlPage = lazy(() =>
   import('./pages/ComputerControlPage').then((m) => ({ default: m.ComputerControlPage }))
 );
@@ -253,7 +256,8 @@ export function App() {
           </AuthGuard>
         }
       >
-        <Route index element={page(<ChatPage />)} />
+        <Route index element={page(<LeoConsolePage />)} />
+        <Route path="chat" element={page(<ChatPage />)} />
         <Route path="dashboard" element={page(<DashboardPage />)} />
         <Route path="analytics" element={page(<AnalyticsPage />)} />
         <Route path="autonomy" element={page(<AutonomyPage />)} />
@@ -308,6 +312,7 @@ export function App() {
         <Route path="social" element={page(<SocialPage />)} />
         <Route path="computer" element={page(<ComputerControlPage />)} />
         <Route path="voice" element={page(<VoicePage />)} />
+        <Route path="leo" element={<Navigate to="/" replace />} />
         <Route path="custom-tools" element={page(<CustomToolsPage />)} />
         <Route path="plugins" element={page(<PluginsPage />)} />
         <Route

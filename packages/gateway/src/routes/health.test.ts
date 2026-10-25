@@ -318,6 +318,20 @@ describe('Health Routes', () => {
     });
   });
 
+  describe('GET /health/metrics', () => {
+    it('reports CPU, memory and disk load as bounded numbers', async () => {
+      const res = await app.request('/health/metrics');
+      expect(res.status).toBe(200);
+      const { data } = await res.json();
+      expect(data.cpu.percent).toBeGreaterThanOrEqual(0);
+      expect(data.cpu.percent).toBeLessThanOrEqual(100);
+      expect(data.cpu.cores).toBeGreaterThan(0);
+      expect(data.memory.used).toBeLessThanOrEqual(data.memory.total);
+      if (data.disk) expect(data.disk.free).toBeLessThanOrEqual(data.disk.total);
+      expect(data.uptime).toBeGreaterThanOrEqual(0);
+    });
+  });
+
   describe('GET /health/live', () => {
     it('returns liveness status', async () => {
       const res = await app.request('/health/live');
@@ -587,6 +601,11 @@ describe('Health Routes — public mount auth gating (HEALTH-AUTH)', () => {
       dockerVersion: null,
       relaxedSecurityRequired: false,
     });
+  });
+
+  it('blocks GET /health/metrics without authentication (401)', async () => {
+    const res = await publicApp.request('/health/metrics');
+    expect(res.status).toBe(401);
   });
 
   it('blocks GET /health/sandbox without authentication (401)', async () => {

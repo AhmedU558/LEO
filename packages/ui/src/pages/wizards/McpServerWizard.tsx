@@ -6,6 +6,7 @@
 
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { CHAT_PATH } from '../../constants/routes';
 import { WizardShell, type WizardStep } from '../../components/WizardShell';
 import { WizardLoadingView, WizardErrorView, useWizardKeyboard } from '../../components/wizard';
 import { mcpApi, type CreateMcpServerInput } from '../../api';
@@ -415,7 +416,7 @@ export function McpServerWizard({ onComplete, onCancel }: Props) {
               View MCP Servers
             </button>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(CHAT_PATH)}
               className="px-4 py-2 text-sm rounded-lg border border-border dark:border-dark-border hover:bg-bg-tertiary dark:hover:bg-dark-bg-tertiary transition-colors"
             >
               Go to Chat

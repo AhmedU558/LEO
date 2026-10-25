@@ -10,6 +10,7 @@ import { useChatStore } from '../../hooks/useChatStore';
 import { chatApi } from '../../api/endpoints/chat';
 import { ignoreError } from '../../utils/ignore-error';
 import type { NavItem } from '../../constants/nav-items';
+import { CHAT_PATH } from '../../constants/routes';
 
 interface PinnedNavLinkProps {
   item: NavItem;
@@ -32,11 +33,11 @@ export function PinnedNavLink({
 
   const handleClick = (e: React.MouseEvent) => {
     onCloseCustomize?.();
-    // Chat item: if already on "/" start a new chat instead of no-op navigation
-    if (item.to === '/' && location.pathname === '/') {
+    // Chat item: if already on the chat page start a new chat instead of no-op navigation
+    if (item.to === CHAT_PATH && location.pathname === CHAT_PATH) {
       e.preventDefault();
       clearMessages();
-      navigate('/', { replace: true });
+      navigate(CHAT_PATH, { replace: true });
       // Reset backend context (best-effort)
       ignoreError(chatApi.resetContext(provider, model), 'sidebar:resetContext');
     }
@@ -44,7 +45,8 @@ export function PinnedNavLink({
 
   // Chat link: de-highlight when a conversation is active
   const hasActiveConversation =
-    item.to === '/' && (sessionId || searchParams.get('conversationId') || messages.length > 0);
+    item.to === CHAT_PATH &&
+    (sessionId || searchParams.get('conversationId') || messages.length > 0);
 
   return (
     <NavLink

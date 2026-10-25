@@ -16,6 +16,7 @@ import { MarkdownContent } from './MarkdownContent';
 import { SuggestionChips } from './SuggestionChips';
 import { MessageSquare, X, ExternalLink, Maximize2, Minimize2, Plus } from './icons';
 import { STORAGE_KEYS } from '../constants/storage-keys';
+import { CHAT_PATH } from '../constants/routes';
 import { chatApi } from '../api';
 import { formatNumber } from '../utils/formatters';
 import { cleanStreamingChatContent, stripChatInternalTags } from '../utils/chat-content';
@@ -277,7 +278,7 @@ export function MiniChat() {
   // Handle expand — navigate to full ChatPage
   const handleExpand = useCallback(() => {
     setIsOpen(false);
-    navigate('/');
+    navigate(CHAT_PATH);
   }, [navigate]);
 
   // New chat — clear frontend + reset backend context
@@ -372,7 +373,7 @@ export function MiniChat() {
   const maxContextTokens = sessionInfo?.maxContextTokens ?? 128_000;
 
   // Hidden on ChatPage and mobile
-  if (location.pathname === '/' || isMobile) return null;
+  if (location.pathname === CHAT_PATH || isMobile) return null;
 
   // ---- Collapsed: Chat bubble ----
   if (!isOpen) {

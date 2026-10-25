@@ -66,6 +66,7 @@ export class Pcm16Player {
 
   private nextScheduledTime = 0;
   private activeNodes: AudioBufferSourceNode[] = [];
+  private analyser: AnalyserNode | null = null;
   private currentResponseId: string | null = null;
   private isDisposed = false;
 
@@ -168,7 +169,7 @@ export class Pcm16Player {
       const startTime = Math.max(currentTime, this.nextScheduledTime);
       const sourceNode = ctx.createBufferSource();
       sourceNode.buffer = audioBuffer;
-      sourceNode.connect(ctx.destination);
+      sourceNode.connect(this.analyser ?? ctx.destination);
 
       sourceNode.onended = () => {
         const index = this.activeNodes.indexOf(sourceNode);
@@ -216,6 +217,20 @@ export class Pcm16Player {
   }
 
   /**
+   * Tap the output for visualisation. Created on first call and routed to the
+   * speakers; null until the AudioContext exists (after a user gesture).
+   */
+  getAnalyser(): AnalyserNode | null {
+    if (this.isDisposed || !this.audioContext) return null;
+    if (!this.analyser) {
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 512;
+      this.analyser.connect(this.audioContext.destination);
+    }
+    return this.analyser;
+  }
+
+  /**
    * Whether audio is actively playing or scheduled.
    */
   isPlaying(): boolean {
@@ -251,6 +266,7 @@ export class Pcm16Player {
         // Ignore close errors
       }
       this.audioContext = null;
+      this.analyser = null;
     }
   }
 }
