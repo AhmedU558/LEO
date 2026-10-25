@@ -17,15 +17,15 @@ import { useLayoutConfig } from '../hooks/useLayoutConfig';
 import { useTheme } from '../hooks/useTheme';
 import { ALL_NAV_ITEMS } from '../constants/nav-items';
 import { DEFAULT_LAYOUT_CONFIG } from '../types/layout-config';
-import { RotateCcw, Sun, Moon, Monitor, Palette, Plus, X } from '../components/icons';
-
-type ThemeOption = 'system' | 'light' | 'dark' | 'claude';
+import { RotateCcw, Sun, Moon, Monitor, Palette, Plus, X, Sparkles } from '../components/icons';
+import type { Theme } from '../hooks/useTheme';
 
 const THEME_OPTIONS: {
-  value: ThemeOption;
+  value: Theme;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
+  { value: 'jarvis', label: 'JARVIS', icon: Sparkles },
   { value: 'system', label: 'System', icon: Monitor },
   { value: 'light', label: 'Light', icon: Sun },
   { value: 'dark', label: 'Dark', icon: Moon },

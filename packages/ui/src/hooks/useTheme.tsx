@@ -1,55 +1,58 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { STORAGE_KEYS } from '../constants/storage-keys';
 
-type Theme = 'system' | 'light' | 'dark' | 'claude';
+export type Theme = 'system' | 'light' | 'dark' | 'claude' | 'jarvis';
+type ResolvedTheme = Exclude<Theme, 'system'>;
+
+/** LEO's signature look; used until the user picks another theme. */
+export const DEFAULT_THEME: Theme = 'jarvis';
 
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  resolvedTheme: 'light' | 'dark' | 'claude'; // The actual applied theme
+  resolvedTheme: ResolvedTheme; // The actual applied theme
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
+
+const THEME_CLASSES = ['dark', 'claude', 'jarvis'] as const;
 
 function getSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function applyTheme(theme: 'light' | 'dark' | 'claude') {
+function readSavedTheme(): Theme {
+  const saved = localStorage.getItem(STORAGE_KEYS.THEME);
+  return saved === 'system' ||
+    saved === 'light' ||
+    saved === 'dark' ||
+    saved === 'claude' ||
+    saved === 'jarvis'
+    ? saved
+    : DEFAULT_THEME;
+}
+
+function applyTheme(theme: ResolvedTheme) {
   const root = document.documentElement;
-  root.classList.remove('dark', 'claude');
-  if (theme === 'dark') {
-    root.classList.add('dark');
-  } else if (theme === 'claude') {
-    root.classList.add('claude');
-  }
+  root.classList.remove(...THEME_CLASSES);
+  if (theme !== 'light') root.classList.add(theme);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'system';
-    const saved = localStorage.getItem(STORAGE_KEYS.THEME) as Theme | null;
-    return saved || 'system';
-  });
+  const [theme, setThemeState] = useState<Theme>(() =>
+    typeof window === 'undefined' ? DEFAULT_THEME : readSavedTheme()
+  );
 
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark' | 'claude'>(() => {
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
     if (typeof window === 'undefined') return 'light';
-    const saved = localStorage.getItem(STORAGE_KEYS.THEME) as Theme | null;
-    if (saved === 'light' || saved === 'dark' || saved === 'claude') return saved;
-    return getSystemTheme();
+    const saved = readSavedTheme();
+    return saved === 'system' ? getSystemTheme() : saved;
   });
 
   // Apply theme on mount and when theme changes
   useEffect(() => {
-    let resolved: 'light' | 'dark' | 'claude';
-
-    if (theme === 'system') {
-      resolved = getSystemTheme();
-    } else {
-      resolved = theme;
-    }
-
+    const resolved: ResolvedTheme = theme === 'system' ? getSystemTheme() : theme;
     setResolvedTheme(resolved);
     applyTheme(resolved);
   }, [theme]);
