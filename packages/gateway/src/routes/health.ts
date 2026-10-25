@@ -4,6 +4,8 @@
 
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
+import { cpus, freemem, totalmem, uptime as osUptime } from 'node:os';
+import { statfs } from 'node:fs/promises';
 import { VERSION } from '@ownpilot/core/version';
 import {
   getSandboxStatus,
@@ -39,6 +41,43 @@ const requireAuthenticatedHealth = createMiddleware(async (c, next) => {
 healthRoutes.use('/sandbox', requireAuthenticatedHealth);
 healthRoutes.use('/sandbox/*', requireAuthenticatedHealth);
 healthRoutes.use('/tool-dependencies', requireAuthenticatedHealth);
+healthRoutes.use('/metrics', requireAuthenticatedHealth);
+
+/** Aggregate CPU time; usage is the busy share of the delta between two samples. */
+function sampleCpu(): { idle: number; total: number } {
+  let idle = 0;
+  let total = 0;
+  for (const cpu of cpus()) {
+    const t = cpu.times;
+    idle += t.idle;
+    total += t.user + t.nice + t.sys + t.irq + t.idle;
+  }
+  return { idle, total };
+}
+let lastCpuSample = sampleCpu();
+
+/** Host load for the Command Center's system monitor. */
+healthRoutes.get('/metrics', async (c) => {
+  const now = sampleCpu();
+  const idle = now.idle - lastCpuSample.idle;
+  const total = now.total - lastCpuSample.total;
+  lastCpuSample = now;
+
+  let disk: { total: number; free: number } | null = null;
+  try {
+    const fs = await statfs(process.cwd());
+    disk = { total: fs.blocks * fs.bsize, free: fs.bavail * fs.bsize };
+  } catch {
+    // Not supported on this filesystem; the UI shows the disk as unavailable.
+  }
+
+  return apiResponse(c, {
+    cpu: { percent: total > 0 ? Math.round((1 - idle / total) * 100) : 0, cores: cpus().length },
+    memory: { total: totalmem(), used: totalmem() - freemem() },
+    disk,
+    uptime: Math.round(osUptime()),
+  });
+});
 
 async function checkDatabaseReadiness(): Promise<{
   status: 'pass' | 'fail';

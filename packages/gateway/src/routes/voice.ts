@@ -434,7 +434,76 @@ voiceRoutes.post('/command', async (c) => {
   }
 });
 import { getVoiceSessionManager } from '../services/voice/session-manager.js';
+import { transcribeLocally } from '../services/voice/providers/local-provider.js';
+import { heardWakeWord, WAKE_PROMPT } from '../services/voice/wake-word.js';
 import { streamSSE } from 'hono/streaming';
+
+// =============================================================================
+// POST /wake — "Hey Leo" check on a short clip, transcribed by local Whisper only
+// =============================================================================
+
+const WAKE_RATES = new Set([16000, 24000]);
+const WAKE_MAX_SECONDS = 4;
+// ponytail: one check per user at a time; clips arriving meanwhile are dropped
+// (the browser just listens for the next one). A queue adds latency, not accuracy.
+const wakeInFlight = new Set<string>();
+
+voiceRoutes.post('/wake', async (c) => {
+  const userId = getUserId(c);
+  if (userId === 'default' && !c.get('sessionAuthenticated')) {
+    return apiError(c, { code: ERROR_CODES.UNAUTHORIZED, message: 'Authentication required' }, 401);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { audio?: unknown; sampleRate?: unknown };
+  const sampleRate = Number(body.sampleRate);
+  const audio = typeof body.audio === 'string' ? body.audio : '';
+  if (!audio || !WAKE_RATES.has(sampleRate)) {
+    return apiError(
+      c,
+      {
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: 'audio (base64 PCM16 mono) and sampleRate 16000 or 24000 are required',
+      },
+      400
+    );
+  }
+  if (Math.floor((audio.length * 3) / 4) > sampleRate * 2 * WAKE_MAX_SECONDS) {
+    return apiError(
+      c,
+      { code: ERROR_CODES.VALIDATION_ERROR, message: `Clip too long (max ${WAKE_MAX_SECONDS} s)` },
+      400
+    );
+  }
+  if (wakeInFlight.has(userId)) {
+    return apiError(
+      c,
+      { code: ERROR_CODES.RATE_LIMITED, message: 'A wake-word check is already running' },
+      429
+    );
+  }
+
+  wakeInFlight.add(userId);
+  try {
+    const text = await transcribeLocally(
+      audio,
+      sampleRate,
+      AbortSignal.timeout(20_000),
+      WAKE_PROMPT
+    );
+    return apiResponse(c, { detected: heardWakeWord(text), text });
+  } catch {
+    return apiError(
+      c,
+      {
+        code: ERROR_CODES.SERVICE_UNAVAILABLE,
+        message: 'Local wake-word check failed. Check Python and the cached Whisper model.',
+      },
+      503
+    );
+  } finally {
+    wakeInFlight.delete(userId);
+  }
+});
 
 // =============================================================================
 // Voice Sessions Lifecycle & Realtime APIs

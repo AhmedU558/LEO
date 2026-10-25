@@ -199,6 +199,14 @@ export const systemApi = {
       database?: DatabaseStatus;
     }>('/health'),
   toolDependencies: () => apiClient.get<ToolDependenciesResponse>('/health/tool-dependencies'),
+  /** Host CPU/RAM/disk load (authenticated). */
+  metrics: () =>
+    apiClient.get<{
+      cpu: { percent: number; cores: number };
+      memory: { total: number; used: number };
+      disk: { total: number; free: number } | null;
+      uptime: number;
+    }>('/health/metrics'),
   databaseStatus: () => apiClient.get<{ backups: BackupInfo[] }>('/db/status'),
   databaseStats: () => apiClient.get<DatabaseStats>('/db/stats'),
   databaseOperation: (endpoint: string, body?: Record<string, unknown>, adminKey?: string) =>
