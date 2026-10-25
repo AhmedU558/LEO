@@ -68,7 +68,8 @@ export interface NavGroup {
 
 // Main navigation items (always visible)
 export const mainItems: NavItem[] = [
-  { to: '/', icon: MessageSquare, label: 'Chat' },
+  { to: '/', icon: Sparkles, label: 'Command Center' },
+  { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/analytics', icon: Activity, label: 'Analytics' },
   { to: '/channels', icon: Send, label: 'Channels' },

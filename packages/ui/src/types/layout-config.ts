@@ -15,7 +15,7 @@
  *   - If in config array → shown. If not → hidden.
  */
 
-export const LAYOUT_CONFIG_VERSION = 11;
+export const LAYOUT_CONFIG_VERSION = 12;
 
 /** How pinned header items render */
 export type HeaderItemDisplayMode = 'icon' | 'icon-text' | 'text';
@@ -119,33 +119,34 @@ export const SECTION_DEFAULT_STYLES: Record<string, SidebarSectionStyle> = {
 /** Default sidebar sections — nav items + built-in sections */
 export const DEFAULT_SIDEBAR_SECTIONS: SidebarSectionConfig[] = [
   // Nav items (individual page links — was "pinned" section)
-  { id: '/', order: 0 },
-  { id: '/dashboard', order: 1 },
+  { id: '/', order: 0 }, // Command Center (home)
+  { id: '/chat', order: 1 },
+  { id: '/dashboard', order: 2 },
   // Mission Control — single-pane operator view of the entire autonomous
   // fleet (claw cards + inline controls + escalation queue + activity feed).
   // Pinned right after Dashboard so it's the headline operator surface.
-  { id: '/mission-control', order: 2 },
+  { id: '/mission-control', order: 3 },
   // Core UI controls
-  { id: 'search', order: 3 },
-  { id: 'scheduled', order: 4 },
-  { id: 'customize', order: 5 },
+  { id: 'search', order: 4 },
+  { id: 'scheduled', order: 5 },
+  { id: 'customize', order: 6 },
   // Headline autonomous-agent runtime — pinned by default so the Claw
   // operator surface (plan, queue intent, reset failures, live events) is
   // one click away without an enable-via-customize step. Was previously
   // only reachable through the "AI & Automation" nav group, which itself
   // had to be enabled, making the entire claw stack invisible by default.
-  { id: '/claws', order: 6 },
+  { id: '/claws', order: 7 },
   // Agentic Center — unified autonomous task execution across all agent types
-  { id: '/agentic', order: 7 },
+  { id: '/agentic', order: 8 },
   // Data (shown by default, user can remove)
-  { id: 'workspaces', order: 8, style: 'accordion' },
-  { id: 'workflows', order: 9, style: 'accordion' },
+  { id: 'workspaces', order: 9, style: 'accordion' },
+  { id: 'workflows', order: 10, style: 'accordion' },
   // Live claw list (top 5) right alongside workspaces/workflows so the
   // running runtimes are visible at a glance.
-  { id: 'claws', order: 10, style: 'accordion' },
+  { id: 'claws', order: 11, style: 'accordion' },
   // Recent agentic executions
-  { id: 'agentic-executions', order: 11, style: 'accordion' },
-  { id: 'recents', order: 12, style: 'accordion' },
+  { id: 'agentic-executions', order: 12, style: 'accordion' },
+  { id: 'recents', order: 13, style: 'accordion' },
 ];
 
 /** Human-readable labels for built-in sidebar sections */

@@ -12,6 +12,7 @@ import { useChatStore } from '../hooks/useChatStore';
 import { useSidebarRecents } from '../hooks/useSidebarRecents';
 import { useLayoutConfig } from '../hooks/useLayoutConfig';
 import { NAV_ITEM_MAP } from '../constants/nav-items';
+import { CHAT_PATH } from '../constants/routes';
 import { SIDEBAR_WIDTH_VALUES, DEFAULT_SIDEBAR_SECTIONS } from '../types/layout-config';
 import {
   SIDEBAR_DATA_SECTIONS,
@@ -127,7 +128,7 @@ export function Sidebar({
 
   const handleRecentClick = (conversationId: string) => {
     onCloseCustomize();
-    navigate(`/?conversationId=${conversationId}`);
+    navigate(`${CHAT_PATH}?conversationId=${conversationId}`);
   };
 
   const handleDeleteConv = async (id: string, e: React.MouseEvent) => {
@@ -141,7 +142,7 @@ export function Sidebar({
     if (!ok) return;
     try {
       await recents.handleDelete(id);
-      if (activeConversationId === id) navigate('/');
+      if (activeConversationId === id) navigate(CHAT_PATH);
     } catch {
       toast.error('Failed to delete conversation');
     }

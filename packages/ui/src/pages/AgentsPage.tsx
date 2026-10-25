@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
+import { CHAT_PATH } from '../constants/routes';
 import { useSkipHome } from '../hooks/useSkipHome';
 import {
   Plus,
@@ -70,7 +71,7 @@ export function AgentsPage() {
   const handleChatWithAgent = useCallback(
     (agent: Agent) => {
       // Navigate to chat with the agent's provider and model
-      navigate(`/?agent=${agent.id}&provider=${agent.provider}&model=${agent.model}`);
+      navigate(`${CHAT_PATH}?agent=${agent.id}&provider=${agent.provider}&model=${agent.model}`);
     },
     [navigate]
   );

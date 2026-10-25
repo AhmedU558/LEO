@@ -13,6 +13,7 @@
  */
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { STORAGE_KEYS } from '../constants/storage-keys';
+import { CHAT_PATH } from '../constants/routes';
 import {
   type LayoutConfig,
   type HeaderItemDisplayMode,
@@ -459,6 +460,23 @@ function migrateConfig(raw: unknown): LayoutConfig {
   return DEFAULT_LAYOUT_CONFIG;
 }
 
+/**
+ * V12: `/` became the Command Center and Chat moved to `/chat`. A saved layout
+ * that pinned `/` meant Chat, so keep Chat pinned right after it. Runs once,
+ * on the upgrade; unpinning Chat afterwards sticks.
+ */
+export function pinChatAfterHome(config: LayoutConfig): LayoutConfig {
+  const sections = config.sidebar?.sections ?? [];
+  const home = sections.findIndex((s) => s.id === '/');
+  if (home < 0 || sections.some((s) => s.id === CHAT_PATH)) return config;
+  const next = [...sections];
+  next.splice(home + 1, 0, { id: CHAT_PATH, order: 0 });
+  return {
+    ...config,
+    sidebar: { ...config.sidebar, sections: next.map((s, i) => ({ ...s, order: i })) },
+  };
+}
+
 function readConfig(): LayoutConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.LAYOUT_CONFIG);
@@ -485,7 +503,7 @@ function readConfig(): LayoutConfig {
         }
         return parsed;
       }
-      const migrated = migrateConfig(parsed);
+      const migrated = pinChatAfterHome(migrateConfig(parsed));
       localStorage.setItem(STORAGE_KEYS.LAYOUT_CONFIG, JSON.stringify(migrated));
       return migrated;
     }

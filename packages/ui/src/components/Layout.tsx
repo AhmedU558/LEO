@@ -9,6 +9,7 @@ import { Sidebar } from './Sidebar';
 import { PinnedItemsProvider } from '../hooks/usePinnedItems';
 import { HeaderItemsProvider } from '../hooks/useHeaderItems';
 import { navGroups } from '../constants/nav-items';
+import { CHAT_PATH } from '../constants/routes';
 import { LayoutConfigProvider } from '../hooks/useLayoutConfig';
 import { HeaderItemsBar } from './HeaderItemsBar';
 import { FleetStatusIndicator } from './FleetStatusIndicator';
@@ -58,7 +59,7 @@ export function Layout() {
     const willOpen = !isCustomizePanelOpen;
     setIsCustomizePanelOpen(willOpen);
     if (willOpen) {
-      navigate('/');
+      navigate(CHAT_PATH);
     }
   }, [isCustomizePanelOpen, navigate]);
 

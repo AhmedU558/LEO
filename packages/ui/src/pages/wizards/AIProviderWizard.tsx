@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { CHAT_PATH } from '../../constants/routes';
 import { WizardShell, type WizardStep } from '../../components/WizardShell';
 import {
   WizardPasswordInput,
@@ -356,7 +357,7 @@ export function AIProviderWizard({ onComplete, onCancel }: Props) {
           </p>
           <div className="flex justify-center gap-3">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(CHAT_PATH)}
               className="px-4 py-2 text-sm rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
             >
               Go to Chat
