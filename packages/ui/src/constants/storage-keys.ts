@@ -21,4 +21,5 @@ export const STORAGE_KEYS = {
   CHAT_MODEL: 'ownpilot-chat-model', // last-selected model ID (persists across page reloads)
   CHAT_SESSION_ID: 'ownpilot-chat-session-id', // active conversation ID (persists across page reloads)
   AUTO_COMPACT_DISABLED: 'ownpilot-auto-compact-disabled', // '1' when the user opted out of the auto-compact banner
+  VOICE_SPEECH_OUTPUT: 'leo-voice-speech-output', // 'local' | 'local-gradium' — Voice page speech engine
 } as const;

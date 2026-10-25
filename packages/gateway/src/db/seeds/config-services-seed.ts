@@ -283,6 +283,49 @@ export const KNOWN_CONFIG_SERVICES: CreateConfigServiceInput[] = [
       },
     ],
   },
+  {
+    name: 'gradium',
+    displayName: 'Gradium',
+    category: 'media',
+    description: 'Hosted text-to-speech for the local-gradium voice session provider.',
+    docsUrl: 'https://docs.gradium.ai',
+    configSchema: [
+      {
+        name: 'api_key',
+        label: 'API Key',
+        type: 'secret',
+        required: true,
+        envVar: 'GRADIUM_API_KEY',
+        order: 0,
+      },
+      {
+        name: 'voice_id',
+        label: 'Voice ID',
+        type: 'string',
+        required: true,
+        envVar: 'GRADIUM_VOICE_ID',
+        description: 'A library voice or your own clone, from Gradium Studio.',
+        order: 1,
+      },
+      {
+        name: 'base_url',
+        label: 'Base URL',
+        type: 'url',
+        required: false,
+        defaultValue: 'https://api.gradium.ai/api',
+        placeholder: 'https://api.gradium.ai/api',
+        order: 2,
+      },
+      {
+        name: 'model_name',
+        label: 'Model',
+        type: 'string',
+        required: false,
+        defaultValue: 'default',
+        order: 3,
+      },
+    ],
+  },
   // NOTE: Deepgram, DeepL, Tavily, Serper, Perplexity were removed — no built-in consumer code.
   // They can be re-added when actual tools/plugins implement them, or registered
   // dynamically via `requiredServices` in custom tools / user extensions.
