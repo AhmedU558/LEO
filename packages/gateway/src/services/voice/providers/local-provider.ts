@@ -47,9 +47,21 @@ try {
 }
 `;
 
-/** Offline Whisper + Ollama + Windows speech; never falls back to a paid provider. */
+/** Replaces Windows speech with another speech engine; recognition and replies stay local. */
+export interface SpeechSynthesizer {
+  /** Throw on missing configuration. Must not make a network request. */
+  check(): void;
+  /** Stream 24 kHz PCM16 mono in whole samples; reject on failure or abort. */
+  stream(text: string, signal: AbortSignal, onPcm: (pcm: Buffer) => void): Promise<void>;
+}
+
+/** Offline Whisper + Ollama + Windows speech (or an explicitly chosen synthesizer); never falls back. */
 export class LocalVoiceProvider implements VoiceProvider {
-  readonly name = 'local';
+  constructor(
+    readonly name = 'local',
+    private readonly synth?: SpeechSynthesizer
+  ) {}
+
   private events: VoiceProviderEvents = {};
   private status: VoiceSessionStatus = 'disconnected';
   private audio: Buffer[] = [];
@@ -114,12 +126,14 @@ export class LocalVoiceProvider implements VoiceProvider {
       if (!response.ok) throw new Error(`Start Ollama and install the local ${MODEL} model.`);
       // shortcut: reload tiny Whisper per turn; use a persistent worker if startup latency becomes noticeable.
       await this.runProcess('python', ['-c', WHISPER], '', request.signal);
-      await this.runProcess(
-        'powershell.exe',
-        ['-NoProfile', '-NonInteractive', '-Command', SPEAK],
-        '',
-        request.signal
-      );
+      if (this.synth) this.synth.check();
+      else
+        await this.runProcess(
+          'powershell.exe',
+          ['-NoProfile', '-NonInteractive', '-Command', SPEAK],
+          '',
+          request.signal
+        );
       request.signal.throwIfAborted();
       this.history = [
         {
@@ -225,6 +239,10 @@ export class LocalVoiceProvider implements VoiceProvider {
       this.history.push({ role: 'assistant', content: reply });
       // Bound the local context while retaining the system instruction.
       if (this.history.length > 13) this.history.splice(1, this.history.length - 13);
+      if (this.synth) {
+        await this.speakWith(this.synth, id, reply, request.signal);
+        return;
+      }
       const pcm = await this.runProcess(
         'powershell.exe',
         ['-NoProfile', '-NonInteractive', '-Command', SPEAK],
@@ -265,6 +283,48 @@ export class LocalVoiceProvider implements VoiceProvider {
     } catch (error) {
       if (!request.signal.aborted) this.fail(error);
     }
+  }
+
+  /** Text first, so the reply stays readable if speech fails; then stream audio as it arrives. */
+  private async speakWith(
+    synth: SpeechSynthesizer,
+    id: string,
+    reply: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    this.emitReply(id, reply);
+    try {
+      await synth.stream(reply, signal, (pcm) => {
+        if (signal.aborted) return;
+        if (this.status !== 'speaking') this.setStatus('speaking');
+        this.events.onAudioDelta?.({
+          sessionId: id,
+          responseId: id,
+          delta: pcm.toString('base64'),
+          format: 'pcm16',
+          sampleRate: 24000,
+          channels: 1,
+          timestamp: new Date().toISOString(),
+        });
+      });
+    } catch (error) {
+      if (signal.aborted) return;
+      // Report it, but keep the session usable for the next turn: no fallback voice.
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+    if (!signal.aborted) this.setStatus('connected');
+  }
+
+  private emitReply(id: string, reply: string): void {
+    const timestamp = new Date().toISOString();
+    this.events.onTranscript?.({
+      sessionId: id,
+      role: 'assistant',
+      text: reply,
+      isFinal: true,
+      timestamp,
+    });
+    this.events.onMessage?.({ id, role: 'assistant', type: 'text', text: reply, timestamp });
   }
 
   interrupt(): void {

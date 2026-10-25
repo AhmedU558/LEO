@@ -14,6 +14,19 @@ import { useToast } from '../components/ToastProvider';
 import type { VoiceSession, VoiceSessionStatus, VoiceMessage } from '../types/leo';
 import { Pcm16Player } from '../utils/pcm-player';
 import { PcmStreamRecorder } from '../utils/pcm-recorder';
+import { STORAGE_KEYS } from '../constants/storage-keys';
+
+type SpeechOutput = 'local' | 'local-gradium';
+
+function readSpeechOutput(): SpeechOutput {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.VOICE_SPEECH_OUTPUT) === 'local-gradium'
+      ? 'local-gradium'
+      : 'local';
+  } catch {
+    return 'local';
+  }
+}
 
 interface TranscriptItem {
   id: string;
@@ -31,6 +44,16 @@ export function VoicePage() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [toolName, setToolName] = useState('search_docs');
   const [isPressing, setIsPressing] = useState(false);
+  const [speechOutput, setSpeechOutput] = useState<SpeechOutput>(readSpeechOutput);
+
+  const chooseSpeechOutput = (value: SpeechOutput) => {
+    setSpeechOutput(value);
+    try {
+      localStorage.setItem(STORAGE_KEYS.VOICE_SPEECH_OUTPUT, value);
+    } catch {
+      // Preference only; the selection still applies to this page.
+    }
+  };
 
   const isPressingRef = useRef(false);
   const isStartingRef = useRef(false);
@@ -204,10 +227,10 @@ export function VoicePage() {
         return;
       }
 
-      // Normal sessions always use the real-time speech provider. `/voice/status`
-      // reports the TTS/STT config type ('openai' | 'elevenlabs'), a different
-      // setting that must not choose the session provider. The mock is test-only.
-      const targetProvider = 'local';
+      // Both choices keep Whisper and Ollama local; 'local-gradium' only sends the
+      // reply text to Gradium for speech. `/voice/status` reports the separate
+      // TTS/STT config type and must not choose the session provider.
+      const targetProvider = speechOutput;
 
       const res = await fetch('/api/v1/voice/sessions', {
         method: 'POST',
@@ -497,6 +520,19 @@ export function VoicePage() {
             <p className="text-text-muted">
               Start a new voice session to interact with LEO using realtime speech.
             </p>
+            <label className="flex flex-col gap-1 text-sm text-left w-full">
+              <span className="text-text-muted">Speech output</span>
+              <select
+                value={speechOutput}
+                onChange={(e) => chooseSpeechOutput(e.target.value as SpeechOutput)}
+                className="bg-bg-tertiary dark:bg-dark-bg-tertiary text-text-primary dark:text-dark-text-primary border border-border dark:border-dark-border rounded px-3 py-2"
+              >
+                <option value="local">Windows speech (offline)</option>
+                <option value="local-gradium">
+                  Gradium voice clone (sends reply text to Gradium)
+                </option>
+              </select>
+            </label>
             <button
               onClick={startSession}
               className="mt-4 flex items-center gap-2 bg-accent text-white px-6 py-3 rounded-full font-medium hover:opacity-90 transition-opacity shadow-md"

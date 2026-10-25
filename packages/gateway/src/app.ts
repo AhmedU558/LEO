@@ -117,10 +117,11 @@ export function createApp(config: Partial<GatewayConfig> = {}): Hono {
       xXssProtection: '1; mode=block',
       // Control referrer information - only send origin to cross-origin
       referrerPolicy: 'strict-origin-when-cross-origin',
-      // Permissions Policy - restrict browser features
+      // Permissions Policy - restrict browser features. The Voice page needs
+      // the microphone, so allow it for LEO's own origin only (never frames).
       permissionsPolicy: {
         camera: [],
-        microphone: [],
+        microphone: ['self'],
         geolocation: [],
         payment: [],
         usb: [],

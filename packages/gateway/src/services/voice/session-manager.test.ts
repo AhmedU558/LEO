@@ -415,4 +415,24 @@ describe('VoiceSessionManager', () => {
       expect(sendAudioSpy).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('Provider selection', () => {
+    it('defaults to the local provider', async () => {
+      const session = await manager.createSession('user-1', 'workspace-1');
+      expect(session.provider).toBe('local');
+    });
+
+    it('creates local-gradium only when explicitly requested', async () => {
+      const session = await manager.createSession('user-1', 'workspace-1', {
+        provider: 'local-gradium',
+      });
+      expect(session.provider).toBe('local-gradium');
+    });
+
+    it('rejects unknown providers instead of substituting one', async () => {
+      await expect(
+        manager.createSession('user-1', 'workspace-1', { provider: 'elevenlabs' })
+      ).rejects.toThrow('Unsupported voice provider: elevenlabs');
+    });
+  });
 });

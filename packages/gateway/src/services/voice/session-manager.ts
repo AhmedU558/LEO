@@ -19,6 +19,7 @@ import {
 import { MockVoiceProvider } from './providers/mock-provider.js';
 import { OpenAIRealtimeVoiceProvider } from './providers/openai-realtime.js';
 import { LocalVoiceProvider } from './providers/local-provider.js';
+import { gradiumSpeech } from './gradium-tts.js';
 import { VoiceService } from './service.js';
 
 export interface CreateSessionOptions {
@@ -59,6 +60,9 @@ export class VoiceSessionManager {
       return new MockVoiceProvider();
     }
     if (providerName === 'local') return new LocalVoiceProvider();
+    // Local Whisper + Ollama; only the reply text goes to Gradium for speech.
+    if (providerName === 'local-gradium')
+      return new LocalVoiceProvider('local-gradium', gradiumSpeech);
     if (providerName === 'openai-realtime') return new OpenAIRealtimeVoiceProvider();
     throw new Error(`Unsupported voice provider: ${providerName}`);
   }

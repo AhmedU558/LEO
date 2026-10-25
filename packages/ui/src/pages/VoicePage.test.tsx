@@ -448,4 +448,49 @@ describe('VoicePage Component', () => {
     expect(container.textContent).not.toContain('Listening... Release to process');
     expect(container.textContent).toContain('Push and hold to talk (or hold Spacebar)');
   });
+
+  describe('speech output selection', () => {
+    const sessionBody = () => {
+      const call = vi
+        .mocked(global.fetch)
+        .mock.calls.find(([url]) => url === '/api/v1/voice/sessions');
+      return JSON.parse((call?.[1] as RequestInit).body as string);
+    };
+
+    const start = async (container: HTMLElement) => {
+      const startButton = [...container.querySelectorAll('button')].find((b) =>
+        b.textContent?.includes('Start Voice Session')
+      );
+      await act(async () => {
+        startButton?.click();
+      });
+    };
+
+    beforeEach(() => localStorage.clear());
+
+    it('defaults to local Windows speech and makes no Gradium request', async () => {
+      const container = render(<VoicePage />);
+      expect(container.querySelector('select')?.value).toBe('local');
+      await start(container);
+      expect(sessionBody().provider).toBe('local');
+    });
+
+    it('starts a local-gradium session once selected and remembers the choice', async () => {
+      const container = render(<VoicePage />);
+      const select = container.querySelector('select')!;
+      act(() => {
+        select.value = 'local-gradium';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      expect(localStorage.getItem('leo-voice-speech-output')).toBe('local-gradium');
+      await start(container);
+      expect(sessionBody().provider).toBe('local-gradium');
+    });
+
+    it('ignores an unknown stored value', () => {
+      localStorage.setItem('leo-voice-speech-output', 'elevenlabs');
+      const container = render(<VoicePage />);
+      expect(container.querySelector('select')?.value).toBe('local');
+    });
+  });
 });
