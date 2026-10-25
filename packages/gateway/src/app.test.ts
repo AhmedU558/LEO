@@ -217,6 +217,15 @@ describe('createApp', () => {
       expect(res.headers.get('X-XSS-Protection')).toBe('1; mode=block');
     });
 
+    it('allows the microphone for LEO itself only and keeps other features off', async () => {
+      const app = createApp();
+      const res = await app.request('/api/v1/agents');
+      const policy = res.headers.get('Permissions-Policy') ?? '';
+      expect(policy).toContain('microphone=(self)');
+      expect(policy).toContain('camera=()');
+      expect(policy).toContain('geolocation=()');
+    });
+
     it('removes X-Powered-By header', async () => {
       const app = createApp();
       const res = await app.request('/api/v1/agents');
