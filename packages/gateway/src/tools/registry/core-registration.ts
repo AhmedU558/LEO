@@ -73,6 +73,7 @@ import {
   executeCliWrapperTool,
 } from '../index.js';
 import { CONFIG_TOOLS, executeConfigTool } from '../config-tools.js';
+import { applyImageOverrides } from '../overrides/image.js';
 import {
   traceToolCallStart,
   traceToolCallEnd,
@@ -263,6 +264,10 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
       return toToolResult(result);
     });
   }
+
+  // registerAllTools() on this registry installed the core image placeholders;
+  // replace them here so per-agent registries match the shared one.
+  applyImageOverrides(tools);
 }
 
 /** Names of meta-tools that have dedicated executors (registered separately) */

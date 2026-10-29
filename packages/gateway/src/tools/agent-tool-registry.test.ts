@@ -230,6 +230,7 @@ vi.mock('./config-tools.js', () => ({
   CONFIG_TOOLS: [],
   executeConfigTool: vi.fn(),
 }));
+vi.mock('./overrides/image.js', () => ({ applyImageOverrides: vi.fn() }));
 vi.mock('../services/extension/service.js', () => ({
   getExtensionService: vi.fn(),
 }));

@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerGatewayTools, registerDynamicTools } from './core-registration.js';
-import { ToolRegistry } from '@ownpilot/core/tools';
+import { ToolRegistry, registerAllTools } from '@ownpilot/core/tools';
 import * as permissionService from '../../services/tool/permission.js';
 
 vi.mock('../../services/tool/permission.js', () => ({
@@ -42,5 +42,18 @@ describe('core-registration (QA-007)', () => {
 
     // Verify checkToolPermission was called
     expect(permissionService.checkToolPermission).toHaveBeenCalled();
+  });
+
+  it('replaces the core generate_image placeholder on per-agent registries', async () => {
+    // Chat agents and runners build their registry exactly like this, and
+    // use_tool executes against it — so the stub must not survive here.
+    registerAllTools(tools);
+    registerGatewayTools(tools, 'user-123', false);
+
+    const result = await tools.execute('generate_image', { prompt: 'A castle' }, {});
+
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.value.content)).not.toContain('requiresImageGenerationAPI');
+    expect(JSON.stringify(result.value.content)).not.toContain('Override this executor');
   });
 });
