@@ -638,6 +638,24 @@ describe('createAgentExecutionMiddleware', () => {
       );
     });
 
+    it('should call stream.onError when agent returns a failed result', async () => {
+      // A returned failure (e.g. a provider rejected before any request) used to
+      // end the web stream silently, leaving an empty assistant bubble.
+      const agent = createAgent();
+      agent.chat.mockResolvedValue({ ok: false, error: { message: 'base URL is private' } });
+      const onError = vi.fn();
+      const stream: StreamCallbacks = { onError };
+      const ctx = createContext({ store: { agent, stream } });
+      const msg = createMessage();
+      const next = vi.fn().mockResolvedValue(createNextResult());
+
+      const result = await middleware(msg, ctx, next);
+
+      expect(onError).toHaveBeenCalledOnce();
+      expect((onError.mock.calls[0][0] as Error).message).toBe('base URL is private');
+      expect(result.response.content).toBe('Error: base URL is private');
+    });
+
     it('should call stream.onError when agent throws', async () => {
       const agent = createAgent();
       agent.chat.mockRejectedValue(new Error('stream fail'));
