@@ -2,14 +2,14 @@
  * Weather Service
  *
  * Provider-agnostic weather data service.
- * Supports: OpenWeatherMap, WeatherAPI
+ * Supports: OpenWeatherMap, WeatherAPI, Open-Meteo (free, no key)
  */
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type WeatherProvider = 'openweathermap' | 'weatherapi';
+export type WeatherProvider = 'openweathermap' | 'weatherapi' | 'open-meteo';
 
 export interface WeatherServiceConfig {
   provider: WeatherProvider;
@@ -439,6 +439,189 @@ function getWindDirection(degrees: number): string {
 }
 
 // =============================================================================
+// Open-Meteo Implementation (free, no API key; non-commercial use)
+// =============================================================================
+
+/** WMO weather interpretation codes used by Open-Meteo. */
+const WMO_CONDITIONS: Record<number, string> = {
+  0: 'Clear sky',
+  1: 'Mainly clear',
+  2: 'Partly cloudy',
+  3: 'Overcast',
+  45: 'Fog',
+  48: 'Depositing rime fog',
+  51: 'Light drizzle',
+  53: 'Moderate drizzle',
+  55: 'Dense drizzle',
+  56: 'Light freezing drizzle',
+  57: 'Dense freezing drizzle',
+  61: 'Slight rain',
+  63: 'Moderate rain',
+  65: 'Heavy rain',
+  66: 'Light freezing rain',
+  67: 'Heavy freezing rain',
+  71: 'Slight snow',
+  73: 'Moderate snow',
+  75: 'Heavy snow',
+  77: 'Snow grains',
+  80: 'Slight rain showers',
+  81: 'Moderate rain showers',
+  82: 'Violent rain showers',
+  85: 'Slight snow showers',
+  86: 'Heavy snow showers',
+  95: 'Thunderstorm',
+  96: 'Thunderstorm with slight hail',
+  99: 'Thunderstorm with heavy hail',
+};
+
+interface OpenMeteoPlace {
+  name: string;
+  latitude: number;
+  longitude: number;
+  country?: string;
+  admin1?: string;
+  timezone?: string;
+}
+
+/**
+ * Geocode "City" or "City, Region/Country". The geocoder matches names only,
+ * so the part after the first comma is used to pick among the candidates.
+ */
+async function openMeteoGeocode(location: string): Promise<OpenMeteoPlace> {
+  const [name = '', ...rest] = location.split(',').map((p) => p.trim());
+  const hint = rest.join(' ').toLowerCase();
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&language=en&format=json`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Open-Meteo geocoding error: ${await response.text()}`);
+  }
+  const { results = [] } = (await response.json()) as { results?: OpenMeteoPlace[] };
+  const place =
+    (hint &&
+      results.find((r) =>
+        [r.country, r.admin1].some((v) => v && hint.includes(v.toLowerCase()))
+      )) ||
+    results[0];
+  if (!place) {
+    throw new Error(`Location not found: ${location}`);
+  }
+  return place;
+}
+
+async function openMeteoCurrent(location: string): Promise<WeatherCurrent> {
+  const place = await openMeteoGeocode(location);
+  const vars =
+    'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,visibility,uv_index';
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=${vars}&timezone=auto`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Open-Meteo weather error: ${await response.text()}`);
+  }
+  const data = (await response.json()) as {
+    timezone?: string;
+    current: {
+      time: string;
+      temperature_2m: number;
+      relative_humidity_2m: number;
+      apparent_temperature: number;
+      is_day: number;
+      weather_code: number;
+      cloud_cover: number;
+      pressure_msl: number;
+      wind_speed_10m: number;
+      wind_direction_10m: number;
+      visibility?: number;
+      uv_index?: number;
+    };
+  };
+  const c = data.current;
+
+  return {
+    location: {
+      name: place.name,
+      region: place.admin1,
+      country: place.country ?? '',
+      lat: place.latitude,
+      lon: place.longitude,
+      timezone: data.timezone ?? place.timezone,
+      localTime: c.time,
+    },
+    current: {
+      temperature: Math.round(c.temperature_2m),
+      feelsLike: Math.round(c.apparent_temperature),
+      humidity: c.relative_humidity_2m,
+      pressure: Math.round(c.pressure_msl),
+      windSpeed: Math.round(c.wind_speed_10m), // km/h by default
+      windDirection: getWindDirection(c.wind_direction_10m),
+      windDegree: c.wind_direction_10m,
+      visibility: Math.round((c.visibility ?? 0) / 1000), // m to km
+      uvIndex: c.uv_index,
+      cloudCover: c.cloud_cover,
+      condition: WMO_CONDITIONS[c.weather_code] ?? 'Unknown',
+      conditionIcon: '',
+      isDay: c.is_day === 1,
+    },
+    provider: 'open-meteo',
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+async function openMeteoForecast(location: string, days: number): Promise<WeatherForecast> {
+  const place = await openMeteoGeocode(location);
+  const actualDays = Math.min(Math.max(days, 1), 16); // Open-Meteo max
+  const vars =
+    'weather_code,temperature_2m_max,temperature_2m_min,temperature_2m_mean,relative_humidity_2m_mean,precipitation_probability_max,sunrise,sunset,uv_index_max';
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&daily=${vars}&forecast_days=${actualDays}&timezone=auto`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Open-Meteo forecast error: ${await response.text()}`);
+  }
+  const { daily: d } = (await response.json()) as {
+    daily: {
+      time: string[];
+      weather_code: number[];
+      temperature_2m_max: number[];
+      temperature_2m_min: number[];
+      temperature_2m_mean?: number[];
+      relative_humidity_2m_mean?: number[];
+      precipitation_probability_max?: number[];
+      sunrise?: string[];
+      sunset?: string[];
+      uv_index_max?: number[];
+    };
+  };
+
+  return {
+    location: {
+      name: place.name,
+      region: place.admin1,
+      country: place.country ?? '',
+      lat: place.latitude,
+      lon: place.longitude,
+    },
+    forecast: d.time.map((date, i) => {
+      const max = d.temperature_2m_max[i] ?? 0;
+      const min = d.temperature_2m_min[i] ?? 0;
+      return {
+        date,
+        maxTemp: Math.round(max),
+        minTemp: Math.round(min),
+        avgTemp: Math.round(d.temperature_2m_mean?.[i] ?? (max + min) / 2),
+        humidity: Math.round(d.relative_humidity_2m_mean?.[i] ?? 0),
+        condition: WMO_CONDITIONS[d.weather_code[i] ?? -1] ?? 'Unknown',
+        conditionIcon: '',
+        chanceOfRain: d.precipitation_probability_max?.[i] ?? 0,
+        sunrise: d.sunrise?.[i]?.split('T')[1],
+        sunset: d.sunset?.[i]?.split('T')[1],
+        uvIndex: d.uv_index_max?.[i],
+      };
+    }),
+    provider: 'open-meteo',
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+// =============================================================================
 // Weather Service Class
 // =============================================================================
 
@@ -458,6 +641,8 @@ export class WeatherDataService {
         return openWeatherMapCurrent(this.config.apiKey, location);
       case 'weatherapi':
         return weatherAPICurrent(this.config.apiKey, location);
+      case 'open-meteo':
+        return openMeteoCurrent(location);
       default:
         throw new Error(`Unsupported weather provider: ${this.config.provider}`);
     }
@@ -472,6 +657,8 @@ export class WeatherDataService {
         return openWeatherMapForecast(this.config.apiKey, location, days);
       case 'weatherapi':
         return weatherAPIForecast(this.config.apiKey, location, days);
+      case 'open-meteo':
+        return openMeteoForecast(location, days);
       default:
         throw new Error(`Unsupported weather provider: ${this.config.provider}`);
     }
@@ -502,5 +689,11 @@ export const WEATHER_PROVIDERS = [
     name: 'WeatherAPI',
     freeLimit: '1,000,000 calls/month',
     signupUrl: 'https://www.weatherapi.com/',
+  },
+  {
+    id: 'open-meteo',
+    name: 'Open-Meteo',
+    freeLimit: 'Free, no API key (non-commercial use)',
+    signupUrl: 'https://open-meteo.com/',
   },
 ];

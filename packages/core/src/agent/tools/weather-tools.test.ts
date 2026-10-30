@@ -228,35 +228,35 @@ describe('getWeatherService resolution order', () => {
     });
   });
 
-  it('should return null when no context keys and no legacy config', async () => {
-    const result = await getWeatherExecutor({ location: 'Istanbul' }, {});
+  it('falls back to Open-Meteo when no context keys and no legacy config', async () => {
+    await getWeatherExecutor({ location: 'Istanbul' }, {});
 
-    expect(result.isError).toBe(true);
-    expect((result.content as Record<string, unknown>).error).toBe(
-      'Weather service not configured'
-    );
+    expect(mockCreateWeatherDataService).toHaveBeenCalledWith({
+      provider: 'open-meteo',
+      apiKey: '',
+    });
   });
 
-  it('should return null when context is undefined', async () => {
-    const result = await getWeatherExecutor({ location: 'Istanbul' }, undefined);
+  it('falls back to Open-Meteo when context is undefined', async () => {
+    await getWeatherExecutor({ location: 'Istanbul' }, undefined);
 
-    expect(result.isError).toBe(true);
-    expect((result.content as Record<string, unknown>).error).toBe(
-      'Weather service not configured'
-    );
+    expect(mockCreateWeatherDataService).toHaveBeenCalledWith({
+      provider: 'open-meteo',
+      apiKey: '',
+    });
   });
 
-  it('should handle context.getApiKey returning empty string (falsy)', async () => {
+  it('treats an empty API key as missing and falls back to Open-Meteo', async () => {
     const context = {
       getApiKey: vi.fn(() => ''),
     };
 
-    const result = await getWeatherExecutor({ location: 'Istanbul' }, context);
+    await getWeatherExecutor({ location: 'Istanbul' }, context);
 
-    expect(result.isError).toBe(true);
-    expect((result.content as Record<string, unknown>).error).toBe(
-      'Weather service not configured'
-    );
+    expect(mockCreateWeatherDataService).toHaveBeenCalledWith({
+      provider: 'open-meteo',
+      apiKey: '',
+    });
   });
 });
 
@@ -301,16 +301,19 @@ describe('getWeatherExecutor', () => {
     });
   });
 
-  describe('no service configured', () => {
-    it('should return error with suggestion text', async () => {
+  describe('no key configured', () => {
+    it('returns weather from Open-Meteo', async () => {
+      const svc = makeMockService();
+      svc.getCurrentWeather.mockResolvedValue(makeWeatherResponse());
+      mockCreateWeatherDataService.mockReturnValue(svc);
+
       const result = await getWeatherExecutor({ location: 'Istanbul' }, {});
 
-      expect(result.isError).toBe(true);
-      const content = result.content as Record<string, unknown>;
-      expect(content.error).toBe('Weather service not configured');
-      expect(content.suggestion).toContain('Add a weather API key');
-      expect(content.suggestion).toContain('OpenWeatherMap');
-      expect(content.suggestion).toContain('WeatherAPI');
+      expect(result.isError).toBe(false);
+      expect(mockCreateWeatherDataService).toHaveBeenCalledWith({
+        provider: 'open-meteo',
+        apiKey: '',
+      });
     });
   });
 
@@ -647,14 +650,19 @@ describe('getWeatherForecastExecutor', () => {
     });
   });
 
-  describe('no service configured', () => {
-    it('should return error with suggestion', async () => {
+  describe('no key configured', () => {
+    it('returns a forecast from Open-Meteo', async () => {
+      const svc = makeMockService();
+      svc.getForecast.mockResolvedValue(makeForecastResponse());
+      mockCreateWeatherDataService.mockReturnValue(svc);
+
       const result = await getWeatherForecastExecutor({ location: 'Istanbul' }, {});
 
-      expect(result.isError).toBe(true);
-      const content = result.content as Record<string, unknown>;
-      expect(content.error).toBe('Weather service not configured');
-      expect(content.suggestion).toContain('Add a weather API key');
+      expect(result.isError).toBe(false);
+      expect(mockCreateWeatherDataService).toHaveBeenCalledWith({
+        provider: 'open-meteo',
+        apiKey: '',
+      });
     });
   });
 
@@ -1086,10 +1094,12 @@ describe('config override flow', () => {
 
     vi.clearAllMocks();
 
-    // Second: reset to null
+    // Second: reset to null — falls back to Open-Meteo
     setWeatherConfig(() => null);
-    const result = await getWeatherExecutor({ location: 'Istanbul' }, {});
-    expect(result.isError).toBe(true);
-    expect(mockCreateWeatherDataService).not.toHaveBeenCalled();
+    await getWeatherExecutor({ location: 'Istanbul' }, {});
+    expect(mockCreateWeatherDataService).toHaveBeenCalledWith({
+      provider: 'open-meteo',
+      apiKey: '',
+    });
   });
 });
