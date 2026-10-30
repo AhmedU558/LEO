@@ -4,7 +4,7 @@ import type { VoiceAudioDeltaEvent, VoiceProviderEvents } from '@ownpilot/core/v
 const execFileMock = vi.fn();
 vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => execFileMock(...args) }));
 
-const { LocalVoiceProvider } = await import('./local-provider.js');
+const { LocalVoiceProvider, forSpeech } = await import('./local-provider.js');
 type Synth = NonNullable<ConstructorParameters<typeof LocalVoiceProvider>[1]>;
 
 const WINDOWS_PCM = Buffer.alloc(8, 1).toString('base64');
@@ -174,5 +174,48 @@ describe('LocalVoiceProvider', () => {
       expect(r.errors).toHaveLength(0);
       expect(provider.getStatus()).toBe('connected');
     });
+  });
+
+  describe('site commands', () => {
+    it('opens the site and speaks a confirmation without asking the model', async () => {
+      const provider = new LocalVoiceProvider();
+      const r = recorder();
+      await provider.connect(r.events);
+
+      provider.sendText('Open YouTube');
+      await vi.waitFor(() => expect(r.audio.length).toBeGreaterThan(0));
+
+      expect(execFileMock).toHaveBeenCalledWith(
+        'explorer.exe',
+        ['https://www.youtube.com'],
+        expect.anything(),
+        expect.any(Function)
+      );
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/api/chat'))).toBe(
+        false
+      );
+      expect(r.errors).toHaveLength(0);
+    });
+
+    it('sends everything else to the model', async () => {
+      const provider = new LocalVoiceProvider();
+      const r = recorder();
+      await provider.connect(r.events);
+
+      provider.sendText('Tell me a joke');
+      await vi.waitFor(() => expect(r.audio.length).toBeGreaterThan(0));
+
+      expect(execFileMock.mock.calls.some(([cmd]) => cmd === 'explorer.exe')).toBe(false);
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/api/chat'))).toBe(
+        true
+      );
+    });
+  });
+});
+
+describe('forSpeech', () => {
+  it('drops emoji from the spoken text only', () => {
+    expect(forSpeech('Happy to help! 😊 Anything else? 👍🏽')).toBe('Happy to help! Anything else?');
+    expect(forSpeech('Plain reply.')).toBe('Plain reply.');
   });
 });

@@ -703,6 +703,37 @@ voiceRoutes.post('/sessions/:id/audio', async (c) => {
   }
 });
 
+/** Typed input: answered and spoken exactly like a voice turn. */
+voiceRoutes.post('/sessions/:id/text', async (c) => {
+  try {
+    const userId = getUserId(c);
+    if (userId === 'default' && !c.get('sessionAuthenticated')) {
+      return apiError(
+        c,
+        { code: ERROR_CODES.UNAUTHORIZED, message: 'Authentication required' },
+        401
+      );
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!text || text.length > 2000) {
+      return apiError(
+        c,
+        { code: ERROR_CODES.VALIDATION_ERROR, message: 'text must be 1–2000 characters' },
+        400
+      );
+    }
+    getVoiceSessionManager().sendText(c.req.param('id'), userId, text);
+    return apiResponse(c, { received: true });
+  } catch (err) {
+    const msg = getErrorMessage(err);
+    if (msg.includes('not found') || msg.includes('unauthorized')) {
+      return apiError(c, { code: ERROR_CODES.NOT_FOUND, message: msg }, 404);
+    }
+    return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: msg }, 500);
+  }
+});
+
 voiceRoutes.post('/sessions/:id/tool_call', async (c) => {
   try {
     const userId = getUserId(c);
