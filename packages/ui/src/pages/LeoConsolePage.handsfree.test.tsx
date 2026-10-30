@@ -69,14 +69,45 @@ function fakeFetch(input: RequestInfo | URL) {
   );
 }
 
+const listeners = new Map<string, (e: MessageEvent) => void>();
+const emit = (name: string, data: unknown) =>
+  listeners.get(name)?.(new MessageEvent(name, { data: JSON.stringify(data) }));
+const openUrlMessage = (url: string) => ({
+  message: {
+    id: 'm1_open',
+    role: 'assistant',
+    type: 'tool_call',
+    toolCall: { id: 'm1_open', name: 'open_url', arguments: JSON.stringify({ url }) },
+    timestamp: '',
+  },
+});
+
+async function mountOnline() {
+  const container = render(
+    <MemoryRouter>
+      <LeoConsolePage />
+    </MemoryRouter>
+  );
+  await flushAsyncUpdates();
+  const core = container.querySelector<HTMLButtonElement>('[aria-label="Start a voice session"]')!;
+  await act(async () => {
+    core.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  });
+  await flushAsyncUpdates();
+  return container;
+}
+
 describe('LeoConsolePage hands-free and typed turns', () => {
   let getUserMedia: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    listeners.clear();
     vi.stubGlobal(
       'EventSource',
       class {
-        addEventListener = vi.fn();
+        addEventListener = vi.fn((name: string, fn: (e: MessageEvent) => void) => {
+          listeners.set(name, fn);
+        });
         close = vi.fn();
       }
     );
@@ -150,5 +181,46 @@ describe('LeoConsolePage hands-free and typed turns', () => {
       text: 'open YouTube',
     });
     expect(input.value).toBe('');
+  });
+
+  it('opens a site LEO was asked for in a new tab', async () => {
+    const open = vi.fn(() => ({ opener: {} }));
+    vi.stubGlobal('open', open);
+    await mountOnline();
+
+    await act(async () => {
+      emit('message', openUrlMessage('https://www.youtube.com'));
+    });
+
+    expect(open).toHaveBeenCalledWith('https://www.youtube.com', '_blank');
+  });
+
+  it('offers a link when the browser blocks the new tab', async () => {
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => null)
+    );
+    const container = await mountOnline();
+
+    await act(async () => {
+      emit('message', openUrlMessage('https://www.youtube.com'));
+    });
+
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain('blocked the new tab');
+    expect(alert?.querySelector('a')?.getAttribute('href')).toBe('https://www.youtube.com');
+    expect(alert?.textContent).toContain('Open www.youtube.com');
+  });
+
+  it('ignores anything that is not https', async () => {
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+    await mountOnline();
+
+    await act(async () => {
+      emit('message', openUrlMessage('javascript:alert(1)'));
+    });
+
+    expect(open).not.toHaveBeenCalled();
   });
 });

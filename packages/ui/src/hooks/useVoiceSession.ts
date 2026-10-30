@@ -31,6 +31,18 @@ function readSpeechOutput(): SpeechOutput {
   }
 }
 
+/**
+ * Open a site LEO was asked for in a new tab of this browser. Returns false
+ * when the browser blocked it (no click behind a spoken command).
+ */
+function openInNewTab(url: string): boolean {
+  if (!url.startsWith('https://')) return true; // LEO only sends https; ignore anything else.
+  const tab = window.open(url, '_blank');
+  if (!tab) return false;
+  tab.opener = null;
+  return true;
+}
+
 export function useVoiceSession() {
   const toast = useToast();
   const [session, setSession] = useState<VoiceSession | null>(null);
@@ -38,6 +50,8 @@ export function useVoiceSession() {
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [streamingDelta, setStreamingDelta] = useState<string>('');
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  /** A site LEO tried to open but the browser's pop-up blocker stopped. */
+  const [blockedLink, setBlockedLink] = useState<string | null>(null);
   const [isPressing, setIsPressing] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [speechOutput, setSpeechOutput] = useState<SpeechOutput>(readSpeechOutput);
@@ -153,6 +167,11 @@ export function useVoiceSession() {
       try {
         const data = JSON.parse((e as MessageEvent).data);
         const msg = data.message as VoiceMessage;
+        if (msg?.type === 'tool_call' && msg.toolCall?.name === 'open_url') {
+          const { url } = JSON.parse(msg.toolCall.arguments) as { url?: string };
+          if (url && !openInNewTab(url)) setBlockedLink(url);
+          return;
+        }
         if (msg && msg.text) {
           const text = msg.text;
           setTranscripts((prev) => {
@@ -474,6 +493,8 @@ export function useVoiceSession() {
     startRecording,
     stopRecording,
     sendText,
+    blockedLink,
+    dismissBlockedLink: () => setBlockedLink(null),
     handleKeyDown,
     handleKeyUp,
     getOutputAnalyser,

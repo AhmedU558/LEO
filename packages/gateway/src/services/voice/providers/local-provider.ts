@@ -102,14 +102,8 @@ export function forSpeech(text: string): string {
     .trim();
 }
 
-/**
- * Open a URL from parseSiteCommand() in the default browser on this PC.
- * explorer.exe takes the URL as a plain argument (no shell), and exits 1 even
- * on success, so its result is ignored.
- */
-function openInBrowser(url: string): void {
-  execFile('explorer.exe', [url], { windowsHide: true }, () => {});
-}
+/** Name of the client action that opens a site in a new browser tab. */
+export const OPEN_URL_ACTION = 'open_url';
 
 /** Replaces Windows speech with another speech engine; recognition and replies stay local. */
 export interface SpeechSynthesizer {
@@ -262,7 +256,20 @@ export class LocalVoiceProvider implements VoiceProvider {
       this.events.onMessage?.({ id: `${id}_user`, role: 'user', type: 'text', text, timestamp });
       this.history.push({ role: 'user', content: text });
       const site = parseSiteCommand(text);
-      if (site) openInBrowser(site.url);
+      // The page opens it in a new tab of the same browser. Sent before the
+      // spoken reply so a typed command still counts as the user's click.
+      if (site)
+        this.events.onMessage?.({
+          id: `${id}_open`,
+          role: 'assistant',
+          type: 'tool_call',
+          toolCall: {
+            id: `${id}_open`,
+            name: OPEN_URL_ACTION,
+            arguments: JSON.stringify({ url: site.url }),
+          },
+          timestamp,
+        });
       const reply = site ? site.say : await this.ask(request.signal);
       this.history.push({ role: 'assistant', content: reply });
       // Bound the local context while retaining the system instruction.

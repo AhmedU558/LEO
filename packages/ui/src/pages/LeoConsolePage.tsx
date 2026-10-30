@@ -596,6 +596,25 @@ export function LeoConsolePage() {
               <Send className="size-4" /> Send
             </button>
           </form>
+          {voice.blockedLink && (
+            <p
+              role="alert"
+              className="w-full max-w-lg rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+            >
+              Your browser blocked the new tab.{' '}
+              <a
+                href={voice.blockedLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={voice.dismissBlockedLink}
+                className="font-semibold underline"
+              >
+                Open {new URL(voice.blockedLink).hostname}
+              </a>
+              . To let LEO open sites hands-free, allow pop-ups for this page: click the blocked
+              pop-up icon at the right of the address bar and choose &quot;Always allow&quot;.
+            </p>
+          )}
         </section>
 
         {/* Live intelligence feed */}
