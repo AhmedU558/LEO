@@ -187,6 +187,13 @@ export function createAgentExecutionMiddleware(): MessageMiddleware {
       if (!result.ok) {
         ctx.set('error', result.error);
 
+        // A returned (not thrown) failure must reach the client too. Without this
+        // the web chat stream ends with no error and no text, and the UI shows an
+        // empty assistant bubble (e.g. a provider rejected before any request).
+        if (stream?.onError) {
+          stream.onError(new Error(result.error?.message ?? 'Unknown error'));
+        }
+
         return {
           response: {
             id: randomUUID(),

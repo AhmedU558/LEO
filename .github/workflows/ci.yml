@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # ubuntu-latest is 26.04; Playwright has no chromium build for it yet
 
     strategy:
       matrix:

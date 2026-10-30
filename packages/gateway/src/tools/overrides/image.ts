@@ -30,6 +30,8 @@ const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const SUPPORTED_FORMATS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
 const IMAGE_GEN_SERVICE = 'image_generation';
+/** Generation can take a minute on slower models; never hang a chat turn forever. */
+const IMAGE_GEN_TIMEOUT_MS = 120_000;
 
 type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
 
@@ -307,6 +309,7 @@ async function callOpenAIImageGen(
   const response = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(IMAGE_GEN_TIMEOUT_MS),
     body: JSON.stringify({
       prompt,
       model: model || 'dall-e-3',
@@ -321,9 +324,12 @@ async function callOpenAIImageGen(
     throw new Error(`OpenAI Image API ${response.status}: ${text.slice(0, 500)}`);
   }
   const data = (await response.json()) as {
-    data: Array<{ b64_json: string; revised_prompt?: string }>;
+    data?: Array<{ b64_json?: string; revised_prompt?: string }>;
   };
-  return data.data.map((d) => ({ base64: d.b64_json, revisedPrompt: d.revised_prompt }));
+  return (data.data ?? []).map((d) => ({
+    base64: d.b64_json ?? '',
+    revisedPrompt: d.revised_prompt,
+  }));
 }
 
 async function callStabilityImageGen(
@@ -344,6 +350,7 @@ async function callStabilityImageGen(
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    signal: AbortSignal.timeout(IMAGE_GEN_TIMEOUT_MS),
     body: JSON.stringify({
       text_prompts: [{ text: prompt, weight: 1 }],
       cfg_scale: 7,
@@ -357,8 +364,8 @@ async function callStabilityImageGen(
     const text = await response.text();
     throw new Error(`Stability API ${response.status}: ${text.slice(0, 500)}`);
   }
-  const data = (await response.json()) as { artifacts: Array<{ base64: string }> };
-  return data.artifacts.map((a) => ({ base64: a.base64 }));
+  const data = (await response.json()) as { artifacts?: Array<{ base64?: string }> };
+  return (data.artifacts ?? []).map((a) => ({ base64: a.base64 ?? '' }));
 }
 
 async function callFalImageGen(
@@ -373,16 +380,17 @@ async function callFalImageGen(
   const response = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Key ${apiKey}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(IMAGE_GEN_TIMEOUT_MS),
     body: JSON.stringify({ prompt, image_size: size, num_images: n }),
   });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`FAL API ${response.status}: ${text.slice(0, 500)}`);
   }
-  const data = (await response.json()) as { images: Array<{ url: string }> };
+  const data = (await response.json()) as { images?: Array<{ url: string }> };
   // FAL returns URLs — download to base64
   const results: ImageGenResult[] = [];
-  for (const img of data.images) {
+  for (const img of data.images ?? []) {
     // SECURITY (SSRF-001): img.url comes from the provider's JSON response and
     // must not be fetched with bare fetch() — a spoofed/compromised response
     // could point at 169.254.169.254 or other internal addresses.
@@ -410,6 +418,7 @@ async function callReplicateImageGen(
       'Content-Type': 'application/json',
       Prefer: 'wait',
     },
+    signal: AbortSignal.timeout(IMAGE_GEN_TIMEOUT_MS),
     body: JSON.stringify({
       model: model || 'black-forest-labs/flux-schnell',
       input: { prompt, width, height, num_outputs: n },
@@ -456,12 +465,15 @@ const generateImageOverride: ToolExecutor = async (
     return { content: { error: 'Prompt too long. Maximum 4000 characters.' }, isError: true };
   }
 
+  // Hoisted so the catch block can scrub the key out of provider error text.
+  let apiKey: string | undefined;
+
   try {
-    // --- Read config ---
+    // --- Read config (server-side only; the key never leaves this function) ---
     const config = getConfigCenter();
     const providerType = config.getFieldValue(IMAGE_GEN_SERVICE, 'provider_type') as
       string | undefined;
-    const apiKey = config.getFieldValue(IMAGE_GEN_SERVICE, 'api_key') as string | undefined;
+    apiKey = config.getFieldValue(IMAGE_GEN_SERVICE, 'api_key') as string | undefined;
     const baseUrl = config.getFieldValue(IMAGE_GEN_SERVICE, 'base_url') as string | undefined;
     const model = config.getFieldValue(IMAGE_GEN_SERVICE, 'model') as string | undefined;
 
@@ -473,6 +485,24 @@ const generateImageOverride: ToolExecutor = async (
         },
         isError: true,
       };
+    }
+
+    // --- Resolve where images go; outputPath must stay inside the workspace ---
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const workDir = context.workspaceDir || '.';
+    const imagesDir = path.join(workDir, 'generated_images');
+
+    let customPath: string | undefined;
+    if (outputPath) {
+      customPath = path.isAbsolute(outputPath) ? outputPath : path.join(workDir, outputPath);
+      const rel = path.relative(workDir, customPath);
+      if (!rel || /^\.\.([\\/]|$)/.test(rel) || path.isAbsolute(rel)) {
+        return {
+          content: { error: 'outputPath must be a file inside the workspace' },
+          isError: true,
+        };
+      }
     }
 
     // Enhance prompt with style
@@ -543,15 +573,16 @@ const generateImageOverride: ToolExecutor = async (
         );
     }
 
+    // Providers can answer 200 with an empty or partial payload; keep only real image data.
+    results = results.filter((r) => typeof r.base64 === 'string' && r.base64.length > 0);
     if (!results.length) {
-      return { content: { error: 'No images generated' }, isError: true };
+      return {
+        content: { error: 'No images generated (the provider returned no image data)' },
+        isError: true,
+      };
     }
 
     // --- Save to workspace ---
-    const fs = await import('node:fs/promises');
-    const path = await import('node:path');
-    const workDir = context.workspaceDir || '.';
-    const imagesDir = path.join(workDir, 'generated_images');
     await fs.mkdir(imagesDir, { recursive: true });
 
     const savedImages: Array<{ path: string; size: number; revisedPrompt?: string }> = [];
@@ -559,8 +590,8 @@ const generateImageOverride: ToolExecutor = async (
     for (let i = 0; i < results.length; i++) {
       const result = results[i]!;
       const filename =
-        outputPath && results.length === 1
-          ? outputPath
+        customPath && results.length === 1
+          ? customPath
           : path.join(imagesDir, `image_${Date.now()}_${i}.png`);
 
       const dir = path.dirname(filename);
@@ -574,16 +605,16 @@ const generateImageOverride: ToolExecutor = async (
     }
 
     // Build markdown for display (use relative paths so UI resolveImageUrl() works)
-    const markdown = savedImages
-      .map((img) => {
-        const relativePath = path.relative(workDir, img.path).replace(/\\/g, '/');
-        return `![Generated image](${relativePath})`;
-      })
-      .join('\n');
+    const relativePaths = savedImages.map((img) =>
+      path.relative(workDir, img.path).replace(/\\/g, '/')
+    );
+    const markdown = relativePaths.map((p) => `![Generated image](${p})`).join('\n');
 
     return {
       content: {
         success: true,
+        // The chat tool card previews `output` (ToolExecutionDisplay isImageToolResult).
+        output: relativePaths[0],
         images: savedImages,
         prompt: enhancedPrompt,
         originalPrompt: prompt,
@@ -596,8 +627,13 @@ const generateImageOverride: ToolExecutor = async (
       isError: false,
     };
   } catch (error) {
+    const reason =
+      error instanceof Error && error.name === 'TimeoutError'
+        ? `the image provider did not respond within ${IMAGE_GEN_TIMEOUT_MS / 1000}s`
+        : getErrorMessage(error);
+    const safeReason = apiKey ? reason.split(apiKey).join('[redacted]') : reason;
     return {
-      content: { error: `Failed to generate image: ${getErrorMessage(error)}` },
+      content: { error: `Failed to generate image: ${safeReason}` },
       isError: true,
     };
   }
@@ -623,6 +659,20 @@ function getDefaultBaseUrl(providerType: string): string {
 // ============================================================================
 
 export async function registerImageOverrides(registry: ToolRegistry): Promise<void> {
+  applyImageOverrides(registry);
+
+  // Register the image_generation Config Center service (async, non-blocking)
+  ensureImageGenService().catch((err) => log.debug('ensureImageGenService:', getErrorMessage(err)));
+}
+
+/**
+ * Swap the core placeholder executors for the real ones on any registry.
+ *
+ * Chat agents and autonomous runners build their own ToolRegistry instead of
+ * using the shared one, and `use_tool` executes against that per-agent registry,
+ * so each of them must apply this too or the model gets the core stub back.
+ */
+export function applyImageOverrides(registry: ToolRegistry): void {
   // Override analyze_image executor
   const analyzeName = 'analyze_image';
   if (registry.updateExecutor(analyzeName, analyzeImageOverride)) {
@@ -643,7 +693,4 @@ export async function registerImageOverrides(registry: ToolRegistry): Promise<vo
       log.info(`Overrode core.${genName} with provider-agnostic implementation`);
     }
   }
-
-  // Register the image_generation Config Center service (async, non-blocking)
-  ensureImageGenService().catch((err) => log.debug('ensureImageGenService:', getErrorMessage(err)));
 }

@@ -131,7 +131,7 @@ vi.mock('node:path', () => {
 // Import under test
 // ---------------------------------------------------------------------------
 
-import { registerImageOverrides } from './image.js';
+import { applyImageOverrides, registerImageOverrides } from './image.js';
 
 // ---------------------------------------------------------------------------
 // Types & helpers
@@ -1915,6 +1915,119 @@ describe('image-overrides', () => {
         const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
         expect(body.n).toBe(1);
       });
+    });
+  });
+
+  // ==========================================================================
+  // Per-agent wiring, UI result shape, and provider hardening
+  // ==========================================================================
+
+  describe('applyImageOverrides', () => {
+    it('replaces the placeholders synchronously without touching Config Center', () => {
+      const names: string[] = [];
+      const registry = {
+        updateExecutor: vi.fn((name: string) => {
+          names.push(name);
+          return true;
+        }),
+      };
+
+      applyImageOverrides(registry as never);
+
+      expect(names).toEqual(['analyze_image', 'generate_image']);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generate_image hardening', () => {
+    let generate: Executor;
+    const okResponse = (data: unknown) => ({ ok: true, json: async () => data });
+
+    beforeEach(async () => {
+      generate = (await captureExecutors())['generate_image']!;
+      setupImageGenConfig();
+      mockFsStat.mockResolvedValue({ size: 1024 });
+    });
+
+    it('returns `output` as a workspace-relative path the chat card can preview', async () => {
+      mockFetch.mockResolvedValue(okResponse({ data: [{ b64_json: 'aW1hZ2VkYXRh' }] }));
+
+      const result = await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(result.isError).toBe(false);
+      expect(result.content.output).toMatch(/^generated_images\/image_\d+_0\.png$/);
+      expect(result.content.markdown).toContain(result.content.output);
+    });
+
+    it('rejects an outputPath outside the workspace before calling the provider', async () => {
+      for (const outputPath of ['../escape.png', '/etc/escape.png']) {
+        const result = await generate({ prompt: 'A castle', outputPath }, defaultContext);
+        expect(result.isError).toBe(true);
+        expect(result.content.error).toContain('inside the workspace');
+      }
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockFsWriteFile).not.toHaveBeenCalled();
+    });
+
+    it('accepts a relative outputPath inside the workspace', async () => {
+      mockFetch.mockResolvedValue(okResponse({ data: [{ b64_json: 'aW1hZ2VkYXRh' }] }));
+
+      const result = await generate(
+        { prompt: 'A castle', outputPath: 'art/castle.png' },
+        defaultContext
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mockFsWriteFile).toHaveBeenCalledWith('/workspace/art/castle.png', expect.any(Buffer));
+      expect(result.content.output).toBe('art/castle.png');
+    });
+
+    it('treats a 200 response without image data as a failure', async () => {
+      for (const payload of [
+        {},
+        { data: [{ b64_json: '' }] },
+        { data: [{ revised_prompt: 'x' }] },
+      ]) {
+        mockFetch.mockResolvedValueOnce(okResponse(payload));
+        const result = await generate({ prompt: 'A castle' }, defaultContext);
+        expect(result.isError).toBe(true);
+        expect(result.content.error).toContain('no image data');
+      }
+      expect(mockFsWriteFile).not.toHaveBeenCalled();
+    });
+
+    it('sends every provider request with a timeout signal', async () => {
+      mockFetch.mockResolvedValue(okResponse({ data: [{ b64_json: 'aW1hZ2VkYXRh' }] }));
+
+      await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(mockFetch.mock.calls[0]![1].signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('reports a timeout in plain words', async () => {
+      const timeout = new Error('The operation was aborted due to timeout');
+      timeout.name = 'TimeoutError';
+      mockFetch.mockRejectedValue(timeout);
+
+      const result = await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(result.isError).toBe(true);
+      expect(result.content.error).toContain('did not respond within 120s');
+    });
+
+    it('never returns the API key, even when the provider echoes it', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => '{"error":"Incorrect API key provided: sk-test-key"}',
+      });
+
+      const result = await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(result.isError).toBe(true);
+      expect(result.content.error).toContain('401');
+      expect(JSON.stringify(result)).not.toContain('sk-test-key');
+      expect(result.content.error).toContain('[redacted]');
     });
   });
 });
