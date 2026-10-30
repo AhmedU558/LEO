@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { VoiceAudioDeltaEvent, VoiceProviderEvents } from '@ownpilot/core/voice';
+import type { VoiceAudioDeltaEvent, VoiceMessage, VoiceProviderEvents } from '@ownpilot/core/voice';
 
 const execFileMock = vi.fn();
 vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => execFileMock(...args) }));
 
-const { LocalVoiceProvider } = await import('./local-provider.js');
+const { LocalVoiceProvider, forSpeech } = await import('./local-provider.js');
 type Synth = NonNullable<ConstructorParameters<typeof LocalVoiceProvider>[1]>;
 
 const WINDOWS_PCM = Buffer.alloc(8, 1).toString('base64');
@@ -32,8 +32,13 @@ function recorder() {
   const order: string[] = [];
   const audio: VoiceAudioDeltaEvent[] = [];
   const errors: string[] = [];
+  const messages: VoiceMessage[] = [];
   const events: VoiceProviderEvents = {
     onStatusChange: (s) => statuses.push(s),
+    onMessage: (m) => {
+      if (m.type === 'tool_call') order.push('message:tool_call');
+      messages.push(m);
+    },
     onTranscript: (t) => order.push(`transcript:${t.role}`),
     onAudioDelta: (a) => {
       order.push('audio');
@@ -41,7 +46,7 @@ function recorder() {
     },
     onError: (e) => errors.push(e.message),
   };
-  return { statuses, order, audio, errors, events };
+  return { statuses, order, audio, errors, messages, events };
 }
 
 const ranPowerShell = () => execFileMock.mock.calls.some(([cmd]) => cmd === 'powershell.exe');
@@ -174,5 +179,48 @@ describe('LocalVoiceProvider', () => {
       expect(r.errors).toHaveLength(0);
       expect(provider.getStatus()).toBe('connected');
     });
+  });
+
+  describe('site commands', () => {
+    it('asks the page to open the site, then speaks, without asking the model', async () => {
+      const provider = new LocalVoiceProvider();
+      const r = recorder();
+      await provider.connect(r.events);
+
+      provider.sendText('Open YouTube');
+      await vi.waitFor(() => expect(r.audio.length).toBeGreaterThan(0));
+
+      const open = r.messages.find((m) => m.type === 'tool_call');
+      expect(open?.toolCall?.name).toBe('open_url');
+      expect(JSON.parse(open!.toolCall!.arguments)).toEqual({ url: 'https://www.youtube.com' });
+      // Sent before any speech, so a typed command still counts as a click.
+      expect(r.order.indexOf('message:tool_call')).toBeLessThan(r.order.indexOf('audio'));
+      expect(execFileMock.mock.calls.some(([cmd]) => cmd === 'explorer.exe')).toBe(false);
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/api/chat'))).toBe(
+        false
+      );
+      expect(r.errors).toHaveLength(0);
+    });
+
+    it('sends everything else to the model', async () => {
+      const provider = new LocalVoiceProvider();
+      const r = recorder();
+      await provider.connect(r.events);
+
+      provider.sendText('Tell me a joke');
+      await vi.waitFor(() => expect(r.audio.length).toBeGreaterThan(0));
+
+      expect(r.messages.some((m) => m.type === 'tool_call')).toBe(false);
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/api/chat'))).toBe(
+        true
+      );
+    });
+  });
+});
+
+describe('forSpeech', () => {
+  it('drops emoji from the spoken text only', () => {
+    expect(forSpeech('Happy to help! 😊 Anything else? 👍🏽')).toBe('Happy to help! Anything else?');
+    expect(forSpeech('Plain reply.')).toBe('Plain reply.');
   });
 });

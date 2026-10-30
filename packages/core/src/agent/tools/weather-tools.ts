@@ -46,7 +46,7 @@ export function setWeatherConfig(
  */
 function getWeatherService(context?: {
   getApiKey?: (name: string) => string | undefined;
-}): WeatherDataService | null {
+}): WeatherDataService {
   // Try API Center first
   if (context?.getApiKey) {
     const owmKey = context.getApiKey('openweathermap');
@@ -58,10 +58,8 @@ function getWeatherService(context?: {
       return createWeatherDataService({ provider: 'weatherapi', apiKey: waKey });
     }
   }
-  // Fall back to legacy config
-  const config = getWeatherConfig();
-  if (!config) return null;
-  return createWeatherDataService(config);
+  // Fall back to legacy config, then to Open-Meteo, which needs no key.
+  return createWeatherDataService(getWeatherConfig() ?? { provider: 'open-meteo', apiKey: '' });
 }
 
 // =============================================================================
@@ -137,17 +135,6 @@ export const getWeatherExecutor: ToolExecutor = async (
   }
 
   const service = getWeatherService(context);
-
-  if (!service) {
-    return {
-      content: {
-        error: 'Weather service not configured',
-        suggestion:
-          'Add a weather API key in Settings → API Center or Settings → API Keys (OpenWeatherMap or WeatherAPI)',
-      },
-      isError: true,
-    };
-  }
 
   try {
     const weather = await service.getCurrentWeather(location);
@@ -260,16 +247,6 @@ export const getWeatherForecastExecutor: ToolExecutor = async (
   }
 
   const service = getWeatherService(context);
-
-  if (!service) {
-    return {
-      content: {
-        error: 'Weather service not configured',
-        suggestion: 'Add a weather API key in Settings → API Center or Settings → API Keys',
-      },
-      isError: true,
-    };
-  }
 
   try {
     const forecast = await service.getForecast(location, days);

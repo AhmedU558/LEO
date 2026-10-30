@@ -6,6 +6,7 @@ import type {
   VoiceProviderOptions,
   VoiceSessionStatus,
 } from '@ownpilot/core/voice';
+import { parseSiteCommand } from '../site-commands.js';
 
 const MODEL = 'qwen3:4b-instruct';
 const OLLAMA = 'http://127.0.0.1:11434';
@@ -92,6 +93,17 @@ export function transcribeLocally(
 ): Promise<string> {
   return runProcess('python', ['-c', WHISPER, String(sampleRate), prompt], audioBase64, signal);
 }
+
+/** Emoji are read aloud by name ("smiling face"); keep them in the text reply only. */
+export function forSpeech(text: string): string {
+  return text
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/** Name of the client action that opens a site in a new browser tab. */
+export const OPEN_URL_ACTION = 'open_url';
 
 /** Replaces Windows speech with another speech engine; recognition and replies stay local. */
 export interface SpeechSynthesizer {
@@ -243,23 +255,22 @@ export class LocalVoiceProvider implements VoiceProvider {
       this.events.onTranscript?.({ sessionId: id, role: 'user', text, isFinal: true, timestamp });
       this.events.onMessage?.({ id: `${id}_user`, role: 'user', type: 'text', text, timestamp });
       this.history.push({ role: 'user', content: text });
-      const response = await fetch(`${OLLAMA}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: this.history,
-          stream: false,
-          options: { num_predict: 160 },
-        }),
-        signal: AbortSignal.any([request.signal, AbortSignal.timeout(40_000)]),
-      });
-      const body = await response.json();
-      request.signal.throwIfAborted();
-      if (!response.ok || body.error) throw new Error(body.error || 'Local AI request failed.');
-      const reply = body.message?.content;
-      if (typeof reply !== 'string' || !reply.trim())
-        throw new Error('Local AI returned an empty reply.');
+      const site = parseSiteCommand(text);
+      // The page opens it in a new tab of the same browser. Sent before the
+      // spoken reply so a typed command still counts as the user's click.
+      if (site)
+        this.events.onMessage?.({
+          id: `${id}_open`,
+          role: 'assistant',
+          type: 'tool_call',
+          toolCall: {
+            id: `${id}_open`,
+            name: OPEN_URL_ACTION,
+            arguments: JSON.stringify({ url: site.url }),
+          },
+          timestamp,
+        });
+      const reply = site ? site.say : await this.ask(request.signal);
       this.history.push({ role: 'assistant', content: reply });
       // Bound the local context while retaining the system instruction.
       if (this.history.length > 13) this.history.splice(1, this.history.length - 13);
@@ -270,7 +281,7 @@ export class LocalVoiceProvider implements VoiceProvider {
       const pcm = await this.runProcess(
         'powershell.exe',
         ['-NoProfile', '-NonInteractive', '-Command', SPEAK],
-        reply,
+        forSpeech(reply),
         request.signal
       );
       request.signal.throwIfAborted();
@@ -309,6 +320,27 @@ export class LocalVoiceProvider implements VoiceProvider {
     }
   }
 
+  private async ask(signal: AbortSignal): Promise<string> {
+    const response = await fetch(`${OLLAMA}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: this.history,
+        stream: false,
+        options: { num_predict: 160 },
+      }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(40_000)]),
+    });
+    const body = await response.json();
+    signal.throwIfAborted();
+    if (!response.ok || body.error) throw new Error(body.error || 'Local AI request failed.');
+    const reply = body.message?.content;
+    if (typeof reply !== 'string' || !reply.trim())
+      throw new Error('Local AI returned an empty reply.');
+    return reply;
+  }
+
   /** Text first, so the reply stays readable if speech fails; then stream audio as it arrives. */
   private async speakWith(
     synth: SpeechSynthesizer,
@@ -318,7 +350,7 @@ export class LocalVoiceProvider implements VoiceProvider {
   ): Promise<void> {
     this.emitReply(id, reply);
     try {
-      await synth.stream(reply, signal, (pcm) => {
+      await synth.stream(forSpeech(reply), signal, (pcm) => {
         if (signal.aborted) return;
         if (this.status !== 'speaking') this.setStatus('speaking');
         this.events.onAudioDelta?.({

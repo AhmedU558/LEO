@@ -5,7 +5,7 @@
  * providers, tasks, memory, workflow runs). The core orb is the push-to-talk
  * control, and "Hey Leo" starts a hands-free turn via local Whisper.
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import {
   Activity,
@@ -20,6 +20,7 @@ import {
   Play,
   Power,
   Radio,
+  Send,
   Server,
   SlidersHorizontal,
   Sparkles,
@@ -297,7 +298,10 @@ export function LeoConsolePage() {
   // --- "Hey Leo" hands-free flow -------------------------------------------
   const [wakeEnabled, setWakeEnabled] = useState(readWakePref);
   const [handsFree, setHandsFree] = useState(false);
-  const pendingTurn = useRef(false);
+  // State, not a ref: when the session is already connected, a wake changes
+  // nothing else the turn-start effect watches, so a ref never re-ran it and
+  // only the first "Hey Leo" (which also started the session) worked.
+  const [pendingTurn, setPendingTurn] = useState(false);
   const liveRef = useRef(live);
   useEffect(() => {
     liveRef.current = live;
@@ -315,7 +319,7 @@ export function LeoConsolePage() {
 
   const onWake = useCallback(() => {
     chime();
-    pendingTurn.current = true;
+    setPendingTurn(true);
     if (!liveRef.current) void voice.startSession();
   }, [voice]);
 
@@ -328,12 +332,32 @@ export function LeoConsolePage() {
   // Start the hands-free turn once the session is ready.
   const { startRecording, stopRecording } = voice;
   useEffect(() => {
-    if (pendingTurn.current && live && voice.status === 'connected' && !voice.isPressing) {
-      pendingTurn.current = false;
+    if (pendingTurn && live && voice.status === 'connected' && !voice.isPressing) {
+      setPendingTurn(false);
       setHandsFree(true);
       void startRecording();
     }
-  }, [live, voice.status, voice.isPressing, startRecording]);
+  }, [pendingTurn, live, voice.status, voice.isPressing, startRecording]);
+
+  // --- Typed turns: LEO answers out loud, like a spoken turn ----------------
+  const [typed, setTyped] = useState('');
+  const [pendingText, setPendingText] = useState<string | null>(null);
+  const { sendText } = voice;
+  const submitTyped = (e: FormEvent) => {
+    e.preventDefault();
+    const text = typed.trim();
+    if (!text) return;
+    setTyped('');
+    // Sent once the session is connected and idle (starting it if needed).
+    setPendingText(text);
+    if (!live) void voice.startSession();
+  };
+  useEffect(() => {
+    if (pendingText && live && voice.status === 'connected' && !voice.isPressing) {
+      setPendingText(null);
+      void sendText(pendingText);
+    }
+  }, [pendingText, live, voice.status, voice.isPressing, sendText]);
 
   useSilenceStop(voice.micStream, handsFree, () => {
     setHandsFree(false);
@@ -553,6 +577,44 @@ export function LeoConsolePage() {
               <p className="text-sm text-slate-300">{voice.streamingDelta}</p>
             )}
           </div>
+          <form onSubmit={submitTyped} className="flex w-full max-w-lg gap-2">
+            <input
+              type="text"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              maxLength={2000}
+              placeholder='Type to LEO — e.g. "open YouTube" or "what is the weather in Lahore?"'
+              aria-label="Type a message to LEO"
+              className="min-w-0 flex-1 rounded-lg border border-sky-400/20 bg-[#06101c]/80 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-300 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!typed.trim() || pendingText !== null}
+              aria-label="Send to LEO"
+              className="flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100 hover:bg-sky-500/20 disabled:opacity-40"
+            >
+              <Send className="size-4" /> Send
+            </button>
+          </form>
+          {voice.blockedLink && (
+            <p
+              role="alert"
+              className="w-full max-w-lg rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+            >
+              Your browser blocked the new tab.{' '}
+              <a
+                href={voice.blockedLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={voice.dismissBlockedLink}
+                className="font-semibold underline"
+              >
+                Open {new URL(voice.blockedLink).hostname}
+              </a>
+              . To let LEO open sites hands-free, allow pop-ups for this page: click the blocked
+              pop-up icon at the right of the address bar and choose &quot;Always allow&quot;.
+            </p>
+          )}
         </section>
 
         {/* Live intelligence feed */}

@@ -238,8 +238,8 @@ afterEach(() => {
 // =============================================================================
 
 describe('WEATHER_PROVIDERS', () => {
-  it('contains exactly 2 providers', () => {
-    expect(WEATHER_PROVIDERS).toHaveLength(2);
+  it('contains exactly 3 providers', () => {
+    expect(WEATHER_PROVIDERS).toHaveLength(3);
   });
 
   it('has openweathermap entry with required fields', () => {
@@ -1652,5 +1652,101 @@ describe('getWindDirection boundary precision', () => {
   it('large degree value 720 -> N (wraps via modulo)', async () => {
     // 720 / 22.5 = 32, 32 % 16 = 0 -> N
     expect(await getDirection(720)).toBe('N');
+  });
+});
+
+// =============================================================================
+// Open-Meteo (no key)
+// =============================================================================
+
+describe('Open-Meteo provider', () => {
+  const service = () => createWeatherDataService({ provider: 'open-meteo', apiKey: '' });
+  const geo = {
+    results: [
+      { name: 'Lahore', latitude: 1, longitude: 2, country: 'Nigeria', admin1: 'Kogi' },
+      { name: 'Lahore', latitude: 31.55, longitude: 74.34, country: 'Pakistan', admin1: 'Punjab' },
+    ],
+  };
+
+  it('uses the part after the comma to pick the place, and maps current weather', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(geo));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        timezone: 'Asia/Karachi',
+        current: {
+          time: '2026-10-30T15:00',
+          temperature_2m: 27.6,
+          relative_humidity_2m: 40,
+          apparent_temperature: 28.4,
+          is_day: 1,
+          weather_code: 2,
+          cloud_cover: 30,
+          pressure_msl: 1012.4,
+          wind_speed_10m: 9.7,
+          wind_direction_10m: 270,
+          visibility: 24140,
+          uv_index: 3.1,
+        },
+      })
+    );
+
+    const w = await service().getCurrentWeather('Lahore, Pakistan');
+
+    expect(mockFetch.mock.calls[0]![0]).toContain(
+      'geocoding-api.open-meteo.com/v1/search?name=Lahore&'
+    );
+    expect(mockFetch.mock.calls[1]![0]).toContain('latitude=31.55&longitude=74.34');
+    expect(w.location).toMatchObject({
+      name: 'Lahore',
+      country: 'Pakistan',
+      timezone: 'Asia/Karachi',
+    });
+    expect(w.current).toMatchObject({
+      temperature: 28,
+      condition: 'Partly cloudy',
+      windSpeed: 10,
+      windDirection: 'W',
+      visibility: 24,
+      isDay: true,
+    });
+    expect(w.provider).toBe('open-meteo');
+  });
+
+  it('maps a daily forecast and caps days at 16', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(geo));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        daily: {
+          time: ['2026-10-30'],
+          weather_code: [61],
+          temperature_2m_max: [30.2],
+          temperature_2m_min: [18.6],
+          precipitation_probability_max: [70],
+          sunrise: ['2026-10-30T06:21'],
+          sunset: ['2026-10-30T17:15'],
+        },
+      })
+    );
+
+    const f = await service().getForecast('Lahore', 30);
+
+    expect(mockFetch.mock.calls[1]![0]).toContain('forecast_days=16');
+    expect(f.forecast[0]).toMatchObject({
+      date: '2026-10-30',
+      maxTemp: 30,
+      minTemp: 19,
+      avgTemp: 24,
+      condition: 'Slight rain',
+      chanceOfRain: 70,
+      sunrise: '06:21',
+    });
+  });
+
+  it('reports an unknown location', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({}));
+
+    await expect(service().getCurrentWeather('Nowhereville')).rejects.toThrow(
+      'Location not found: Nowhereville'
+    );
   });
 });
