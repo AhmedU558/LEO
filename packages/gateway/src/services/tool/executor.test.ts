@@ -612,6 +612,18 @@ describe('Tool Executor', () => {
       });
     });
 
+    it('returns readable error text when a tool returns { error } content', async () => {
+      mockToolRegistry.has.mockReturnValue(true);
+      mockToolRegistry.execute.mockResolvedValue({
+        ok: true,
+        value: { content: { error: 'Krea API 402: top up' }, isError: true },
+      });
+
+      const result = await executeTool('generate_image', {});
+
+      expect(result.error).toBe('Krea API 402: top up');
+    });
+
     it('returns error when registry execute returns non-ok result', async () => {
       mockToolRegistry.has.mockReturnValue(true);
       mockToolRegistry.execute.mockResolvedValue({

@@ -391,6 +391,9 @@ export const KNOWN_CONFIG_SERVICES: CreateConfigServiceInput[] = [
 // SEED FUNCTION
 // =============================================================================
 
+/** Config services upserted at runtime rather than seeded here (tools/overrides/image.ts). */
+const RUNTIME_REGISTERED_SERVICES = ['image_generation'];
+
 /**
  * Seed known config services into the database.
  * Uses idempotent upsert — metadata and schema are always refreshed
@@ -408,12 +411,21 @@ export async function seedConfigServices(): Promise<number> {
   }
   log.info(`[Seed] Seeded ${seeded} config services`);
 
-  // Clean up stale services that are no longer in the seed and have no dependents
-  const knownNames = new Set(KNOWN_CONFIG_SERVICES.map((s) => s.name));
+  // Clean up stale services that are no longer in the seed and have no dependents.
+  // Services registered at runtime (e.g. by tool overrides) are not stale, and a
+  // service the user has saved entries for is never deleted — that would wipe them.
+  const knownNames = new Set([
+    ...KNOWN_CONFIG_SERVICES.map((s) => s.name),
+    ...RUNTIME_REGISTERED_SERVICES,
+  ]);
   const allServices = configServicesRepo.list();
   let removed = 0;
   for (const service of allServices) {
-    if (!knownNames.has(service.name) && (!service.requiredBy || service.requiredBy.length === 0)) {
+    if (
+      !knownNames.has(service.name) &&
+      (!service.requiredBy || service.requiredBy.length === 0) &&
+      configServicesRepo.getEntries(service.name).length === 0
+    ) {
       try {
         await configServicesRepo.delete(service.name);
         removed++;

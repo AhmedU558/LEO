@@ -13,6 +13,7 @@ const { mockConfigServicesRepo } = vi.hoisted(() => ({
     upsert: vi.fn(),
     list: vi.fn(),
     delete: vi.fn(),
+    getEntries: vi.fn(() => []),
   },
 }));
 
@@ -152,6 +153,21 @@ describe('seedConfigServices', () => {
     mockConfigServicesRepo.list.mockReturnValue([
       { name: 'stale-service', requiredBy: ['some-extension'] },
     ]);
+
+    await seedConfigServices();
+    expect(mockConfigServicesRepo.delete).not.toHaveBeenCalled();
+  });
+
+  it('never removes a stale service that still has saved entries', async () => {
+    mockConfigServicesRepo.list.mockReturnValue([{ name: 'stale-service', requiredBy: [] }]);
+    mockConfigServicesRepo.getEntries.mockReturnValueOnce([{ id: 'e1' }]);
+
+    await seedConfigServices();
+    expect(mockConfigServicesRepo.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not remove image_generation, which is registered at runtime', async () => {
+    mockConfigServicesRepo.list.mockReturnValue([{ name: 'image_generation', requiredBy: [] }]);
 
     await seedConfigServices();
     expect(mockConfigServicesRepo.delete).not.toHaveBeenCalled();

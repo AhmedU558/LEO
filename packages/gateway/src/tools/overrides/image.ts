@@ -46,16 +46,23 @@ async function ensureImageGenService(): Promise<void> {
       displayName: 'Image Generation',
       category: 'ai',
       description:
-        'Image generation service (OpenAI DALL-E, Stability AI, FAL, Replicate, or any OpenAI-compatible API)',
+        'Image generation service (OpenAI DALL-E, Stability AI, FAL, Replicate, Krea, OpenRouter, Pollinations (free), or any OpenAI-compatible API)',
       configSchema: [
         {
           name: 'provider_type',
           label: 'Provider Type',
           type: 'string' as const,
           required: true,
-          description: 'openai, stability, fal, replicate, or openai-compatible',
+          description:
+            'openai, stability, fal, replicate, krea, openrouter, pollinations (free, no key), or openai-compatible',
         },
-        { name: 'api_key', label: 'API Key', type: 'secret' as const, required: true },
+        {
+          name: 'api_key',
+          label: 'API Key',
+          type: 'secret' as const,
+          required: false,
+          description: 'Not needed for pollinations',
+        },
         {
           name: 'base_url',
           label: 'Base URL',
@@ -440,6 +447,173 @@ async function callReplicateImageGen(
   return results;
 }
 
+/**
+ * Pollinations. Without a key: the legacy anonymous API (watermarked, low-res,
+ * ~1 image / 45 s per IP). With a key: gen.pollinations.ai, which spends the
+ * account's pollen (free-tier models such as `flux` cost fractions of a pollen).
+ */
+async function callPollinationsImageGen(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  prompt: string,
+  width: number,
+  height: number,
+  n: number
+): Promise<ImageGenResult[]> {
+  const results: ImageGenResult[] = [];
+  for (let i = 0; i < n; i++) {
+    const query = new URLSearchParams({
+      width: String(width),
+      height: String(height),
+      model: model || 'flux',
+      nologo: 'true',
+      seed: String(Math.floor(Math.random() * 1e9)),
+    });
+    const endpoint = apiKey
+      ? `${baseUrl || 'https://gen.pollinations.ai'}/image/`
+      : `${baseUrl || 'https://image.pollinations.ai'}/prompt/`;
+    const response = await fetch(`${endpoint}${encodeURIComponent(prompt)}?${query}`, {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      signal: AbortSignal.timeout(IMAGE_GEN_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Pollinations API ${response.status}: ${text.slice(0, 500)}`);
+    }
+    if (!response.headers.get('content-type')?.startsWith('image/')) {
+      throw new Error('Pollinations API returned no image');
+    }
+    results.push({ base64: Buffer.from(await response.arrayBuffer()).toString('base64') });
+  }
+  return results;
+}
+
+/** OpenRouter serves image models through chat completions; images come back as data URLs. */
+async function callOpenRouterImageGen(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  prompt: string,
+  width: number,
+  height: number,
+  n: number
+): Promise<ImageGenResult[]> {
+  const results: ImageGenResult[] = [];
+  for (let i = 0; i < n; i++) {
+    const response = await fetch(`${baseUrl}/api/v1/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(IMAGE_GEN_TIMEOUT_MS),
+      body: JSON.stringify({
+        model: model || 'google/gemini-2.5-flash-image',
+        messages: [{ role: 'user', content: prompt }],
+        modalities: ['image', 'text'],
+        image_config: { aspect_ratio: nearestAspectRatio(width, height) },
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`OpenRouter API ${response.status}: ${text.slice(0, 500)}`);
+    }
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string } }> } }>;
+    };
+    for (const img of data.choices?.[0]?.message?.images ?? []) {
+      const match = img.image_url?.url?.match(/^data:image\/[\w.+-]+;base64,(.+)$/);
+      if (match) results.push({ base64: match[1]! });
+    }
+  }
+  return results;
+}
+
+const KREA_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
+
+function nearestAspectRatio(width: number, height: number): string {
+  const target = width / height;
+  return KREA_ASPECT_RATIOS.reduce((best, r) => {
+    const [w, h] = r.split(':').map(Number) as [number, number];
+    const [bw, bh] = best.split(':').map(Number) as [number, number];
+    return Math.abs(w / h - target) < Math.abs(bw / bh - target) ? r : best;
+  });
+}
+const KREA_POLL_MS = 2000;
+
+/** Krea is job-based: submit, then poll GET /jobs/{id} until it settles. */
+async function callKreaImageGen(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  prompt: string,
+  width: number,
+  height: number,
+  n: number
+): Promise<ImageGenResult[]> {
+  const headers = { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+  const aspect_ratio = nearestAspectRatio(width, height);
+  const deadline = Date.now() + IMAGE_GEN_TIMEOUT_MS;
+  const timedOut = () => Object.assign(new Error('timeout'), { name: 'TimeoutError' });
+
+  const results: ImageGenResult[] = [];
+  // One job per image; Krea returns a single image per job.
+  for (let i = 0; i < n; i++) {
+    const submit = await fetch(`${baseUrl}/generate/image/${model || 'krea/krea-3'}`, {
+      method: 'POST',
+      headers,
+      signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
+      body: JSON.stringify({ prompt, aspect_ratio, resolution: '1K' }),
+    });
+    if (!submit.ok) {
+      const text = await submit.text();
+      throw new Error(`Krea API ${submit.status}: ${text.slice(0, 500)}`);
+    }
+    const { job_id } = (await submit.json()) as { job_id?: string };
+    if (!job_id) throw new Error('Krea API returned no job_id');
+
+    let urls: string[] = [];
+    for (;;) {
+      if (Date.now() + KREA_POLL_MS > deadline) throw timedOut();
+      await new Promise((r) => setTimeout(r, KREA_POLL_MS));
+      const poll = await fetch(`${baseUrl}/jobs/${encodeURIComponent(job_id)}`, {
+        headers,
+        signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
+      });
+      if (!poll.ok) {
+        const text = await poll.text();
+        throw new Error(`Krea API ${poll.status}: ${text.slice(0, 500)}`);
+      }
+      const job = (await poll.json()) as {
+        status?: string;
+        result?: { urls?: string[] };
+        error?: { code?: string; message?: string };
+      };
+      if (job.status === 'completed') {
+        urls = job.result?.urls ?? [];
+        break;
+      }
+      if (job.status === 'failed' || job.status === 'cancelled') {
+        throw new Error(
+          `Krea job ${job.status}: ${job.error?.message ?? job.error?.code ?? 'no reason given'}`
+        );
+      }
+    }
+
+    for (const imgUrl of urls) {
+      // SECURITY (SSRF-001): result URLs come from the provider — fetch via the SSRF guard.
+      const imgResp = await safeFetch(imgUrl);
+      results.push({ base64: Buffer.from(await imgResp.arrayBuffer()).toString('base64') });
+    }
+  }
+  return results;
+}
+
+/** File extension from the image's magic bytes; providers differ (Pollinations returns JPEG). */
+function imageExtension(base64: string): string {
+  if (base64.startsWith('/9j/')) return 'jpg';
+  if (base64.startsWith('UklGR')) return 'webp';
+  return 'png';
+}
+
 function parseSizeToDimensions(size: string): { width: number; height: number } {
   const match = size.match(/(\d+)x(\d+)/);
   if (match) return { width: parseInt(match[1]!, 10), height: parseInt(match[2]!, 10) };
@@ -476,8 +650,15 @@ const generateImageOverride: ToolExecutor = async (
     apiKey = config.getFieldValue(IMAGE_GEN_SERVICE, 'api_key') as string | undefined;
     const baseUrl = config.getFieldValue(IMAGE_GEN_SERVICE, 'base_url') as string | undefined;
     const model = config.getFieldValue(IMAGE_GEN_SERVICE, 'model') as string | undefined;
+    // OpenRouter can reuse the chat provider's key, so it needn't be entered twice.
+    if (providerType === 'openrouter' && !apiKey) {
+      apiKey = await getProviderApiKey('openrouter');
+    }
 
-    if (!providerType || !apiKey) {
+    // Pollinations is free and works without a key.
+    if (providerType === 'pollinations') apiKey ??= '';
+
+    if (!providerType || apiKey === undefined || (!apiKey && providerType !== 'pollinations')) {
       return {
         content: {
           error:
@@ -560,6 +741,39 @@ const generateImageOverride: ToolExecutor = async (
           n
         );
         break;
+      case 'pollinations':
+        results = await callPollinationsImageGen(
+          apiKey,
+          baseUrl ?? '',
+          model ?? '',
+          enhancedPrompt,
+          width,
+          height,
+          n
+        );
+        break;
+      case 'openrouter':
+        results = await callOpenRouterImageGen(
+          apiKey,
+          resolvedBaseUrl,
+          model ?? '',
+          enhancedPrompt,
+          width,
+          height,
+          n
+        );
+        break;
+      case 'krea':
+        results = await callKreaImageGen(
+          apiKey,
+          resolvedBaseUrl,
+          model ?? '',
+          enhancedPrompt,
+          width,
+          height,
+          n
+        );
+        break;
       default:
         // Assume OpenAI-compatible for unknown providers
         results = await callOpenAIImageGen(
@@ -592,7 +806,7 @@ const generateImageOverride: ToolExecutor = async (
       const filename =
         customPath && results.length === 1
           ? customPath
-          : path.join(imagesDir, `image_${Date.now()}_${i}.png`);
+          : path.join(imagesDir, `image_${Date.now()}_${i}.${imageExtension(result.base64)}`);
 
       const dir = path.dirname(filename);
       await fs.mkdir(dir, { recursive: true });
@@ -649,6 +863,10 @@ function getDefaultBaseUrl(providerType: string): string {
       return 'https://fal.run';
     case 'replicate':
       return 'https://api.replicate.com';
+    case 'krea':
+      return 'https://api.krea.ai';
+    case 'openrouter':
+      return 'https://openrouter.ai';
     default:
       return 'https://api.openai.com';
   }
