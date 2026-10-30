@@ -66,6 +66,18 @@ import { jobExecutionContext } from '../job-queue-service.js';
 
 const log = getLog('ToolExecutor');
 
+/** Error text for a failed tool result. Tools often return `{ error: '...' }`, which String() turns into "[object Object]". */
+function toolErrorText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  const err = (content as { error?: unknown } | null)?.error;
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(content) ?? String(content);
+  } catch {
+    return String(content);
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -573,7 +585,7 @@ function setupSandboxCallToolHandler(registry: ToolRegistry): void {
       return {
         success: !result.value.isError,
         result: result.value.content,
-        error: result.value.isError ? String(result.value.content) : undefined,
+        error: result.value.isError ? toolErrorText(result.value.content) : undefined,
       };
     }
 
@@ -777,7 +789,7 @@ async function executeToolInternal(
         return {
           success: !value.isError,
           result: value.content,
-          error: value.isError ? String(value.content) : undefined,
+          error: value.isError ? toolErrorText(value.content) : undefined,
           ...(value.metadata ? { metadata: value.metadata } : {}),
         };
       }
@@ -813,7 +825,7 @@ async function executeToolInternal(
         return {
           success: !pluginResult.isError,
           result: content,
-          error: pluginResult.isError ? content : undefined,
+          error: pluginResult.isError ? toolErrorText(pluginResult.content) : undefined,
         };
       } catch (execError) {
         return {
