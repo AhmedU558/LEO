@@ -7,7 +7,7 @@
  * function, and all provider-specific API callers (OpenAI, Stability, FAL, Replicate).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -2028,6 +2028,168 @@ describe('image-overrides', () => {
       expect(result.content.error).toContain('401');
       expect(JSON.stringify(result)).not.toContain('sk-test-key');
       expect(result.content.error).toContain('[redacted]');
+    });
+  });
+
+  describe('generate_image with Krea', () => {
+    let generate: Executor;
+    const okResponse = (data: unknown) => ({ ok: true, json: async () => data });
+
+    beforeEach(async () => {
+      generate = (await captureExecutors())['generate_image']!;
+      setupImageGenConfig({ provider_type: 'krea', model: '' });
+      mockFsStat.mockResolvedValue({ size: 1024 });
+      // Skip the 2 s poll wait.
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
+        fn();
+        return 0;
+      }) as never);
+    });
+
+    afterEach(() => {
+      vi.mocked(globalThis.setTimeout).mockRestore();
+    });
+
+    it('submits a job, polls until completed, and downloads the result', async () => {
+      mockFetch
+        .mockResolvedValueOnce(okResponse({ job_id: 'job-1' }))
+        .mockResolvedValueOnce(okResponse({ status: 'processing' }))
+        .mockResolvedValueOnce(
+          okResponse({ status: 'completed', result: { urls: ['https://cdn.krea.ai/a.png'] } })
+        )
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+
+      const result = await generate({ prompt: 'A castle', size: '1792x1024' }, defaultContext);
+
+      expect(result.isError).toBe(false);
+      const [submitUrl, submitInit] = mockFetch.mock.calls[0]!;
+      expect(submitUrl).toBe('https://api.krea.ai/generate/image/krea/krea-3');
+      expect(submitInit.headers.Authorization).toBe('Bearer sk-test-key');
+      expect(JSON.parse(submitInit.body)).toMatchObject({ aspect_ratio: '16:9' });
+      expect(mockFetch.mock.calls[1]![0]).toBe('https://api.krea.ai/jobs/job-1');
+      expect(mockFetch.mock.calls[3]![0]).toBe('https://cdn.krea.ai/a.png');
+      expect(result.content.output).toMatch(/^generated_images\//);
+    });
+
+    it('reports a failed job with its reason', async () => {
+      mockFetch
+        .mockResolvedValueOnce(okResponse({ job_id: 'job-2' }))
+        .mockResolvedValueOnce(
+          okResponse({ status: 'failed', error: { code: 'content_policy', message: 'blocked' } })
+        );
+
+      const result = await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(result.isError).toBe(true);
+      expect(result.content.error).toContain('Krea job failed: blocked');
+      expect(mockFsWriteFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generate_image with Pollinations', () => {
+    let generate: Executor;
+
+    beforeEach(async () => {
+      generate = (await captureExecutors())['generate_image']!;
+      mockFsStat.mockResolvedValue({ size: 1024 });
+    });
+
+    it('works without an API key and saves the returned image bytes', async () => {
+      setupImageGenConfig({ provider_type: 'pollinations', api_key: undefined, model: '' });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'image/jpeg' }),
+        arrayBuffer: async () => new ArrayBuffer(8),
+      });
+
+      const result = await generate({ prompt: 'A castle', size: '1792x1024' }, defaultContext);
+
+      expect(result.isError).toBe(false);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toMatch(/^https:\/\/image\.pollinations\.ai\/prompt\/A%20castle\?/);
+      expect(url).toContain('width=1792');
+      expect(url).toContain('model=flux');
+      expect(init.headers).toEqual({});
+      expect(mockFsWriteFile).toHaveBeenCalled();
+    });
+
+    it('sends a configured key to the keyed API and names JPEGs .jpg', async () => {
+      setupImageGenConfig({ provider_type: 'pollinations', api_key: 'pk-test', model: '' });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'image/jpeg' }),
+        arrayBuffer: async () => Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]).buffer,
+      });
+
+      const result = await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(result.isError).toBe(false);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toMatch(/^https:\/\/gen\.pollinations\.ai\/image\/A%20castle\?/);
+      expect(init.headers).toEqual({ Authorization: 'Bearer pk-test' });
+      expect(result.content.output).toMatch(/\.jpg$/);
+    });
+
+    it('reports the free rate limit', async () => {
+      setupImageGenConfig({ provider_type: 'pollinations', api_key: undefined });
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 402,
+        text: async () => '{"error":{"code":"FREE_LIMIT","message":"1 image every 45 seconds"}}',
+      });
+
+      const result = await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(result.isError).toBe(true);
+      expect(result.content.error).toContain('Pollinations API 402');
+      expect(result.content.error).toContain('45 seconds');
+    });
+  });
+
+  describe('generate_image with OpenRouter', () => {
+    let generate: Executor;
+    const imageReply = {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { images: [{ image_url: { url: 'data:image/png;base64,aW1n' } }] } }],
+      }),
+    };
+
+    beforeEach(async () => {
+      generate = (await captureExecutors())['generate_image']!;
+      mockFsStat.mockResolvedValue({ size: 1024 });
+    });
+
+    it('requests image output and saves the returned data URL', async () => {
+      setupImageGenConfig({ provider_type: 'openrouter', model: '' });
+      mockFetch.mockResolvedValue(imageReply);
+
+      const result = await generate({ prompt: 'A castle', size: '1792x1024' }, defaultContext);
+
+      expect(result.isError).toBe(false);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+      expect(JSON.parse(init.body)).toMatchObject({
+        model: 'google/gemini-2.5-flash-image',
+        modalities: ['image', 'text'],
+        image_config: { aspect_ratio: '16:9' },
+      });
+      expect(mockFsWriteFile).toHaveBeenCalledWith(
+        expect.any(String),
+        Buffer.from('aW1n', 'base64')
+      );
+    });
+
+    it("falls back to the chat provider's OpenRouter key", async () => {
+      setupImageGenConfig({ provider_type: 'openrouter', api_key: undefined });
+      mockGetProviderApiKey.mockResolvedValue('sk-or-chat');
+      mockFetch.mockResolvedValue(imageReply);
+
+      const result = await generate({ prompt: 'A castle' }, defaultContext);
+
+      expect(result.isError).toBe(false);
+      expect(mockGetProviderApiKey).toHaveBeenCalledWith('openrouter');
+      expect(mockFetch.mock.calls[0]![1].headers.Authorization).toBe('Bearer sk-or-chat');
     });
   });
 });
