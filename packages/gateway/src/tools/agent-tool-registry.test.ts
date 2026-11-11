@@ -217,6 +217,8 @@ vi.mock('./index.js', () => ({
   executeInteractiveTool: vi.fn(),
   CHANNEL_TOOLS: [],
   executeChannelTool: vi.fn(),
+  SOCIAL_TOOLS: [],
+  executeSocialTool: vi.fn(),
   CANVAS_TOOLS: [],
   executeCanvasTool: vi.fn(),
   BROWSER_TOOLS: [],
