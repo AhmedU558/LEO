@@ -434,7 +434,11 @@ voiceRoutes.post('/command', async (c) => {
   }
 });
 import { getVoiceSessionManager } from '../services/voice/session-manager.js';
-import { transcribeLocally } from '../services/voice/providers/local-provider.js';
+import {
+  DEFAULT_LOCAL_MODEL,
+  listOllamaModels,
+  transcribeLocally,
+} from '../services/voice/providers/local-provider.js';
 import { heardWakeWord, WAKE_PROMPT } from '../services/voice/wake-word.js';
 import { streamSSE } from 'hono/streaming';
 
@@ -519,6 +523,22 @@ voiceRoutes.get('/sessions', (c) => {
   return apiResponse(c, { sessions: userSessions });
 });
 
+/** Ollama model names: "qwen3:4b-instruct", "library/name:tag", "gemma4:31b-cloud". */
+const VOICE_MODEL_NAME = /^[\w.\-/:]{1,120}$/;
+
+/** Models the local voice pipeline can answer with (installed in Ollama). */
+voiceRoutes.get('/models', async (c) => {
+  try {
+    return apiResponse(c, { models: await listOllamaModels(), default: DEFAULT_LOCAL_MODEL });
+  } catch (err) {
+    return apiError(
+      c,
+      { code: ERROR_CODES.SERVICE_UNAVAILABLE, message: getErrorMessage(err) },
+      503
+    );
+  }
+});
+
 voiceRoutes.post('/sessions', async (c) => {
   try {
     const userId = getUserId(c);
@@ -536,12 +556,32 @@ voiceRoutes.post('/sessions', async (c) => {
       provider?: string;
       conversationId?: string;
       metadata?: Record<string, unknown>;
+      model?: string;
+      replyProvider?: string;
     } = {};
 
     try {
       body = (await c.req.json()) || {};
     } catch {
       // Body is optional
+    }
+
+    if (
+      body.replyProvider !== undefined &&
+      !/^[a-z0-9][\w.-]{0,63}$/i.test(String(body.replyProvider))
+    ) {
+      return apiError(
+        c,
+        { code: ERROR_CODES.VALIDATION_ERROR, message: 'replyProvider is not a valid provider id' },
+        400
+      );
+    }
+    if (body.model !== undefined && !VOICE_MODEL_NAME.test(String(body.model))) {
+      return apiError(
+        c,
+        { code: ERROR_CODES.VALIDATION_ERROR, message: 'model is not a valid model name' },
+        400
+      );
     }
 
     const manager = getVoiceSessionManager();

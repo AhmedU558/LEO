@@ -27,6 +27,10 @@ export interface CreateSessionOptions {
   provider?: string;
   conversationId?: string;
   metadata?: Record<string, unknown>;
+  /** Model the provider should answer with (e.g. an Ollama model name). */
+  model?: string;
+  /** LEO AI provider for replies (e.g. 'openai'); default: the voice provider's own. */
+  replyProvider?: string;
   customProvider?: VoiceProvider;
 }
 
@@ -89,7 +93,10 @@ export class VoiceSessionManager {
       provider: provider.name,
       messages: [],
       startedAt: new Date().toISOString(),
-      metadata: options.metadata,
+      metadata:
+        options.model || options.replyProvider
+          ? { ...options.metadata, model: options.model, replyProvider: options.replyProvider }
+          : options.metadata,
     };
 
     this.sessions.set(id, session);
@@ -233,7 +240,16 @@ export class VoiceSessionManager {
     };
 
     try {
-      await provider.connect(events);
+      const { model, replyProvider } = session.metadata ?? {};
+      await provider.connect(
+        events,
+        typeof model === 'string' || typeof replyProvider === 'string'
+          ? {
+              model: typeof model === 'string' ? model : undefined,
+              replyProvider: typeof replyProvider === 'string' ? replyProvider : undefined,
+            }
+          : undefined
+      );
       session.status = 'connected';
       return session;
     } catch (err) {

@@ -101,7 +101,8 @@ export class CampaignService {
         const publishResult = await socialService.createPublishTask({
           accountId: account.id,
           platform: account.platform,
-          text: variant!.title || variant!.caption || '',
+          title: variant!.title,
+          text: variant!.caption || variant!.description || variant!.title || '',
           hashtags: variant!.hashtags || [],
           media: mediaAssets,
           metadata: variant!.metadata || {},

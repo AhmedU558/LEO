@@ -17,6 +17,8 @@ export interface VoiceProviderEvents {
 
 export interface VoiceProviderOptions {
   model?: string;
+  /** LEO AI provider that writes replies (e.g. 'openai', 'openrouter'); default: local Ollama. */
+  replyProvider?: string;
   voice?: string;
   instructions?: string;
   temperature?: number;

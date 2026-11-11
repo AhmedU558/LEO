@@ -19,7 +19,7 @@ const m = vi.hoisted(() => ({
     reconcilePublish: vi.fn(),
   },
   repo: { listPublishRequests: vi.fn(), createAccount: vi.fn(), storeCredentials: vi.fn() },
-  provider: { connect: vi.fn() },
+  provider: { connect: vi.fn(), listAdminPages: vi.fn() },
   registryGet: vi.fn(),
   media: { getMedia: vi.fn() },
   campaign: {
@@ -413,6 +413,152 @@ describe('social routes', () => {
       expect((await app.request(`${BASE}/campaigns/c/reconcile`, { method: 'POST' })).status).toBe(
         500
       );
+    });
+  });
+
+  describe('linkedin', () => {
+    beforeEach(() => {
+      process.env.LINKEDIN_CLIENT_ID = 'cid';
+      process.env.LINKEDIN_CLIENT_SECRET = 'secret';
+    });
+    afterEach(() => {
+      delete process.env.LINKEDIN_CLIENT_ID;
+      delete process.env.LINKEDIN_CLIENT_SECRET;
+    });
+
+    const startConnect = async () => {
+      const res = await app.request(`http://localhost:8199${BASE}/linkedin/connect`);
+      const location = new URL(res.headers.get('location')!);
+      const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
+      return { res, location, cookie, state: location.searchParams.get('state')! };
+    };
+
+    it('says what is missing when LinkedIn is not set up', async () => {
+      delete process.env.LINKEDIN_CLIENT_SECRET;
+      const res = await app.request(`${BASE}/linkedin/connect`);
+      expect(res.status).toBe(503);
+      expect((await res.json()).error.message).toContain('LINKEDIN_CLIENT_ID');
+    });
+
+    it('redirects to LinkedIn with the scopes, callback URL and a state cookie', async () => {
+      const { res, location, cookie, state } = await startConnect();
+      expect(res.status).toBe(302);
+      expect(location.origin + location.pathname).toBe(
+        'https://www.linkedin.com/oauth/v2/authorization'
+      );
+      expect(location.searchParams.get('scope')).toBe('openid profile w_member_social');
+      expect(location.searchParams.get('redirect_uri')).toBe(
+        'http://localhost:8199/api/v1/social/linkedin/callback'
+      );
+      expect(cookie).toBe(`leo_linkedin_oauth_state=${state}`);
+      expect(res.headers.get('set-cookie')).toContain('HttpOnly');
+    });
+
+    it('stores the account and returns to the Social page', async () => {
+      const { cookie, state } = await startConnect();
+      const expiresAt = new Date('2027-01-01');
+      m.provider.connect.mockResolvedValueOnce({
+        accountId: 'member123',
+        accountName: 'Ahmed U',
+        profileUrl: 'https://www.linkedin.com/in/me',
+        accessToken: 'tok',
+        expiresAt,
+      });
+
+      const res = await app.request(
+        `http://localhost:8199${BASE}/linkedin/callback?code=c1&state=${state}`,
+        { headers: { Cookie: cookie } }
+      );
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/social?connected=linkedin');
+      expect(m.registryGet).toHaveBeenCalledWith('linkedin');
+      expect(m.provider.connect).toHaveBeenCalledWith(
+        'c1',
+        'http://localhost:8199/api/v1/social/linkedin/callback'
+      );
+      expect(m.repo.createAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: 'linkedin',
+          accountId: 'member123',
+          accessToken: 'tok',
+          expiresAt,
+        })
+      );
+    });
+
+    it('connects the company pages the member administers when asked', async () => {
+      const res = await app.request(`http://localhost:8199${BASE}/linkedin/connect?pages=1`);
+      const location = new URL(res.headers.get('location')!);
+      const state = location.searchParams.get('state')!;
+      expect(location.searchParams.get('scope')).toBe(
+        'openid profile w_member_social w_organization_social r_organization_admin'
+      );
+      const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
+      expect(decodeURIComponent(cookie)).toBe(`leo_linkedin_oauth_state=${state}|pages`);
+
+      m.provider.connect.mockResolvedValueOnce({
+        accountId: 'member123',
+        accountName: 'Ahmed U',
+        accessToken: 'tok',
+      });
+      m.provider.listAdminPages.mockResolvedValueOnce([
+        { urn: 'urn:li:organization:42', name: 'Aqvion Labs' },
+      ]);
+
+      const back = await app.request(
+        `http://localhost:8199${BASE}/linkedin/callback?code=c1&state=${state}`,
+        { headers: { Cookie: cookie } }
+      );
+
+      expect(back.headers.get('location')).toBe('/social?connected=linkedin-pages');
+      expect(m.provider.listAdminPages).toHaveBeenCalledWith('tok');
+      expect(m.repo.createAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: 'urn:li:organization:42',
+          accountName: 'Aqvion Labs',
+          profileUrl: 'https://www.linkedin.com/company/42',
+          accessToken: 'tok',
+        })
+      );
+    });
+
+    it('does not list company pages on a plain LinkedIn connect', async () => {
+      const { cookie, state } = await startConnect();
+      m.provider.connect.mockResolvedValueOnce({
+        accountId: 'm',
+        accountName: 'A',
+        accessToken: 't',
+      });
+      await app.request(`http://localhost:8199${BASE}/linkedin/callback?code=c1&state=${state}`, {
+        headers: { Cookie: cookie },
+      });
+      expect(m.provider.listAdminPages).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a wrong state', (state: string, cookie: string) => [`code=c1&state=x${state}`, cookie]],
+      ['no state cookie', (state: string) => [`code=c1&state=${state}`, '']],
+    ])('rejects a callback with %s', async (_name, build) => {
+      const { cookie, state } = await startConnect();
+      const [query, sentCookie] = build(state, cookie);
+
+      const res = await app.request(`${BASE}/linkedin/callback?${query}`, {
+        headers: sentCookie ? { Cookie: sentCookie } : {},
+      });
+
+      expect(res.headers.get('location')).toContain('/social?error=');
+      expect(m.provider.connect).not.toHaveBeenCalled();
+      expect(m.repo.createAccount).not.toHaveBeenCalled();
+    });
+
+    it('returns to the Social page when the user cancels on LinkedIn', async () => {
+      const res = await app.request(
+        `${BASE}/linkedin/callback?error=user_cancelled_login&error_description=The+user+cancelled`
+      );
+      const location = new URL(res.headers.get('location')!, 'http://localhost');
+      expect(location.pathname).toBe('/social');
+      expect(location.searchParams.get('error')).toBe('LinkedIn: The user cancelled');
     });
   });
 });

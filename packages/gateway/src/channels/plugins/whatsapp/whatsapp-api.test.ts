@@ -96,4 +96,38 @@ describe('WhatsAppChannelAPI', () => {
 
     expect(mockEmit).not.toHaveBeenCalled();
   });
+
+  describe('QR codes that expire unscanned', () => {
+    const closeWith = (statusCode: number) => ({
+      connection: 'close',
+      lastDisconnect: {
+        error: Object.assign(new Error('QR refs attempts ended'), { output: { statusCode } }),
+      },
+    });
+
+    it('stops instead of generating QR codes forever', () => {
+      vi.useFakeTimers();
+      const api = new WhatsAppChannelAPI({}, 'channel.whatsapp');
+      (api as any).sock = { authState: { creds: {} } }; // never linked
+
+      (api as any).handleConnectionUpdate(closeWith(408));
+
+      expect(api.getStatus()).toBe('disconnected');
+      expect((api as any).reconnectTimer).toBeNull();
+      vi.useRealTimers();
+    });
+
+    it('still reconnects a linked account after a dropped connection', () => {
+      vi.useFakeTimers();
+      const api = new WhatsAppChannelAPI({}, 'channel.whatsapp');
+      (api as any).sock = { authState: { creds: { me: { id: '123:1@s.whatsapp.net' } } } };
+
+      (api as any).handleConnectionUpdate(closeWith(408));
+
+      expect(api.getStatus()).toBe('reconnecting');
+      expect((api as any).reconnectTimer).not.toBeNull();
+      (api as any).clearReconnectTimer();
+      vi.useRealTimers();
+    });
+  });
 });

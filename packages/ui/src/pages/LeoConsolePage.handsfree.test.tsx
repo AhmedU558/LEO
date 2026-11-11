@@ -41,6 +41,25 @@ const RESPONSES: Array<[RegExp, unknown]> = [
     },
   ],
   [/\/voice\/sessions/, SESSION],
+  [
+    /^\/api\/v1\/models$/,
+    {
+      models: [
+        { id: 'z-ai/glm-5.3', name: 'GLM 5.3', provider: 'openrouter', capabilities: ['chat'] },
+        { id: 'embed-1', name: 'Embed', provider: 'openrouter', capabilities: ['embeddings'] },
+        { id: 'llama3', name: 'Llama 3', provider: 'lmstudio-local' },
+      ],
+      configuredProviders: ['openrouter', 'lmstudio-local'],
+      availableProviders: ['openrouter', 'openai'],
+    },
+  ],
+  [
+    /\/voice\/models/,
+    {
+      models: [{ name: 'gemma4:31b-cloud', cloud: true, sizeBytes: 384 }],
+      default: 'qwen3:4b-instruct',
+    },
+  ],
   [/\/tasks/, []],
   [
     /\/summary/,
@@ -222,5 +241,80 @@ describe('LeoConsolePage hands-free and typed turns', () => {
     });
 
     expect(open).not.toHaveBeenCalled();
+  });
+
+  it('lists Ollama models and starts the session with the chosen one', async () => {
+    localStorage.clear();
+    const container = render(
+      <MemoryRouter>
+        <LeoConsolePage />
+      </MemoryRouter>
+    );
+    await flushAsyncUpdates();
+
+    const select = container.querySelector<HTMLSelectElement>('#leo-voice-model')!;
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      'Default model (qwen3:4b-instruct)',
+      'gemma4:31b-cloud · cloud',
+      'GLM 5.3',
+    ]);
+    expect([...select.querySelectorAll('optgroup')].map((g) => g.label)).toEqual([
+      'Ollama',
+      'openrouter',
+    ]);
+    act(() => {
+      select.value = 'ollama::gemma4:31b-cloud';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const core = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Start a voice session"]'
+    )!;
+    await act(async () => {
+      core.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    await flushAsyncUpdates();
+
+    const create = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([url, init]) => url === '/api/v1/voice/sessions' && init?.method === 'POST'
+      );
+    expect(JSON.parse((create?.[1] as RequestInit).body as string)).toMatchObject({
+      replyProvider: 'ollama',
+      model: 'gemma4:31b-cloud',
+    });
+  });
+
+  it('starts the session with a connected provider model', async () => {
+    localStorage.clear();
+    const container = render(
+      <MemoryRouter>
+        <LeoConsolePage />
+      </MemoryRouter>
+    );
+    await flushAsyncUpdates();
+
+    const select = container.querySelector<HTMLSelectElement>('#leo-voice-model')!;
+    act(() => {
+      select.value = 'openrouter::z-ai/glm-5.3';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const core = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Start a voice session"]'
+    )!;
+    await act(async () => {
+      core.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    await flushAsyncUpdates();
+
+    const create = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([url, init]) => url === '/api/v1/voice/sessions' && init?.method === 'POST'
+      );
+    expect(JSON.parse((create?.[1] as RequestInit).body as string)).toMatchObject({
+      replyProvider: 'openrouter',
+      model: 'z-ai/glm-5.3',
+    });
   });
 });

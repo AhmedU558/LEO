@@ -55,6 +55,7 @@ const ALWAYS_DESTRUCTIVE_TOOLS = new Set<string>([
   'send_channel_message',
   'broadcast_channel_message',
   'broadcast_to_crew',
+  'publish_social_post',
   'git_push',
   'git_reset',
   'git_clean',
@@ -109,6 +110,7 @@ const COMMUNICATION_TOOLS = new Set<string>([
   'send_channel_message',
   'broadcast_channel_message',
   'broadcast_to_crew',
+  'publish_social_post',
 ]);
 
 const VCS_TOOLS = new Set<string>(['git_push', 'git_reset', 'git_clean']);

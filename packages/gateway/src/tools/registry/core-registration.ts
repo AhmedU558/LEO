@@ -63,6 +63,8 @@ import {
   executeInteractiveTool,
   CHANNEL_TOOLS,
   executeChannelTool,
+  SOCIAL_TOOLS,
+  executeSocialTool,
   CANVAS_TOOLS,
   executeCanvasTool,
   BROWSER_TOOLS,
@@ -151,6 +153,12 @@ export function registerGatewayTools(tools: ToolRegistry, userId: string, trace:
     {
       definitions: CHANNEL_TOOLS,
       executor: executeChannelTool,
+      needsUserId: true,
+    },
+    {
+      // Drafted in chat, published only after the user approves the exact text.
+      definitions: SOCIAL_TOOLS,
+      executor: executeSocialTool,
       needsUserId: true,
     },
     {

@@ -12,7 +12,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, flushAsyncUpdates, hasText, render } from '../test-harness';
+import { act } from 'react';
+import { MemoryRouter } from 'react-router';
 import { SocialPage } from './SocialPage';
+
+const mount = (url = '/social') =>
+  render(
+    <MemoryRouter initialEntries={[url]}>
+      <SocialPage />
+    </MemoryRouter>
+  );
 
 const mockToast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../components/ToastProvider', () => ({ useToast: () => mockToast }));
@@ -66,12 +75,13 @@ describe('SocialPage', () => {
 
   it('fires its data calls and renders accounts and campaigns', async () => {
     const fetchMock = stubFetch({
-      '/social/accounts': { data: [account] },
+      // Real shape: GET /social/accounts returns { accounts: [...] }.
+      '/social/accounts': { data: { accounts: [account] } },
       '/social/campaigns': { data: [campaign] },
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const container = render(<SocialPage />);
+    const container = mount();
     await flushAsyncUpdates();
 
     const urls = fetchMock.mock.calls.map((c) => String(c[0]));
@@ -84,9 +94,15 @@ describe('SocialPage', () => {
   });
 
   it('renders the empty state when nothing is connected', async () => {
-    vi.stubGlobal('fetch', stubFetch({ '/social/': { data: [] } }));
+    vi.stubGlobal(
+      'fetch',
+      stubFetch({
+        '/social/accounts': { data: { accounts: [] } },
+        '/social/campaigns': { data: [] },
+      })
+    );
 
-    const container = render(<SocialPage />);
+    const container = mount();
     await flushAsyncUpdates();
 
     expect(hasText(container, 'No accounts connected yet.')).toBe(true);
@@ -99,9 +115,84 @@ describe('SocialPage', () => {
       vi.fn(() => Promise.reject(new Error('gateway down')))
     );
 
-    const container = render(<SocialPage />);
+    const container = mount();
     await flushAsyncUpdates();
 
     expect(hasText(container, 'Social Publishing')).toBe(true);
+  });
+
+  it('offers LinkedIn alongside the other platforms', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline')))
+    );
+
+    const container = mount();
+    await flushAsyncUpdates();
+
+    const hrefs = [...container.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(hrefs).toContain('/api/v1/social/linkedin/connect');
+  });
+
+  it('creates a campaign using the id from the wrapped content response', async () => {
+    const linkedin = { ...account, id: 'acc-li', platform: 'linkedin', accountName: 'Me' };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const ok = (data: unknown) =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true, data }),
+        } as Response);
+      if (url.endsWith('/social/accounts')) return ok({ accounts: [linkedin] });
+      if (url.endsWith('/social/campaigns') && init?.method !== 'POST') return ok([]);
+      if (url.endsWith('/api/v1/content')) return ok({ id: 'content-9' });
+      if (url.includes('/variants/')) return ok({ platform: 'linkedin' });
+      if (url.endsWith('/social/campaigns')) return ok(campaign);
+      return Promise.reject(new Error(`unexpected request: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const container = mount();
+    await flushAsyncUpdates();
+
+    const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    await act(async () => checkbox.click());
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'value'
+      )!.set!;
+      setValue.call(textarea, 'Hello LinkedIn');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const create = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Create Campaign'
+    )!;
+    await act(async () => create.click());
+    await flushAsyncUpdates();
+
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls).toContain('/api/v1/content/content-9/variants/linkedin');
+    expect(urls.some((u) => u.includes('undefined'))).toBe(false);
+    expect(mockToast.success).toHaveBeenCalledWith('Campaign created successfully');
+  });
+
+  it('shows the result of a connection attempt', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline')))
+    );
+
+    let container = mount('/social?connected=linkedin');
+    await flushAsyncUpdates();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('LinkedIn connected.');
+    cleanup();
+
+    container = mount('/social?error=LinkedIn%3A+The+user+cancelled');
+    await flushAsyncUpdates();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      'LinkedIn: The user cancelled'
+    );
   });
 });
