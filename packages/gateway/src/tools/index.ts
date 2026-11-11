@@ -28,4 +28,5 @@ export { CLAW_TOOLS, executeClawTool } from './claw/tools.js';
 export { CLAW_MANAGEMENT_TOOLS, executeClawManagementTool } from './claw/management-tools.js';
 export { INTERACTIVE_TOOLS, executeInteractiveTool } from './interactive-tools.js';
 export { CHANNEL_TOOLS, executeChannelTool } from './channel-tools.js';
+export { SOCIAL_TOOLS, executeSocialTool } from './social-tools.js';
 export { CANVAS_TOOLS, executeCanvasTool } from './canvas-tools.js';

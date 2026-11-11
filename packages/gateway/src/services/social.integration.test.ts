@@ -110,7 +110,11 @@ describe.skipIf(!url)('Social Publish Integration', () => {
 
     // Simulate dispatcher running the executor
     const res = await executeSocialPublishNode(
-      { userId, workspaceId, workflowInputs: { publishRequestId: request.id } } as any,
+      {
+        userId,
+        workspaceId,
+        workflow: { variables: { __inputs: { publishRequestId: request.id } }, edges: [] },
+      } as any,
       { id: 'n1' } as any
     );
     expect(res.status).toBe('success');
@@ -139,7 +143,11 @@ describe.skipIf(!url)('Social Publish Integration', () => {
     });
 
     const res = await executeSocialPublishNode(
-      { userId, workspaceId, workflowInputs: { publishRequestId: request.id } } as any,
+      {
+        userId,
+        workspaceId,
+        workflow: { variables: { __inputs: { publishRequestId: request.id } }, edges: [] },
+      } as any,
       { id: 'n1' } as any
     );
     expect(res.status).toBe('error');
@@ -168,7 +176,11 @@ describe.skipIf(!url)('Social Publish Integration', () => {
     });
 
     const res = await executeSocialPublishNode(
-      { userId, workspaceId, workflowInputs: { publishRequestId: request.id } } as any,
+      {
+        userId,
+        workspaceId,
+        workflow: { variables: { __inputs: { publishRequestId: request.id } }, edges: [] },
+      } as any,
       { id: 'n1' } as any
     );
     expect(res.status).toBe('error');
@@ -242,7 +254,11 @@ describe.skipIf(!url)('Social Publish Integration', () => {
 
     // Cannot run executor on cancelled request
     const res = await executeSocialPublishNode(
-      { userId, workspaceId, workflowInputs: { publishRequestId: request.id } } as any,
+      {
+        userId,
+        workspaceId,
+        workflow: { variables: { __inputs: { publishRequestId: request.id } }, edges: [] },
+      } as any,
       { id: 'n1' } as any
     );
     expect(res.status).toBe('error');

@@ -1002,6 +1002,17 @@ export class WhatsAppChannelAPI implements ChannelPluginAPI {
         return;
       }
 
+      // A QR that expires unscanned closes with 408. Reconnecting only makes another
+      // QR — it looped all day (43 QRs, never linked). Wait for Connect instead.
+      if (statusCode === 408 && !this.sock?.authState?.creds?.me) {
+        this.internalState = 'disconnected';
+        this.status = 'disconnected';
+        this.qrCode = null;
+        this.emitConnectionEvent('disconnected');
+        log.info('WhatsApp QR code expired without being scanned — click Connect for a new one');
+        return;
+      }
+
       if (isPermanentDisconnect) {
         // Permanent disconnect — stop reconnect, need new QR or account action
         this.internalState = 'disconnected';

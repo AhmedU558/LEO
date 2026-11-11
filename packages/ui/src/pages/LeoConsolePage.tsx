@@ -37,6 +37,7 @@ import { VoiceWaveform } from '../components/leo/VoiceWaveform';
 import { systemApi } from '../api/endpoints/misc';
 import { summaryApi } from '../api/endpoints/summary';
 import { agentsApi } from '../api/endpoints/agents';
+import { modelsApi } from '../api/endpoints/models';
 import { providersApi } from '../api/endpoints/providers';
 import { tasksApi } from '../api/endpoints/tasks';
 import { memoriesApi } from '../api/endpoints/personal-data';
@@ -253,6 +254,11 @@ function Ring({ label, percent }: { label: string; percent: number | null }) {
   );
 }
 
+interface VoiceModel {
+  name: string;
+  cloud: boolean;
+}
+
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 const HINT: Record<ReturnType<typeof orbStateFor>, string> = {
@@ -288,6 +294,27 @@ export function LeoConsolePage() {
   const tasks = usePageData(() => tasksApi.list({ status: ['pending', 'in_progress'] }), []);
   const memory = usePageData(() => memoriesApi.stats(), []);
   const runs = usePageData(() => workflowsApi.recentLogs({ limit: '4' }), []);
+  const voiceModels = usePageData(
+    async () => {
+      const res = await fetch('/api/v1/voice/models');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error?.message ?? 'Could not list Ollama models');
+      return json.data as { models?: VoiceModel[]; default?: string };
+    },
+    [],
+    { errorMessage: 'Could not list Ollama models' }
+  );
+  // Models from LEO's connected providers (OpenAI, Google, OpenRouter, …), grouped for the picker.
+  const providerModels = usePageData(() => modelsApi.list(), [], {
+    errorMessage: 'Could not list AI models',
+  });
+  const cloudProviderIds = new Set(providerModels.data?.availableProviders ?? []);
+  const modelsByProvider = new Map<string, { id: string; name: string }[]>();
+  for (const m of providerModels.data?.models ?? []) {
+    if (!cloudProviderIds.has(m.provider)) continue; // local providers: listed under Ollama
+    if (m.capabilities && !m.capabilities.includes('chat')) continue;
+    modelsByProvider.set(m.provider, [...(modelsByProvider.get(m.provider) ?? []), m]);
+  }
 
   const live = Boolean(voice.session) && voice.status !== 'disconnected';
   const orbState = live ? orbStateFor(voice.status) : 'offline';
@@ -887,6 +914,40 @@ export function LeoConsolePage() {
             <Ear className="size-4" />
             Hey Leo: {wakeEnabled ? (wake.state === 'error' ? 'error' : wake.state) : 'off'}
           </button>
+          <label className="sr-only" htmlFor="leo-voice-model">
+            Reply model
+          </label>
+          <select
+            id="leo-voice-model"
+            value={voice.voiceModel}
+            disabled={live}
+            onChange={(e) => voice.chooseVoiceModel(e.target.value)}
+            title="Model LEO answers with. Cloud and provider models need little memory on this PC; your words are sent to that service."
+            className="max-w-56 border border-sky-400/20 bg-[#03070d] px-2 py-2 text-xs text-slate-200 disabled:opacity-60"
+          >
+            <option value="">
+              Default model ({voiceModels.data?.default ?? 'qwen3:4b-instruct'})
+            </option>
+            <optgroup label="Ollama">
+              {(voiceModels.data?.models ?? []).map((m) => (
+                <option key={m.name} value={`ollama::${m.name}`}>
+                  {m.name} · {m.cloud ? 'cloud' : 'this PC'}
+                </option>
+              ))}
+              {voiceModels.error && (
+                <option disabled>Ollama not running — start it to list models</option>
+              )}
+            </optgroup>
+            {[...modelsByProvider].map(([provider, models]) => (
+              <optgroup key={provider} label={provider}>
+                {models.map((m) => (
+                  <option key={m.id} value={`${provider}::${m.id}`}>
+                    {m.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
           <label className="sr-only" htmlFor="leo-speech-output">
             Speech output
           </label>

@@ -3,8 +3,14 @@ import type { VoiceAudioDeltaEvent, VoiceMessage, VoiceProviderEvents } from '@o
 
 const execFileMock = vi.fn();
 vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => execFileMock(...args) }));
+const checkRemoteProvider = vi.fn(async (_provider: string) => {});
+const remoteReply = vi.fn(async (..._args: unknown[]) => 'Hello from the cloud.');
+vi.mock('../remote-replies.js', () => ({
+  checkRemoteProvider: (provider: string) => checkRemoteProvider(provider),
+  remoteReply: (...args: unknown[]) => remoteReply(...args),
+}));
 
-const { LocalVoiceProvider, forSpeech } = await import('./local-provider.js');
+const { LocalVoiceProvider, forSpeech, listOllamaModels } = await import('./local-provider.js');
 type Synth = NonNullable<ConstructorParameters<typeof LocalVoiceProvider>[1]>;
 
 const WINDOWS_PCM = Buffer.alloc(8, 1).toString('base64');
@@ -75,6 +81,8 @@ beforeEach(() => {
 
 afterEach(() => {
   execFileMock.mockReset();
+  checkRemoteProvider.mockClear();
+  remoteReply.mockClear();
   vi.unstubAllGlobals();
 });
 
@@ -215,6 +223,109 @@ describe('LocalVoiceProvider', () => {
         true
       );
     });
+  });
+});
+
+describe('model choice', () => {
+  const sentModels = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body ?? '{}')).model);
+
+  it('uses the model chosen for the session', async () => {
+    const provider = new LocalVoiceProvider();
+    const r = recorder();
+    await provider.connect(r.events, { model: 'gemma4:31b-cloud' });
+
+    provider.sendText('Tell me a joke');
+    await vi.waitFor(() => expect(r.audio.length).toBeGreaterThan(0));
+
+    expect(sentModels()).toEqual(['gemma4:31b-cloud', 'gemma4:31b-cloud']);
+  });
+
+  it('defaults to qwen3:4b-instruct', async () => {
+    await new LocalVoiceProvider().connect(recorder().events);
+
+    expect(sentModels()).toEqual(['qwen3:4b-instruct']);
+  });
+
+  it('lists installed Ollama models and marks cloud ones', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              models: [
+                { name: 'qwen3:4b-instruct', size: 2_500_000_000 },
+                { name: 'gemma4:31b-cloud', size: 384, remote_host: 'https://ollama.com:443' },
+              ],
+            })
+          )
+      )
+    );
+
+    expect(await listOllamaModels()).toEqual([
+      { name: 'qwen3:4b-instruct', cloud: false, sizeBytes: 2_500_000_000 },
+      { name: 'gemma4:31b-cloud', cloud: true, sizeBytes: 384 },
+    ]);
+  });
+});
+
+describe('replies from a connected AI provider', () => {
+  it('skips Ollama and answers with the chosen provider and model', async () => {
+    const provider = new LocalVoiceProvider();
+    const r = recorder();
+    await provider.connect(r.events, { replyProvider: 'openrouter', model: 'z-ai/glm-5.3' });
+
+    provider.sendText('Tell me a joke');
+    await vi.waitFor(() => expect(r.audio.length).toBeGreaterThan(0));
+
+    expect(checkRemoteProvider).toHaveBeenCalledWith('openrouter');
+    expect(remoteReply).toHaveBeenCalledWith(
+      'openrouter',
+      'z-ai/glm-5.3',
+      expect.arrayContaining([{ role: 'user', content: 'Tell me a joke' }]),
+      300
+    );
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('fails to connect, with a clear message, when the provider has no key', async () => {
+    checkRemoteProvider.mockImplementationOnce(async () => {
+      throw new Error('No API key is set for openai. Add it in Settings → Providers.');
+    });
+    const r = recorder();
+
+    await expect(
+      new LocalVoiceProvider().connect(r.events, { replyProvider: 'openai', model: 'gpt-4o' })
+    ).rejects.toThrow('No API key is set for openai');
+  });
+
+  it('treats "ollama" as the local path', async () => {
+    await new LocalVoiceProvider().connect(recorder().events, {
+      replyProvider: 'ollama',
+      model: 'qwen3.5:4b',
+    });
+
+    expect(checkRemoteProvider).not.toHaveBeenCalled();
+    expect(vi.mocked(fetch)).toHaveBeenCalled();
+  });
+});
+
+describe('when Ollama is not running', () => {
+  it('says so instead of "fetch failed"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      })
+    );
+    const provider = new LocalVoiceProvider();
+    const r = recorder();
+
+    await expect(provider.connect(r.events)).rejects.toThrow("Ollama isn't running");
+    expect(r.errors).toEqual(["Ollama isn't running. Start Ollama, then try again."]);
   });
 });
 

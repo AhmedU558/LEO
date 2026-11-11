@@ -42,6 +42,33 @@ describe('VoiceSessionManager', () => {
     vi.restoreAllMocks();
   });
 
+  describe('model choice', () => {
+    it('passes the chosen model to the provider on connect', async () => {
+      const mockProvider = new MockVoiceProvider();
+      const connect = vi.spyOn(mockProvider, 'connect');
+      const session = await manager.createSession('user-1', 'workspace-1', {
+        customProvider: mockProvider,
+        model: 'gemma4:31b-cloud',
+      });
+
+      await manager.connectSession(session.id, 'user-1');
+
+      expect(connect).toHaveBeenCalledWith(expect.anything(), { model: 'gemma4:31b-cloud' });
+    });
+
+    it('lets the provider use its default when no model is chosen', async () => {
+      const mockProvider = new MockVoiceProvider();
+      const connect = vi.spyOn(mockProvider, 'connect');
+      const session = await manager.createSession('user-1', 'workspace-1', {
+        customProvider: mockProvider,
+      });
+
+      await manager.connectSession(session.id, 'user-1');
+
+      expect(connect).toHaveBeenCalledWith(expect.anything(), undefined);
+    });
+  });
+
   describe('Lifecycle Management', () => {
     it('creates, connects, and disconnects a voice session', async () => {
       const mockProvider = new MockVoiceProvider();

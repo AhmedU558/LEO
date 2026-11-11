@@ -96,6 +96,8 @@ export function ExecutionApprovalDialog({ approval, onResolve }: ExecutionApprov
   const seconds = remaining % 60;
   const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
   const isUrgent = remaining <= 30;
+  // Social posts reuse this dialog; `code` then holds the exact text that will be published.
+  const isPost = approval.category === 'publish_social_post';
 
   return (
     <div
@@ -112,11 +114,13 @@ export function ExecutionApprovalDialog({ approval, onResolve }: ExecutionApprov
             </div>
             <div>
               <h3 className="text-base font-semibold text-text-primary dark:text-dark-text-primary">
-                Code Execution Approval
+                {isPost ? 'Approve post' : 'Code Execution Approval'}
               </h3>
-              <p className="text-xs text-text-muted dark:text-dark-text-muted">
-                {approval.category}
-              </p>
+              {!isPost && (
+                <p className="text-xs text-text-muted dark:text-dark-text-muted">
+                  {approval.category}
+                </p>
+              )}
             </div>
           </div>
           <button
@@ -135,7 +139,14 @@ export function ExecutionApprovalDialog({ approval, onResolve }: ExecutionApprov
         </div>
 
         {/* Code Preview */}
-        {approval.code && (
+        {approval.code && isPost && (
+          <div className="mx-6 mb-3 rounded-lg border border-border dark:border-dark-border bg-bg-secondary dark:bg-dark-bg-secondary">
+            <p className="p-3 text-sm text-text-primary dark:text-dark-text-primary whitespace-pre-wrap break-words max-h-80 overflow-y-auto leading-relaxed">
+              {approval.code}
+            </p>
+          </div>
+        )}
+        {approval.code && !isPost && (
           <div className="mx-6 mb-3 rounded-lg overflow-hidden border border-border dark:border-dark-border bg-[#1e1e1e]">
             <pre className="p-3 text-xs font-mono text-gray-300 overflow-x-auto max-h-48 overflow-y-auto leading-relaxed">
               {approval.code}

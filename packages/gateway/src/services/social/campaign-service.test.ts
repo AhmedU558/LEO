@@ -68,6 +68,41 @@ describe('CampaignService', () => {
     expect(mockSocialService.createPublishTask).toHaveBeenCalled();
   });
 
+  it('createCampaign: posts the body text, not the title, and passes the title separately', async () => {
+    (ContentService as any).mockImplementation(function () {
+      return {
+        getContent: vi.fn().mockResolvedValue({
+          item: { id: 'content1', workspaceId: 'workspace1', mediaAssetIds: [] },
+          variants: [
+            { platform: 'linkedin', title: 'Headline', description: 'The post body', metadata: {} },
+          ],
+        }),
+      };
+    });
+    (SocialRepository as any).mockImplementation(function () {
+      return {
+        getAccount: vi.fn().mockResolvedValue({ id: 'acc1', platform: 'linkedin' }),
+        createCampaign: vi.fn().mockResolvedValue(undefined),
+        createCampaignTarget: vi.fn().mockResolvedValue(undefined),
+        getCampaign: vi.fn().mockResolvedValue({ id: 'camp1', status: 'READY' }),
+        getCampaignTargets: vi.fn().mockResolvedValue([]),
+        listCampaigns: vi.fn().mockResolvedValue([]),
+      };
+    });
+    const createPublishTask = vi
+      .fn()
+      .mockResolvedValue({ request: { id: 'req1' }, taskId: 'task1' });
+    (SocialService as any).mockImplementation(function () {
+      return { createPublishTask };
+    });
+
+    await service.createCampaign({ contentItemId: 'content1', accountIds: ['acc1'] });
+
+    expect(createPublishTask).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Headline', text: 'The post body' })
+    );
+  });
+
   it('createCampaign: fails if ContentItem missing', async () => {
     const mockContentService = { getContent: vi.fn().mockResolvedValue(null) };
     (ContentService as any).mockImplementation(function () {

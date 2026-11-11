@@ -6,6 +6,12 @@ import { SocialService } from '../services/social/service.js';
 import { SocialRepository } from '../db/repositories/social.js';
 import { socialProviderRegistry } from '../services/social/provider-registry.js';
 import { randomUUID } from 'node:crypto';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import {
+  LINKEDIN_PAGE_SCOPES,
+  LINKEDIN_SCOPES,
+  type LinkedInProvider,
+} from '../services/social/providers/linkedin.js';
 
 export const socialRoutes = new Hono();
 
@@ -249,6 +255,105 @@ socialRoutes.get('/facebook/callback', async (c) => {
     return apiError(c, { code: ERROR_CODES.INTERNAL_ERROR, message: (err as Error).message }, 500);
   }
 });
+// LinkedIn — the OAuth `state` is kept in an httpOnly cookie and checked on the
+// way back, so a callback LEO didn't start (login CSRF) is rejected.
+const LINKEDIN_STATE_COOKIE = 'leo_linkedin_oauth_state';
+const linkedInRedirectUri = (url: string) =>
+  `${new URL(url).origin}/api/v1/social/linkedin/callback`;
+
+socialRoutes.get('/linkedin/connect', async (c) => {
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  if (!clientId || !process.env.LINKEDIN_CLIENT_SECRET) {
+    return apiError(
+      c,
+      {
+        code: ERROR_CODES.SERVICE_UNAVAILABLE,
+        message:
+          'LinkedIn is not set up: add LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET to .env',
+      },
+      503
+    );
+  }
+  // `?pages=1` also asks for company-page access (needs the Community Management API).
+  const pages = c.req.query('pages') === '1';
+  const state = randomUUID();
+  setCookie(c, LINKEDIN_STATE_COOKIE, pages ? `${state}|pages` : state, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: new URL(c.req.url).protocol === 'https:',
+    path: '/api/v1/social/linkedin',
+    maxAge: 600,
+  });
+  return c.redirect(
+    'https://www.linkedin.com/oauth/v2/authorization?' +
+      new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: linkedInRedirectUri(c.req.url),
+        state,
+        scope: pages ? LINKEDIN_PAGE_SCOPES : LINKEDIN_SCOPES,
+      }).toString()
+  );
+});
+
+socialRoutes.get('/linkedin/callback', async (c) => {
+  const [expected, mode] = (getCookie(c, LINKEDIN_STATE_COOKIE) ?? '').split('|');
+  deleteCookie(c, LINKEDIN_STATE_COOKIE, { path: '/api/v1/social/linkedin' });
+  const back = (query: Record<string, string>) =>
+    c.redirect(`/social?${new URLSearchParams(query).toString()}`);
+
+  const denied = c.req.query('error_description') ?? c.req.query('error');
+  if (denied) return back({ error: `LinkedIn: ${denied}` });
+  const code = c.req.query('code');
+  if (!code || !expected || c.req.query('state') !== expected) {
+    return back({ error: 'LinkedIn sign-in expired or was not started here. Try Connect again.' });
+  }
+
+  try {
+    const linkedin = socialProviderRegistry.get('linkedin') as LinkedInProvider;
+    const auth = await linkedin.connect(code, linkedInRedirectUri(c.req.url));
+    const repo = new SocialRepository(getUserId(c), getWorkspaceId(c));
+    await repo.createAccount({
+      id: `acc_${randomUUID()}`,
+      platform: 'linkedin',
+      accountId: auth.accountId!,
+      userId: getUserId(c),
+      workspaceId: getWorkspaceId(c),
+      accountName: auth.accountName!,
+      profileUrl: auth.profileUrl,
+      status: 'active',
+      accessToken: auth.accessToken,
+      refreshToken: auth.refreshToken,
+      expiresAt: auth.expiresAt,
+    });
+    if (mode === 'pages') {
+      const companyPages = await linkedin.listAdminPages(auth.accessToken);
+      if (companyPages.length === 0) {
+        return back({ error: 'LinkedIn: you are not an admin of any company page.' });
+      }
+      for (const page of companyPages) {
+        await repo.createAccount({
+          id: `acc_${randomUUID()}`,
+          platform: 'linkedin',
+          accountId: page.urn,
+          userId: getUserId(c),
+          workspaceId: getWorkspaceId(c),
+          accountName: page.name,
+          profileUrl: `https://www.linkedin.com/company/${page.urn.split(':').pop()}`,
+          status: 'active',
+          accessToken: auth.accessToken,
+          refreshToken: auth.refreshToken,
+          expiresAt: auth.expiresAt,
+        });
+      }
+      return back({ connected: 'linkedin-pages' });
+    }
+    return back({ connected: 'linkedin' });
+  } catch (err: unknown) {
+    return back({ error: (err as Error).message });
+  }
+});
+
 socialRoutes.get('/tiktok/connect', async (c) => {
   const clientKey = process.env.TIKTOK_CLIENT_KEY || '';
   const redirectUri = `${new URL(c.req.url).origin}/api/v1/social/tiktok/callback`;

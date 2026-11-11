@@ -106,6 +106,9 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,jpeg,png,ico,woff2}'],
+          // Navigations to the gateway (OAuth connect links and provider callbacks)
+          // must reach the server; the SPA fallback would answer them with index.html.
+          navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             {
               urlPattern: /^\/api\/v1\/(chat|conversations|models|providers|settings)/,

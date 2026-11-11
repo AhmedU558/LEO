@@ -24,9 +24,9 @@ describe('socialProviderRegistry', () => {
 
   it('loads every built-in provider on first use', async () => {
     const registry = await load();
-    for (const platform of ['youtube', 'instagram', 'facebook', 'tiktok'] as const)
+    for (const platform of ['youtube', 'instagram', 'facebook', 'tiktok', 'linkedin'] as const)
       expect(registry.get(platform).platform).toBe(platform);
-    expect(log.debug).toHaveBeenCalledTimes(4);
+    expect(log.debug).toHaveBeenCalledTimes(5);
     expect(log.info).not.toHaveBeenCalled();
   });
 

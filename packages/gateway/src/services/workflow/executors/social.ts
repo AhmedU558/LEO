@@ -11,9 +11,9 @@ export async function executeSocialPublishNode(
   const startTime = Date.now();
 
   try {
-    // Inputs come from ExecutionTask mapping
-    const publishRequestId = (context as any).workflowInputs?.publishRequestId as
-      string | undefined;
+    // ExecutionTask inputs reach the run as workflow.variables.__inputs (see executeWorkflow).
+    const inputs = context.workflow.variables.__inputs as Record<string, unknown> | undefined;
+    const publishRequestId = inputs?.publishRequestId as string | undefined;
     if (!publishRequestId) throw new Error('Missing publishRequestId input');
 
     // Need workspaceId which was missing from the DispatchNodeContext type in this context?

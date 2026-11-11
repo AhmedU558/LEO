@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { Share2 } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../hooks/useAuth';
@@ -21,6 +22,15 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+const PLATFORM_NAMES: Record<string, string> = {
+  youtube: 'YouTube',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  tiktok: 'TikTok',
+  linkedin: 'LinkedIn',
+  'linkedin-pages': 'LinkedIn company pages',
+};
+
 export const SocialPage = () => {
   const { isAuthenticated } = useAuth();
   const toast = useToast();
@@ -40,11 +50,22 @@ export const SocialPage = () => {
     fetchCampaigns();
   }, [isAuthenticated]);
 
+  // OAuth callbacks return here with ?connected=<platform> or ?error=<message>.
+  const [searchParams] = useSearchParams();
+  const connected = searchParams.get('connected');
+  const connectError = searchParams.get('error');
+  const connectResult = connected
+    ? { ok: true, message: `${PLATFORM_NAMES[connected] ?? connected} connected.` }
+    : connectError
+      ? { ok: false, message: connectError }
+      : null;
+
   const fetchAccounts = async () => {
     try {
       const res = await fetch('/api/v1/social/accounts');
       const data = await res.json();
-      setAccounts(data.data || []);
+      // GET /social/accounts returns { accounts: [...] }, not a bare array.
+      setAccounts(data.data?.accounts ?? []);
     } catch (e) {
       console.error(e);
     }
@@ -109,7 +130,7 @@ export const SocialPage = () => {
       });
 
       if (!contentRes.ok) throw new Error('Failed to create content');
-      const content = await contentRes.json();
+      const content = (await contentRes.json()).data;
 
       // 2. Create platform variants for all selected platforms
       const selectedPlatforms = new Set(
@@ -117,7 +138,7 @@ export const SocialPage = () => {
       );
 
       for (const platform of selectedPlatforms) {
-        await fetch(`/api/v1/content/${content.id}/variants/${platform}`, {
+        const variantRes = await fetch(`/api/v1/content/${content.id}/variants/${platform}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -130,6 +151,7 @@ export const SocialPage = () => {
             privacyStatus: draftPrivacy,
           }),
         });
+        if (!variantRes.ok) throw new Error(`Failed to prepare the ${platform} version`);
       }
 
       // 3. Create Campaign
@@ -142,7 +164,10 @@ export const SocialPage = () => {
         }),
       });
 
-      if (!campRes.ok) throw new Error('Failed to create campaign');
+      if (!campRes.ok) {
+        const body = await campRes.json().catch(() => null);
+        throw new Error(body?.error?.message ?? 'Failed to create campaign');
+      }
 
       toast.success('Campaign created successfully');
       setDraftTitle('');
@@ -152,7 +177,7 @@ export const SocialPage = () => {
       setUploadedMediaId(null);
       fetchCampaigns();
     } catch (error) {
-      toast.error('Failed to create campaign');
+      toast.error(error instanceof Error ? error.message : 'Failed to create campaign');
       console.error(error);
     }
   };
@@ -191,6 +216,16 @@ export const SocialPage = () => {
         <Share2 className="w-5 h-5 text-accent" />
         <h2 className="text-lg font-semibold">Social Publishing</h2>
       </header>
+      {connectResult && (
+        <p
+          role="status"
+          className={`mb-4 rounded-lg px-3 py-2 text-sm ${
+            connectResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
+          }`}
+        >
+          {connectResult.message}
+        </p>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <Card title="Connected Accounts">
@@ -240,6 +275,19 @@ export const SocialPage = () => {
                   className="text-center py-2 bg-black/10 text-black dark:text-white dark:bg-white/10 rounded-lg text-xs font-medium"
                 >
                   TikTok
+                </a>
+                <a
+                  href="/api/v1/social/linkedin/connect"
+                  className="text-center py-2 bg-sky-700/10 text-sky-600 rounded-lg text-xs font-medium"
+                >
+                  LinkedIn
+                </a>
+                <a
+                  href="/api/v1/social/linkedin/connect?pages=1"
+                  title="Company pages you admin. Needs LinkedIn's Community Management API on your LinkedIn app."
+                  className="text-center py-2 bg-sky-700/10 text-sky-600 rounded-lg text-xs font-medium"
+                >
+                  LinkedIn Page
                 </a>
               </div>
             </div>

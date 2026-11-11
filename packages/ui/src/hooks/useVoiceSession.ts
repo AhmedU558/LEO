@@ -43,6 +43,18 @@ function openInNewTab(url: string): boolean {
   return true;
 }
 
+/**
+ * Reply-model picker values are "provider::model" (e.g. "openrouter::z-ai/glm-5.3",
+ * "ollama::gemma4:31b-cloud"). Older saved values are bare Ollama model names.
+ */
+export function parseVoiceModel(value: string): { replyProvider: string; model: string } | null {
+  if (!value) return null;
+  const at = value.indexOf('::');
+  return at < 0
+    ? { replyProvider: 'ollama', model: value }
+    : { replyProvider: value.slice(0, at), model: value.slice(at + 2) };
+}
+
 export function useVoiceSession() {
   const toast = useToast();
   const [session, setSession] = useState<VoiceSession | null>(null);
@@ -55,6 +67,23 @@ export function useVoiceSession() {
   const [isPressing, setIsPressing] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [speechOutput, setSpeechOutput] = useState<SpeechOutput>(readSpeechOutput);
+
+  /** Ollama model for replies; '' lets the gateway use its default. */
+  const [voiceModel, setVoiceModel] = useState<string>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.VOICE_MODEL) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const chooseVoiceModel = (value: string) => {
+    setVoiceModel(value);
+    try {
+      localStorage.setItem(STORAGE_KEYS.VOICE_MODEL, value);
+    } catch {
+      // Preference only; the selection still applies to this page.
+    }
+  };
 
   const chooseSpeechOutput = (value: SpeechOutput) => {
     setSpeechOutput(value);
@@ -244,7 +273,11 @@ export function useVoiceSession() {
       const res = await fetch('/api/v1/voice/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'push-to-talk', provider: targetProvider }),
+        body: JSON.stringify({
+          mode: 'push-to-talk',
+          provider: targetProvider,
+          ...parseVoiceModel(voiceModel),
+        }),
       });
 
       if (!res.ok) {
@@ -487,6 +520,8 @@ export function useVoiceSession() {
     micStream,
     speechOutput,
     chooseSpeechOutput,
+    voiceModel,
+    chooseVoiceModel,
     startSession,
     endSession,
     cancelActiveTurn,

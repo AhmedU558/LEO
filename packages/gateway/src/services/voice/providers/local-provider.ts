@@ -7,8 +7,10 @@ import type {
   VoiceSessionStatus,
 } from '@ownpilot/core/voice';
 import { parseSiteCommand } from '../site-commands.js';
+import { checkRemoteProvider, remoteReply } from '../remote-replies.js';
 
-const MODEL = 'qwen3:4b-instruct';
+/** Default local reply model; a session can choose another installed Ollama model. */
+export const DEFAULT_LOCAL_MODEL = 'qwen3:4b-instruct';
 const OLLAMA = 'http://127.0.0.1:11434';
 const WHISPER = `
 import base64, io, sys, wave
@@ -102,6 +104,42 @@ export function forSpeech(text: string): string {
     .trim();
 }
 
+/**
+ * fetch() to local Ollama. A refused connection surfaces from Node as a bare
+ * "fetch failed"; say what's actually wrong. Aborts and timeouts pass through.
+ */
+async function ollamaFetch(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${OLLAMA}${path}`, init);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error("Ollama isn't running. Start Ollama, then try again.");
+    }
+    throw error;
+  }
+}
+
+export interface OllamaModel {
+  name: string;
+  /** Runs on Ollama's servers (needs an ollama.com sign-in), not on this PC. */
+  cloud: boolean;
+  sizeBytes: number;
+}
+
+/** Models installed in local Ollama, for the voice model picker. */
+export async function listOllamaModels(): Promise<OllamaModel[]> {
+  const response = await ollamaFetch('/api/tags', { signal: AbortSignal.timeout(5_000) });
+  if (!response.ok) throw new Error(`Ollama returned ${response.status}.`);
+  const body = (await response.json()) as {
+    models?: Array<{ name: string; size?: number; remote_host?: string }>;
+  };
+  return (body.models ?? []).map((m) => ({
+    name: m.name,
+    cloud: Boolean(m.remote_host) || /[:-]cloud$/.test(m.name),
+    sizeBytes: m.size ?? 0,
+  }));
+}
+
 /** Name of the client action that opens a site in a new browser tab. */
 export const OPEN_URL_ACTION = 'open_url';
 
@@ -126,6 +164,9 @@ export class LocalVoiceProvider implements VoiceProvider {
   private audioBytes = 0;
   private request: AbortController | null = null;
   private history: Array<{ role: string; content: string }> = [];
+  private model = DEFAULT_LOCAL_MODEL;
+  /** Set when a LEO AI provider (not local Ollama) writes the replies. */
+  private replyProvider: string | undefined;
 
   getStatus(): VoiceSessionStatus {
     return this.status;
@@ -149,17 +190,28 @@ export class LocalVoiceProvider implements VoiceProvider {
     if (process.platform !== 'win32')
       throw new Error('Local voice currently requires Windows speech.');
     this.events = events;
+    this.model = options?.model || DEFAULT_LOCAL_MODEL;
+    const remote = options?.replyProvider;
+    this.replyProvider = remote && remote !== 'ollama' ? remote : undefined;
     this.setStatus('connecting');
     const request = new AbortController();
     this.request = request;
     try {
-      const response = await fetch(`${OLLAMA}/api/show`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL }),
-        signal: AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]),
-      });
-      if (!response.ok) throw new Error(`Start Ollama and install the local ${MODEL} model.`);
+      if (this.replyProvider) {
+        if (!options?.model) throw new Error(`Choose a ${this.replyProvider} model.`);
+        await checkRemoteProvider(this.replyProvider);
+      } else {
+        const response = await ollamaFetch('/api/show', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: this.model }),
+          signal: AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]),
+        });
+        if (!response.ok)
+          throw new Error(
+            `Ollama has no model named ${this.model}. Pick another model or install it.`
+          );
+      }
       // shortcut: reload tiny Whisper per turn; use a persistent worker if startup latency becomes noticeable.
       await this.runProcess('python', ['-c', WHISPER], '', request.signal);
       if (this.synth) this.synth.check();
@@ -321,11 +373,16 @@ export class LocalVoiceProvider implements VoiceProvider {
   }
 
   private async ask(signal: AbortSignal): Promise<string> {
-    const response = await fetch(`${OLLAMA}/api/chat`, {
+    if (this.replyProvider) {
+      const reply = await remoteReply(this.replyProvider, this.model, this.history, 300);
+      signal.throwIfAborted(); // interrupted while the provider was answering: drop it
+      return reply;
+    }
+    const response = await ollamaFetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL,
+        model: this.model,
         messages: this.history,
         stream: false,
         options: { num_predict: 160 },

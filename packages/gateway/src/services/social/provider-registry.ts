@@ -4,6 +4,7 @@ import { YouTubeProvider } from './providers/youtube.js';
 import { InstagramProvider } from './providers/instagram.js';
 import { FacebookProvider } from './providers/facebook.js';
 import { TikTokProvider } from './providers/tiktok.js';
+import { LinkedInProvider } from './providers/linkedin.js';
 
 const log = getLog('SocialProviderRegistry');
 
@@ -39,6 +40,7 @@ export class SocialProviderRegistry {
       new InstagramProvider(),
       new FacebookProvider(),
       new TikTokProvider(),
+      new LinkedInProvider(),
     ])
       if (!this.providers.has(provider.platform)) this.register(provider);
   }
